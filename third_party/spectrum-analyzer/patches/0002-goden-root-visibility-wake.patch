@@ -1,0 +1,52 @@
+diff --git a/UIElement.cpp b/UIElement.cpp
+--- a/UIElement.cpp
++++ b/UIElement.cpp
+@@ -650,6 +650,27 @@ LRESULT uielement_t::OnWindowPositionChanged(UINT uMsg, WPARAM wParam, LPARAM l
+     return 0;
+ }
+ 
++/// <summary>
++/// Wakes the event-idle renderer when the Goden root window is restored.
++/// Child UI elements do not receive a size/position notification when only
++/// their ancestor changes iconic state, so the root chrome broadcasts this
++/// registered message to every descendant.
++/// </summary>
++UINT uielement_t::RootPresentationVisibilityMessage() noexcept
++{
++    static const auto message = ::RegisterWindowMessageW(
++        L"Goden.RootPresentationVisibility.V1");
++    return message;
++}
++
++LRESULT uielement_t::OnRootPresentationVisibility(UINT, WPARAM, LPARAM)
++{
++    WakeRenderer();
++    Invalidate();
++    SetMsgHandled(FALSE);
++    return 0;
++}
++
+ /// <summary>
+ /// Gets the graph that contains the specified point.
+ /// </summary>
+diff --git a/UIElement.h b/UIElement.h
+--- a/UIElement.h
++++ b/UIElement.h
+@@ -75,6 +75,8 @@ private:
+     void OnLButtonDblClk(UINT nFlags, CPoint point);
+     LRESULT OnDPIChanged(UINT dpiX, UINT dpiY, PRECT newRect);
+     LRESULT OnWindowPositionChanged(UINT uMsg, WPARAM wParam, LPARAM lParam);
++    static UINT RootPresentationVisibilityMessage() noexcept;
++    LRESULT OnRootPresentationVisibility(UINT uMsg, WPARAM wParam, LPARAM lParam);
+ 
+     void OnMouseMove(UINT, CPoint);
+     void OnMouseLeave();
+@@ -138,6 +140,8 @@ private:
+         MSG_WM_LBUTTONDBLCLK(OnLButtonDblClk)
+         MSG_WM_DPICHANGED(OnDPIChanged)
+         MESSAGE_HANDLER_EX(WM_WINDOWPOSCHANGED, OnWindowPositionChanged)
++        MESSAGE_HANDLER_EX(RootPresentationVisibilityMessage(),
++            OnRootPresentationVisibility)
+ 
+         MSG_WM_MOUSEMOVE(OnMouseMove)   // Required for CToolTip
+         MSG_WM_MOUSELEAVE(OnMouseLeave) // Required for tracking tooltip

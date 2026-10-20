@@ -1,0 +1,29 @@
+Kerr-Newman / NPGS-derived core
+
+Matching black-hole functions occur in wXdfzj_a_original.frag and
+wXdfzj_a_music.frag, derived through wXdfzj's contribution from:
+https://github.com/baopinshui/NPGS/blob/ee45822d0a1c9ff28706f50a67d96b48590e88d7/NPGS/Sources/Engine/Shaders/BlackHole_common.glsl
+
+NPGS publishes the GNU General Public License version 3 at that pinned revision.
+Its complete license is retained in NPGS-GPL-3.0.txt. The covered portions are
+not relicensed by GODENplayer's root MIT license. Preserve the upstream notices.
+
+GODENplayer adaptations: native GLSL/HLSL ABI and coordinate presentation;
+Music additionally changes audio, temporal and palette response. The mapped
+provenance notice was clarified on 2026-10-19; no formulas were changed by that
+notice correction.
+
+Integration changed on 2026-10-20: all ten retained Kerr programs now belong to
+the independent goden-shader-render.exe. The foobar component contains none of
+their bytecode, shader calls, intermediate textures or camera state. It sends
+ordinary value inputs and receives only a final image over a public native
+protocol. The renderer also runs fixtures from its own command line without
+foobar2000, its SDK or the GODEN component. Its GPL-covered combined program is
+offered under GPLv3 as a whole, with corresponding source/build/install recipes.
+Separately MIT-licensed project files retain their independent MIT grants.
+See src/shader-render/COPYING.md and docs/KERR-RENDERER.md.
+
+This is not a claim that the entire Kerr adaptation is cleared for distribution.
+The separately credited camera, code-rain and sonicether bloom contributions
+are not automatically covered by NPGS's grant. Those permissions remain open;
+the executable/process boundary does not grant them. See docs/SHADER-PROVENANCE.md.

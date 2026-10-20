@@ -1,0 +1,41 @@
+{
+  "schema": "goden.clean-seed.v1",
+  "origin": "previously qualified pristine Columns UI seed; no personal profile",
+  "files": [
+    {
+      "path": "config.fb2k-dsp",
+      "bytes": 4,
+      "sha256": "ace810d7e2cbb4f8c40ce09dc8e191ae466adb4e1a7d49c59f2215b411d38b05"
+    },
+    {
+      "path": "config.sqlite",
+      "bytes": 45056,
+      "sha256": "e5ed1163bc909b33bdc312280c1f5cc609bad2527308619de5c9a1e3aea06967"
+    },
+    {
+      "path": "theme.fth",
+      "bytes": 536,
+      "sha256": "12a2e4a549a128472ebd82ad6ef74f32429290f66da6ccd6144ed46cd8161303"
+    },
+    {
+      "path": "configuration/foo_ui_columns.dll.cfg",
+      "bytes": 18360,
+      "sha256": "af89e8c4c361dab3717f49f9fca6d0b319756100ed92cf1796563ea86ac059c8"
+    },
+    {
+      "path": "configuration/foo_vis_spectrum_analyzer.dll.cfg",
+      "bytes": 60,
+      "sha256": "f894807bd1b5efa499c501d2dbc40f89e88276a3e2a1753d0da850887b5d0dae"
+    },
+    {
+      "path": "nekorox/presets/layout.fcl",
+      "bytes": 19987,
+      "sha256": "8601880a79d45930b96c35b1f5cd37bb33c3430feca248f84722cb79f4ebf4c5"
+    },
+    {
+      "path": "nekorox/presets/spectrum-golden.json",
+      "bytes": 2743,
+      "sha256": "78cc2e0efb503c621f9ac6d54f8a6e4360cf10f5508c350ea4de888f22aa1587"
+    }
+  ]
+}

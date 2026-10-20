@@ -1,0 +1,8 @@
+{
+  "name": "goden-icon-assets",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Optional build-time SVG rasterization; never shipped with the player",
+  "engines": { "node": ">=24" },
+  "dependencies": { "sharp": "0.35.5" }
+}

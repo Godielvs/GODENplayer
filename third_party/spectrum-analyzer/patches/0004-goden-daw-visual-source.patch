@@ -1,0 +1,71 @@
+diff --git a/UIElement.h b/UIElement.h
+index 8ad0261..27dca9c 100644
+--- a/UIElement.h
++++ b/UIElement.h
+@@ -13,6 +13,7 @@
+ #include "Graph.h"
+ #include "Artwork.h"
+ #include "FrameCounter.h"
++#include "GodenDawVisualSource.h"
+ 
+ #include <atomic>
+ #include <vector>
+@@ -229,6 +230,7 @@ private:
+ #endif
+ 
+     visualisation_stream_v2::ptr _VisualisationStream;
++    goden_daw_visual_source_t _GodenDawSource;
+     std::atomic_bool _IsFrozen { false }; // True if the component should stop rendering the spectrum.
+ 
+     frame_counter_t _FrameCounter;
+diff --git a/UIElementRendering.cpp b/UIElementRendering.cpp
+index 508a83f..7d0af1e 100644
+--- a/UIElementRendering.cpp
++++ b/UIElementRendering.cpp
+@@ -49,8 +49,9 @@ void uielement_t::RenderThreadProc() noexcept
+     const auto IsActive = [&]() noexcept
+     {
+         return IsRenderable()
+-            && !_PlaybackStopped.load(std::memory_order_acquire)
+-            && !_PlaybackPaused.load(std::memory_order_acquire);
++            && (_GodenDawSource.IsActive()
++                || (!_PlaybackStopped.load(std::memory_order_acquire)
++                    && !_PlaybackPaused.load(std::memory_order_acquire)));
+     };
+ 
+     const auto GetAnalysisFrameTime = [&]() noexcept
+@@ -85,8 +86,10 @@ void uielement_t::RenderThreadProc() noexcept
+ 
+         if (!IsActive())
+         {
+-            const HANDLE Handles[] = { _hStopRendering, _hRenderWake };
+-            const DWORD WaitResult = ::WaitForMultipleObjects((DWORD) _countof(Handles), Handles, FALSE, INFINITE);
++            const HANDLE DawWake = _GodenDawSource.WakeHandle();
++            const HANDLE Handles[] = { _hStopRendering, _hRenderWake, DawWake };
++            const DWORD HandleCount = (DawWake != nullptr) ? 3U : 2U;
++            const DWORD WaitResult = ::WaitForMultipleObjects(HandleCount, Handles, FALSE, INFINITE);
+ 
+             if (WaitResult == WAIT_OBJECT_0 || WaitResult == WAIT_FAILED)
+                 break;
+@@ -286,6 +289,21 @@ void uielement_t::ProcessEvents() noexcept
+ /// </summary>
+ void uielement_t::ProcessAudio() noexcept
+ {
++    audio_chunk_impl DawChunk;
++    double DawPlaybackTime = 0.;
++    if (_GodenDawSource.ReadLatest(DawChunk, DawPlaybackTime))
++    {
++        InitializeSampleRateDependentParameters(DawChunk);
++        for (auto & Iter : _Grid)
++            Iter._Graph->Process(DawChunk);
++        _RenderState._PlaybackTime = DawPlaybackTime;
++        _RenderState._IsStopped = false;
++        _RenderState._IsPaused = false;
++        return;
++    }
++    if (_GodenDawSource.IsActive())
++        return;
++
+     if (!_VisualisationStream.is_valid())
+         return;
+ 

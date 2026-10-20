@@ -1,0 +1,243 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals"><ProjectGuid>{2B6B699A-67E9-4E36-9716-90B7B08F54B2}</ProjectGuid><Keyword>Win32Proj</Keyword><RootNamespace>foo_nekorox</RootNamespace></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration"><ConfigurationType>DynamicLibrary</ConfigurationType><UseDebugLibraries>true</UseDebugLibraries></PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration"><ConfigurationType>DynamicLibrary</ConfigurationType><UseDebugLibraries>false</UseDebugLibraries><WholeProgramOptimization>true</WholeProgramOptimization></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup><OutDir>$(RepoRoot)out\$(Configuration)\</OutDir><IntDir>$(RepoRoot)out\obj\$(ProjectName)\$(Configuration)\</IntDir><TargetName>foo_nekorox</TargetName></PropertyGroup>
+  <PropertyGroup Condition="'$(GodenEnableQaHooks)'=='1'">
+    <OutDir>$(RepoRoot)out\qa\$(Configuration)\</OutDir>
+    <IntDir>$(RepoRoot)out\obj\$(ProjectName)\$(Configuration)\qa\</IntDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(IntDir)crt-shaders;$(IntDir)scope-shaders;$(IntDir)ambient-shaders;$(RepoRoot)src\core\include;$(RepoRoot)vendor;$(RepoRoot)vendor\libsonare\src;$(RepoRoot)vendor\libsonare\include;$(RepoRoot)vendor\libsonare\third_party\r8brain;$(RepoRoot)vendor\columns_ui-sdk;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp20</LanguageStandard><WarningLevel>Level4</WarningLevel><PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <PreprocessorDefinitions>GODEN_ENABLE_QA_HOOKS=$(GodenEnableQaHooks);WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;_WINDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation><ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem><GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>$(RepoRoot)out\third_party\libsonare\$(Configuration)\lib\sonare_mastering.lib;$(RepoRoot)out\third_party\libsonare\$(Configuration)\lib\sonare_fx.lib;$(RepoRoot)out\third_party\libsonare\$(Configuration)\lib\sonare_acoustic.lib;$(RepoRoot)out\third_party\libsonare\$(Configuration)\lib\sonare_rt.lib;$(RepoRoot)out\third_party\libsonare\$(Configuration)\lib\sonare_core.lib;$(RepoRoot)out\third_party\libsonare\$(Configuration)\lib\kissfft.lib;$(RepoRoot)vendor\foobar2000\shared\shared-x64.lib;Advapi32.lib;Bcrypt.lib;Comctl32.lib;Comdlg32.lib;D2d1.lib;D3d11.lib;Dcomp.lib;Dwrite.lib;Dwmapi.lib;Dxgi.lib;Dxguid.lib;Ole32.lib;Shell32.lib;Shlwapi.lib;User32.lib;Uxtheme.lib;Windowscodecs.lib;Winhttp.lib;Winmm.lib;Wtsapi32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'"><ClCompile><RuntimeLibrary>MultiThreaded</RuntimeLibrary><PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions><AdditionalOptions>/d2notypeopt %(AdditionalOptions)</AdditionalOptions></ClCompile><Link><OptimizeReferences>true</OptimizeReferences><EnableCOMDATFolding>true</EnableCOMDATFolding><AdditionalOptions>/Brepro %(AdditionalOptions)</AdditionalOptions></Link></ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'"><ClCompile><RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary></ClCompile></ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="opus_info_reader.cpp" />
+    <ClInclude Include="opus_info_projection.h" />
+    <ClInclude Include="opus_info_activation.h" />
+    <ClCompile Include="album_ambient_controller.cpp" />
+    <ClCompile Include="album_ambient_effect.cpp" />
+    <ClCompile Include="compact_scope_gpu.cpp" />
+    <ClCompile Include="album_session_service.cpp" />
+    <ClCompile Include="ui_form_viewport.cpp" />
+    <ClCompile Include="scope_light_pass.cpp" />
+    <ClCompile Include="album_mode_view.cpp" />
+    <ClCompile Include="album_mode_renderer.cpp" />
+    <ClCompile Include="album_booklet_model.cpp" />
+    <ClCompile Include="scrub_output_adapter.cpp" />
+    <ClCompile Include="scrub_preview_service.cpp" />
+    <ClCompile Include="analysis_controller.cpp" /><ClCompile Include="analysis_worker_host.cpp" /><ClCompile Include="art_cache.cpp" /><ClCompile Include="artwork_transition_renderer.cpp" /><ClCompile Include="ascii_artwork_transition_renderer.cpp" /><ClCompile Include="chrome.cpp" /><ClCompile Include="component.cpp" /><ClCompile Include="coverflow_model.cpp" /><ClCompile Include="crt_xy_surface.cpp" /><ClCompile Include="database_service.cpp" /><ClCompile Include="display_environment.cpp" /><ClCompile Include="file_open_service.cpp" /><ClCompile Include="frame_clock.cpp" /><ClCompile Include="frameless_window.cpp" /><ClCompile Include="glyph_flow_renderer.cpp" /><ClCompile Include="glyph_flow_service.cpp" /><ClCompile Include="interaction_latency_guard.cpp" /><ClCompile Include="keep_playing_service.cpp" /><ClCompile Include="latest_worker.cpp" /><ClCompile Include="legacy_import_service.cpp" /><ClCompile Include="library_model.cpp" /><ClCompile Include="listen_presentation_model.cpp" /><ClCompile Include="listen_visual_renderer.cpp" /><ClCompile Include="listen_window.cpp" /><ClCompile Include="local_content_cache.cpp" /><ClCompile Include="mainmenu.cpp" /><ClCompile Include="motion_coordinator.cpp" /><ClCompile Include="native_d2d_surface.cpp" /><ClCompile Include="native_panels.cpp" /><ClCompile Include="note_editor.cpp" /><ClCompile Include="persona_editor.cpp" /><ClCompile Include="packet_cost_controller.cpp" /><ClCompile Include="panel_d2d.cpp" /><ClCompile Include="player_shell_panel.cpp" /><ClCompile Include="realtime_analysis_hub.cpp" /><ClCompile Include="runtime.cpp" /><ClCompile Include="scrub_coordinator.cpp" /><ClCompile Include="scrub_smoother_dsp.cpp" /><ClCompile Include="tag_edit_service.cpp" /><ClCompile Include="tag_editor_window.cpp" /><ClCompile Include="text_reconstruction_transition.cpp" /><ClCompile Include="text_util.cpp" /><ClCompile Include="theme_provider.cpp" /><ClCompile Include="theme_service.cpp" /><ClCompile Include="ui_design_system.cpp" /><ClCompile Include="ui_invalidation_bus.cpp" /><ClCompile Include="ui_preferences.cpp" /><ClCompile Include="wave_seek_panel.cpp" /><ClCompile Include="waveform_cache_service.cpp" /><ClCompile Include="waveform_persistence.cpp" /><ClCompile Include="workspace_panel.cpp" /><ClCompile Include="workspace_view_model.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="album_ambient_controller.h" />
+    <ClInclude Include="ambient_texture_scheduler.h" />
+    <ClInclude Include="album_ambient_effect.h" />
+    <ClInclude Include="compact_scope_gpu.h" />
+    <ClInclude Include="album_session_service.h" />
+    <ClInclude Include="ui_form_layout.h" />
+    <ClInclude Include="ui_form_viewport.h" />
+    <ClInclude Include="scope_light_pass.h" />
+    <ClInclude Include="operation_sequence.h" />
+    <ClInclude Include="album_mode_view.h" />
+    <ClInclude Include="album_mode_renderer.h" />
+    <ClInclude Include="accessible_surface.h" />
+    <ClInclude Include="telemetry_span.h" />
+    <ClInclude Include="album_booklet_model.h" />
+    <ClInclude Include="physical_file_edit_plan.h" />
+    <ClInclude Include="pixel_ui\goden_pixel_assets.generated.hpp" />
+    <ClInclude Include="pixel_ui\pixel_icon_painter.hpp" />
+    <ClInclude Include="pixel_ui\pixel_placement.hpp" />
+    <ClInclude Include="pixel_ui\ui_glyph_map.hpp" />
+    <ClInclude Include="render_surface_contracts.h" />
+    <ClInclude Include="scrub_output_adapter.h" />
+    <ClInclude Include="scrub_preview_service.h" />
+    <ClInclude Include="analysis_controller.h" /><ClInclude Include="analysis_worker_host.h" /><ClInclude Include="art_cache.h" /><ClInclude Include="artwork_transition_renderer.h" /><ClInclude Include="ascii_artwork_transition_renderer.h" /><ClInclude Include="chrome.h" /><ClInclude Include="coverflow_model.h" /><ClInclude Include="crt_xy_surface.h" /><ClInclude Include="database_service.h" /><ClInclude Include="display_environment.h" /><ClInclude Include="file_open_service.h" /><ClInclude Include="frame_clock.h" /><ClInclude Include="frameless_window.h" /><ClInclude Include="glyph_flow_renderer.h" /><ClInclude Include="glyph_flow_service.h" /><ClInclude Include="interaction_latency_guard.h" /><ClInclude Include="keep_playing_service.h" /><ClInclude Include="latest_worker.h" /><ClInclude Include="legacy_import_service.h" /><ClInclude Include="library_model.h" /><ClInclude Include="listen_lifecycle.h" /><ClInclude Include="listen_presentation_model.h" /><ClInclude Include="listen_visual_renderer.h" /><ClInclude Include="listen_window.h" /><ClInclude Include="local_content_cache.h" /><ClInclude Include="mainmenu.h" /><ClInclude Include="motion_coordinator.h" /><ClInclude Include="native_d2d_surface.h" /><ClInclude Include="nekorox_theme_provider.h" /><ClInclude Include="note_editor.h" /><ClInclude Include="persona_editor.h" /><ClInclude Include="packet_cost_controller.h" /><ClInclude Include="panel_d2d.h" /><ClInclude Include="player_shell_panel.h" /><ClInclude Include="realtime_analysis_hub.h" /><ClInclude Include="runtime.h" /><ClInclude Include="scrub_coordinator.h" /><ClInclude Include="scrub_smoother_dsp.h" /><ClInclude Include="sdk_compat.h" /><ClInclude Include="tag_edit_service.h" /><ClInclude Include="tag_editor_window.h" /><ClInclude Include="text_reconstruction_transition.h" /><ClInclude Include="text_util.h" /><ClInclude Include="theme_service.h" /><ClInclude Include="ui_design_system.h" /><ClInclude Include="ui_invalidation_bus.h" /><ClInclude Include="ui_preferences.h" /><ClInclude Include="wave_seek_panel.h" /><ClInclude Include="waveform_cache_service.h" /><ClInclude Include="waveform_persistence.h" /><ClInclude Include="workspace_notifications.h" /><ClInclude Include="workspace_panel.h" /><ClInclude Include="workspace_view_model.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="render_device_hub.cpp" />
+    <ClCompile Include="performance_telemetry.cpp" />
+    <ClCompile Include="rollout_flags.cpp" />
+    <ClCompile Include="discord_cover_service.cpp" />
+    <ClCompile Include="discord_relay_client.cpp" />
+    <ClCompile Include="discord_presence_service.cpp" />
+    <ClCompile Include="daw_visual_bridge.cpp" />
+    <ClCompile Include="daw_output_backend.cpp" />
+    <ClCompile Include="options_window.cpp" />
+    <ClCompile Include="daw_window.cpp" />
+    <ClCompile Include="master_dsp_controller.cpp" />
+    <ClCompile Include="master_dsp_engine.cpp" />
+    <ClCompile Include="master_dsp_window.cpp" />
+    <!-- Reuse only libsonare's standalone realtime meter; the full mixing and
+         graph targets remain disabled for the serial master rack. -->
+    <ClCompile Include="$(RepoRoot)vendor\libsonare\src\mixing\meter.cpp" />
+    <ClInclude Include="render_device_hub.h" />
+    <ClInclude Include="performance_telemetry.h" />
+    <ClInclude Include="rollout_flags.h" />
+    <ClInclude Include="discord_cover_service.h" />
+    <ClInclude Include="discord_presence_service.h" />
+    <ClInclude Include="daw_visual_bridge.h" />
+    <ClInclude Include="daw_output_backend.h" />
+    <ClInclude Include="options_window.h" />
+    <ClInclude Include="daw_window.h" />
+    <ClInclude Include="master_dsp_types.h" />
+    <ClInclude Include="master_dsp_controller.h" />
+    <ClInclude Include="master_dsp_engine.h" />
+    <ClInclude Include="master_dsp_window.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="lyrics_http_client.cpp" />
+    <ClCompile Include="lyrics_local_provider.cpp" />
+    <ClCompile Include="lrclib_provider.cpp" />
+    <ClCompile Include="lyrics_service.cpp" />
+    <ClInclude Include="lyrics_http_client.h" />
+    <ClInclude Include="lyrics_local_provider.h" />
+    <ClInclude Include="lyrics_provider_types.h" />
+    <ClInclude Include="lrclib_provider.h" />
+    <ClInclude Include="lyrics_service.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="text_layout_cache.cpp" />
+    <ClCompile Include="async_text_view.cpp" />
+    <ClCompile Include="prepared_text_runs.cpp" />
+    <ClCompile Include="workspace_retained_scene.cpp" />
+    <ClCompile Include="presentation_revision.cpp" />
+    <ClCompile Include="worker_reaper.cpp" />
+    <ClInclude Include="text_layout_cache.h" />
+    <ClInclude Include="workspace_retained_scene.h" />
+    <ClInclude Include="presentation_revision.h" />
+    <ClInclude Include="worker_reaper.h" />
+    <ClInclude Include="motion_policy.h" />
+    <ClInclude Include="monitor_text_rendering.h" />
+    <ClInclude Include="window_monitor_identity.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="shaders\crt_xy.hlsl" />
+    <None Include="shaders\listen_scope_light.hlsl" />
+    <None Include="shaders\album_ambient_a1.hlsl" />
+    <None Include="shaders\compact_scope.hlsl" />
+  </ItemGroup>
+  <PropertyGroup>
+    <CrtShaderSource>$(ProjectDir)shaders\crt_xy.hlsl</CrtShaderSource>
+    <CrtShaderCompiler>$(WindowsSdkDir)bin\$(WindowsTargetPlatformVersion)\x64\fxc.exe</CrtShaderCompiler>
+    <CrtShaderFlags>/nologo /O3 /Ges</CrtShaderFlags>
+    <CrtShaderDirectory>$(IntDir)crt-shaders</CrtShaderDirectory>
+    <CrtShaderStamp>$(CrtShaderDirectory)\crt-inputs.stamp</CrtShaderStamp>
+    <CrtShaderOutputs>$(CrtShaderDirectory)\crt_fullscreen_vs.h;$(CrtShaderDirectory)\crt_decay_ps.h;$(CrtShaderDirectory)\crt_beam_vs.h;$(CrtShaderDirectory)\crt_beam_ps.h;$(CrtShaderDirectory)\crt_composite_ps.h</CrtShaderOutputs>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\core\nekorox_core.vcxproj"><Project>{1A9D7960-BC9A-4FAF-847F-147B88D0F921}</Project></ProjectReference>
+    <ProjectReference Include="..\..\vendor\pfc\pfc.vcxproj"><Project>{EBFFFB4E-261D-44D3-B89C-957B31A0BF9C}</Project><AdditionalProperties>Configuration=$(Configuration) FB2K</AdditionalProperties></ProjectReference>
+    <ProjectReference Include="..\..\vendor\foobar2000\SDK\foobar2000_SDK.vcxproj"><Project>{E8091321-D79D-4575-86EF-064EA1A4A20D}</Project></ProjectReference>
+    <ProjectReference Include="..\..\vendor\foobar2000\foobar2000_component_client\foobar2000_component_client.vcxproj"><Project>{71AD2674-065B-48F5-B8B0-E1F9D3892081}</Project></ProjectReference>
+    <ProjectReference Include="..\..\vendor\columns_ui-sdk\columns_ui-sdk-public.vcxproj"><Project>{93EC0EDE-01CD-4FB0-B8E8-4F2A027E026E}</Project></ProjectReference>
+  </ItemGroup>
+  <Target Name="PrepareCrtShaderStamp" BeforeTargets="CompileCrtShaders">
+    <MakeDir Directories="$(CrtShaderDirectory)" />
+    <WriteLinesToFile File="$(CrtShaderStamp)"
+      Lines="compiler=$(CrtShaderCompiler);flags=$(CrtShaderFlags);FullscreenVS=vs_5_0;DecayPS=ps_5_0;BeamVS=vs_5_0;BeamPS=ps_5_0;CompositePS=ps_5_0"
+      Overwrite="true" WriteOnlyWhenDifferent="true" />
+  </Target>
+  <Target Name="CompileCrtShaders" BeforeTargets="ClCompile"
+    DependsOnTargets="PrepareCrtShaderStamp"
+    Inputs="$(CrtShaderSource);$(CrtShaderCompiler);$(CrtShaderStamp)"
+    Outputs="$(CrtShaderOutputs)">
+    <Exec Command="&quot;$(CrtShaderCompiler)&quot; $(CrtShaderFlags) /E FullscreenVS /T vs_5_0 /Fh &quot;$(CrtShaderDirectory)\crt_fullscreen_vs.h&quot; /Vn g_crtFullscreenVs &quot;$(CrtShaderSource)&quot;" />
+    <Exec Command="&quot;$(CrtShaderCompiler)&quot; $(CrtShaderFlags) /E DecayPS /T ps_5_0 /Fh &quot;$(CrtShaderDirectory)\crt_decay_ps.h&quot; /Vn g_crtDecayPs &quot;$(CrtShaderSource)&quot;" />
+    <Exec Command="&quot;$(CrtShaderCompiler)&quot; $(CrtShaderFlags) /E BeamVS /T vs_5_0 /Fh &quot;$(CrtShaderDirectory)\crt_beam_vs.h&quot; /Vn g_crtBeamVs &quot;$(CrtShaderSource)&quot;" />
+    <Exec Command="&quot;$(CrtShaderCompiler)&quot; $(CrtShaderFlags) /E BeamPS /T ps_5_0 /Fh &quot;$(CrtShaderDirectory)\crt_beam_ps.h&quot; /Vn g_crtBeamPs &quot;$(CrtShaderSource)&quot;" />
+    <Exec Command="&quot;$(CrtShaderCompiler)&quot; $(CrtShaderFlags) /E CompositePS /T ps_5_0 /Fh &quot;$(CrtShaderDirectory)\crt_composite_ps.h&quot; /Vn g_crtCompositePs &quot;$(CrtShaderSource)&quot;" />
+  </Target>
+  <PropertyGroup>
+    <ScopeShaderSource>$(ProjectDir)shaders\listen_scope_light.hlsl</ScopeShaderSource>
+    <ScopeShaderCompiler>$(WindowsSdkDir)bin\$(WindowsTargetPlatformVersion)\x64\fxc.exe</ScopeShaderCompiler>
+    <ScopeShaderFlags>/nologo /O3 /Ges</ScopeShaderFlags>
+    <ScopeShaderDirectory>$(IntDir)scope-shaders</ScopeShaderDirectory>
+    <ScopeShaderStamp>$(ScopeShaderDirectory)\scope-inputs.stamp</ScopeShaderStamp>
+    <ScopeShaderOutputs>$(ScopeShaderDirectory)\scope_mask_vs.h;$(ScopeShaderDirectory)\scope_mask_ps.h;$(ScopeShaderDirectory)\scope_fullscreen_vs.h;$(ScopeShaderDirectory)\scope_blur_ps.h;$(ScopeShaderDirectory)\scope_composite_ps.h</ScopeShaderOutputs>
+  </PropertyGroup>
+  <Target Name="PrepareScopeShaderStamp" BeforeTargets="CompileScopeShaders">
+    <MakeDir Directories="$(ScopeShaderDirectory)" />
+    <WriteLinesToFile File="$(ScopeShaderStamp)"
+      Lines="compiler=$(ScopeShaderCompiler);flags=$(ScopeShaderFlags);MaskVS=vs_5_0;MaskPS=ps_5_0;FullscreenVS=vs_5_0;BlurPS=ps_5_0;CompositePS=ps_5_0"
+      Overwrite="true" WriteOnlyWhenDifferent="true" />
+  </Target>
+  <Target Name="CompileScopeShaders" BeforeTargets="ClCompile"
+    DependsOnTargets="PrepareScopeShaderStamp"
+    Inputs="$(ScopeShaderSource);$(ScopeShaderCompiler);$(ScopeShaderStamp)"
+    Outputs="$(ScopeShaderOutputs)">
+    <Exec Command="&quot;$(ScopeShaderCompiler)&quot; $(ScopeShaderFlags) /E MaskVS /T vs_5_0 /Fh &quot;$(ScopeShaderDirectory)\scope_mask_vs.h&quot; /Vn g_scopeMaskVs &quot;$(ScopeShaderSource)&quot;" />
+    <Exec Command="&quot;$(ScopeShaderCompiler)&quot; $(ScopeShaderFlags) /E MaskPS /T ps_5_0 /Fh &quot;$(ScopeShaderDirectory)\scope_mask_ps.h&quot; /Vn g_scopeMaskPs &quot;$(ScopeShaderSource)&quot;" />
+    <Exec Command="&quot;$(ScopeShaderCompiler)&quot; $(ScopeShaderFlags) /E FullscreenVS /T vs_5_0 /Fh &quot;$(ScopeShaderDirectory)\scope_fullscreen_vs.h&quot; /Vn g_scopeFullscreenVs &quot;$(ScopeShaderSource)&quot;" />
+    <Exec Command="&quot;$(ScopeShaderCompiler)&quot; $(ScopeShaderFlags) /E BlurPS /T ps_5_0 /Fh &quot;$(ScopeShaderDirectory)\scope_blur_ps.h&quot; /Vn g_scopeBlurPs &quot;$(ScopeShaderSource)&quot;" />
+    <Exec Command="&quot;$(ScopeShaderCompiler)&quot; $(ScopeShaderFlags) /E CompositePS /T ps_5_0 /Fh &quot;$(ScopeShaderDirectory)\scope_composite_ps.h&quot; /Vn g_scopeCompositePs &quot;$(ScopeShaderSource)&quot;" />
+  </Target>
+  <PropertyGroup>
+    <AmbientShaderSource>$(ProjectDir)shaders\album_ambient_a1.hlsl</AmbientShaderSource>
+    <AmbientShaderCompiler>$(WindowsSdkDir)bin\$(WindowsTargetPlatformVersion)\x64\fxc.exe</AmbientShaderCompiler>
+    <AmbientShaderFlags>/nologo /O3 /Ges /D D2D_FULL_SHADER /D D2D_ENTRY=main /I &quot;$(WindowsSdkDir)Include\$(WindowsTargetPlatformVersion)\um&quot;</AmbientShaderFlags>
+    <AmbientShaderDirectory>$(IntDir)ambient-shaders</AmbientShaderDirectory>
+    <AmbientShaderStamp>$(AmbientShaderDirectory)\ambient-inputs.stamp</AmbientShaderStamp>
+    <AmbientShaderOutputs>$(AmbientShaderDirectory)\album_ambient_a1_ps.h</AmbientShaderOutputs>
+  </PropertyGroup>
+  <Target Name="PrepareAmbientShaderStamp" BeforeTargets="CompileAmbientShader">
+    <MakeDir Directories="$(AmbientShaderDirectory)" />
+    <WriteLinesToFile File="$(AmbientShaderStamp)"
+      Lines="compiler=$(AmbientShaderCompiler);flags=$(AmbientShaderFlags);AmbientPS=ps_4_0"
+      Overwrite="true" WriteOnlyWhenDifferent="true" />
+  </Target>
+  <Target Name="CompileAmbientShader" BeforeTargets="ClCompile"
+    DependsOnTargets="PrepareAmbientShaderStamp"
+    Inputs="$(AmbientShaderSource);$(AmbientShaderCompiler);$(AmbientShaderStamp)"
+    Outputs="$(AmbientShaderOutputs)">
+    <Exec Command="&quot;$(AmbientShaderCompiler)&quot; $(AmbientShaderFlags) /E main /T ps_4_0 /Fh &quot;$(AmbientShaderOutputs)&quot; /Vn g_albumAmbientA1Ps &quot;$(AmbientShaderSource)&quot;" />
+  </Target>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <PropertyGroup>
+    <CompactScopeSource>$(ProjectDir)shaders\compact_scope.hlsl</CompactScopeSource>
+    <CompactScopeOutput>$(ScopeShaderDirectory)\compact_scope_ps.h</CompactScopeOutput>
+    <CompactScopeFlags>/nologo /O3 /Ges /D D2D_FULL_SHADER /D D2D_ENTRY=main /I &quot;$(WindowsSdkDir)Include\$(WindowsTargetPlatformVersion)\um&quot;</CompactScopeFlags>
+    <CompactScopeStamp>$(ScopeShaderDirectory)\compact-scope-inputs.stamp</CompactScopeStamp>
+  </PropertyGroup>
+  <Target Name="PrepareCompactScopeShaderStamp" BeforeTargets="CompileCompactScopeShader">
+    <MakeDir Directories="$(ScopeShaderDirectory)" />
+    <WriteLinesToFile File="$(CompactScopeStamp)"
+      Lines="compiler=$(ScopeShaderCompiler);flags=$(CompactScopeFlags);CompactScopePS=ps_4_0"
+      Overwrite="true" WriteOnlyWhenDifferent="true" />
+  </Target>
+  <Target Name="CompileCompactScopeShader" BeforeTargets="ClCompile"
+    DependsOnTargets="PrepareCompactScopeShaderStamp"
+    Inputs="$(CompactScopeSource);$(ScopeShaderCompiler);$(CompactScopeStamp);$(WindowsSdkDir)Include\$(WindowsTargetPlatformVersion)\um\d2d1effecthelpers.hlsli"
+    Outputs="$(CompactScopeOutput)">
+    <Exec Command="&quot;$(ScopeShaderCompiler)&quot; $(CompactScopeFlags) /E main /T ps_4_0 /Fh &quot;$(CompactScopeOutput)&quot; /Vn g_compactScopePs &quot;$(CompactScopeSource)&quot;" />
+  </Target>
+  <ItemGroup>
+    <ClCompile Include="library_roots_provider.cpp" />
+    <ClInclude Include="library_roots_provider.h" />
+    <ClCompile Include="media_file_operations.cpp" />
+    <ClCompile Include="media_binding_recovery.cpp" /><ClInclude Include="media_binding_recovery.h" />
+    <ClCompile Include="staging_media_editor.cpp" />
+    <ClInclude Include="media_file_operations.h" />
+    <ClInclude Include="staging_media_editor.h" />
+    <ClCompile Include="media_file_operation_service.cpp" />
+    <ClInclude Include="media_file_operation_service.h" />
+  </ItemGroup>
+  <Import Project="..\..\build\GODEN_A4.targets" />
+  <Import Project="$(MSBuildProjectDirectory)\..\..\build\curated-effects.targets" />
+</Project>

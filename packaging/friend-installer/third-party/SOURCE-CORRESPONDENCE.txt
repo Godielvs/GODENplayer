@@ -1,0 +1,27 @@
+Source correspondence — generated public candidate
+
+Share GODENplayer-corresponding-sources.zip beside the installer. The ZIP
+contains effective GODENplayer source, the modified Columns UI 3.6.0 source
+and submodules, Spectrum upstream plus all 18 patches and effective headers,
+SDK/WTL/vcpkg sources, licenses and build recipes. No private Git history or
+personal profiles are included.
+
+GODEN-RELEASE-MANIFEST.json records the current canonical version and six
+managed runtime binary hashes, source fingerprint and dependency-lock hash.
+GODEN-PAYLOAD-MANIFEST.json and the installer build manifest bind this candidate
+to the source ZIP hash. SOURCE-MANIFEST.json inside the ZIP records each file.
+Historical component hashes are intentionally not copied into this notice.
+
+goden-shader-render.exe is the independent Kerr-Newman image program. Its
+GPL-covered combined program, retained GLSL, MIT frame protocol/client, native
+renderer and offline build recipes are included in the corresponding sources.
+See KERR-RENDERER-COPYING.md and LICENSES/NPGS-NOTICE.txt. Separate contribution
+permissions remain pending; separation does not license those contributions.
+
+foobar2000 remains proprietary and intact; the complete official 2.25.10 x64
+installer is embedded unchanged and executed locally. No extracted portable
+host is distributed. Playback Statistics 3.1.11 is downloaded separately from
+its official source, verified by fixed package/x64 hashes, and not embedded.
+
+The root MIT license covers original project work only. Consult LICENSE-SCOPE.md
+and docs/SHADER-PROVENANCE.md for unresolved shader permissions and icon status.

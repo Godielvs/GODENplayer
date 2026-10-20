@@ -1,0 +1,85 @@
+{
+  "appBaseVersion": "5.1.0-beta.18-public.11",
+  "candidateChange": "Album palette-cache synchronization",
+  "appSourceFingerprint": "76641721ba8bf54d14234d8bd67df0df107fd92cf5eecf8aad1496282bd6409e",
+  "coreBinarySha256": "6b0c63d91dc94391a47bb6e1f73e0fd90dce63460aa87ca0596841e8ea14be4e",
+  "capture": "Real OBS 30.0.2 WGC window capture",
+  "personalMedia": false,
+  "publicationPerformed": false,
+  "audioMethod": "Same original synthesized source tracks paired in editing, not device loopback",
+  "sourceTracks": [
+    {
+      "file": "demo-library\\Tidal Signal\\01 - Quiet Current.flac",
+      "artist": "Low Tide Club",
+      "album": "Tidal Signal",
+      "title": "Quiet Current",
+      "genre": "Electronic",
+      "duration": 82,
+      "sha256": "b488958379eabd59e731b83552277e70f6d08105f5ad6d047ad7a527cfd81f65",
+      "coverSha256": "2bb9a3254b3e73de3767f4e5336d1541ea465356194137b623e961c5cad9866c",
+      "timedLyrics": true
+    },
+    {
+      "file": "demo-library\\After the Rain\\01 - Silver Line.flac",
+      "artist": "Glass Orchard",
+      "album": "After the Rain",
+      "title": "Silver Line",
+      "genre": "Trip-Hop",
+      "duration": 82,
+      "sha256": "04d610f6e93d2e6913687d04d0302abbcf395c2c6bbb52b9fea46104e4106471",
+      "coverSha256": "c0846fed6ad2f08b36758996eb9dd8c88d955ab463b6d8f839ae5d3076ef794a",
+      "timedLyrics": true
+    }
+  ],
+  "assets": [
+    {
+      "file": "album.png",
+      "bytes": 814900,
+      "sha256": "df1e5eedfc0150e9be21d3773cf1a1aad727223572967dc23b445b394b4b8d54"
+    },
+    {
+      "file": "library.png",
+      "bytes": 224672,
+      "sha256": "f8a949828705b1e0c475df0221d410330cc86b16d3dc2395f7b009f89e6bf588"
+    },
+    {
+      "file": "godenplayer-demo.mp4",
+      "bytes": 9348927,
+      "sha256": "0ef477861b2da3a13bf720030316a1ee42cf16f3b74a827005c5e851c3f995fa"
+    },
+    {
+      "file": "album-transition.gif",
+      "bytes": 4316271,
+      "sha256": "cf3464df40c88508776e43e22156853f6d176d00ca67747fc23f5d003521be61"
+    }
+  ],
+  "videoProbe": {
+    "programs": [],
+    "stream_groups": [],
+    "streams": [
+      {
+        "codec_name": "h264",
+        "width": 1328,
+        "height": 894,
+        "avg_frame_rate": "60/1"
+      },
+      {
+        "codec_name": "aac",
+        "sample_rate": "48000",
+        "channels": 2,
+        "avg_frame_rate": "0/0"
+      }
+    ],
+    "format": {
+      "duration": "35.800000",
+      "size": "9348927"
+    }
+  },
+  "gif": {
+    "width": 744,
+    "height": 501,
+    "frames": 72,
+    "loop": 0,
+    "durationMs": 6000
+  }
+}

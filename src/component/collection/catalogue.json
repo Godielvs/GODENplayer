@@ -1,0 +1,724 @@
+[
+  {
+    "id": "avtqpukv",
+    "title": "spectrogram",
+    "origin": "fragcoord",
+    "url": "https://fragcoord.xyz/s/avtqpukv",
+    "passes": [
+      {
+        "key": "main",
+        "stage": "fragment",
+        "slot": 7,
+        "repeat": 1,
+        "scale": 1,
+        "format": "rgba16f",
+        "bindings": [
+          {
+            "binding": 8,
+            "kind": "audio"
+          }
+        ],
+        "final": true,
+        "wrapMask": 0
+      }
+    ],
+    "alreadyAudio": true,
+    "maxEdge": 768,
+    "stateful": false,
+    "flipY": true,
+    "rate": 30,
+    "experimental": false
+  },
+  {
+    "id": "csln1b0s",
+    "title": "Cosmic",
+    "origin": "fragcoord",
+    "url": "https://fragcoord.xyz/s/csln1b0s",
+    "passes": [
+      {
+        "key": "main",
+        "stage": "fragment",
+        "slot": 7,
+        "repeat": 1,
+        "scale": 1,
+        "format": "rgba16f",
+        "bindings": [],
+        "final": true,
+        "wrapMask": 0
+      }
+    ],
+    "alreadyAudio": false,
+    "maxEdge": 1024,
+    "stateful": false,
+    "flipY": true,
+    "rate": 30,
+    "experimental": false
+  },
+  {
+    "id": "cxbf4gfw",
+    "title": "Cloud Bay",
+    "origin": "fragcoord",
+    "url": "https://fragcoord.xyz/s/cxbf4gfw",
+    "passes": [
+      {
+        "key": "main",
+        "stage": "fragment",
+        "slot": 7,
+        "repeat": 1,
+        "scale": 1,
+        "format": "rgba16f",
+        "bindings": [],
+        "final": true,
+        "wrapMask": 0
+      }
+    ],
+    "alreadyAudio": false,
+    "maxEdge": 1024,
+    "stateful": false,
+    "flipY": true,
+    "rate": 30,
+    "experimental": false
+  },
+  {
+    "id": "di76dy6c",
+    "title": "Disco Hive",
+    "origin": "fragcoord",
+    "url": "https://fragcoord.xyz/s/di76dy6c",
+    "passes": [
+      {
+        "key": "main",
+        "stage": "fragment",
+        "slot": 7,
+        "repeat": 1,
+        "scale": 1,
+        "format": "rgba16f",
+        "bindings": [],
+        "final": true,
+        "wrapMask": 0
+      }
+    ],
+    "alreadyAudio": false,
+    "maxEdge": 1024,
+    "stateful": false,
+    "flipY": true,
+    "rate": 30,
+    "experimental": false
+  },
+  {
+    "id": "fspiu4nn",
+    "title": "Fluid Sim Multigrid",
+    "origin": "fragcoord",
+    "url": "https://fragcoord.xyz/s/fspiu4nn",
+    "passes": [
+      {
+        "key": "pass1",
+        "stage": "fragment",
+        "slot": 0,
+        "repeat": 1,
+        "scale": 1,
+        "format": "rgba32f",
+        "bindings": [
+          {
+            "binding": 6,
+            "kind": "pass",
+            "index": 6
+          }
+        ],
+        "final": false,
+        "wrapMask": 127
+      },
+      {
+        "key": "pass2",
+        "stage": "fragment",
+        "slot": 1,
+        "repeat": 6,
+        "scale": 1,
+        "format": "rgba32f",
+        "bindings": [
+          {
+            "binding": 0,
+            "kind": "pass",
+            "index": 0
+          },
+          {
+            "binding": 1,
+            "kind": "pass",
+            "index": 1
+          }
+        ],
+        "final": false,
+        "wrapMask": 127
+      },
+      {
+        "key": "pass3",
+        "stage": "fragment",
+        "slot": 2,
+        "repeat": 12,
+        "scale": 2,
+        "format": "rgba32f",
+        "bindings": [
+          {
+            "binding": 1,
+            "kind": "pass",
+            "index": 1
+          },
+          {
+            "binding": 2,
+            "kind": "pass",
+            "index": 2
+          }
+        ],
+        "final": false,
+        "wrapMask": 127
+      },
+      {
+        "key": "pass4",
+        "stage": "fragment",
+        "slot": 3,
+        "repeat": 20,
+        "scale": 4,
+        "format": "rgba32f",
+        "bindings": [
+          {
+            "binding": 2,
+            "kind": "pass",
+            "index": 2
+          },
+          {
+            "binding": 3,
+            "kind": "pass",
+            "index": 3
+          }
+        ],
+        "final": false,
+        "wrapMask": 127
+      },
+      {
+        "key": "pass5",
+        "stage": "fragment",
+        "slot": 4,
+        "repeat": 12,
+        "scale": 2,
+        "format": "rgba32f",
+        "bindings": [
+          {
+            "binding": 2,
+            "kind": "pass",
+            "index": 2
+          },
+          {
+            "binding": 3,
+            "kind": "pass",
+            "index": 3
+          },
+          {
+            "binding": 4,
+            "kind": "pass",
+            "index": 4
+          }
+        ],
+        "final": false,
+        "wrapMask": 127
+      },
+      {
+        "key": "pass6",
+        "stage": "fragment",
+        "slot": 5,
+        "repeat": 6,
+        "scale": 1,
+        "format": "rgba32f",
+        "bindings": [
+          {
+            "binding": 1,
+            "kind": "pass",
+            "index": 1
+          },
+          {
+            "binding": 4,
+            "kind": "pass",
+            "index": 4
+          },
+          {
+            "binding": 5,
+            "kind": "pass",
+            "index": 5
+          },
+          {
+            "binding": 6,
+            "kind": "pass",
+            "index": 6
+          }
+        ],
+        "final": false,
+        "wrapMask": 127
+      },
+      {
+        "key": "pass7",
+        "stage": "fragment",
+        "slot": 6,
+        "repeat": 1,
+        "scale": 1,
+        "format": "rgba32f",
+        "bindings": [
+          {
+            "binding": 0,
+            "kind": "pass",
+            "index": 0
+          },
+          {
+            "binding": 1,
+            "kind": "pass",
+            "index": 1
+          },
+          {
+            "binding": 5,
+            "kind": "pass",
+            "index": 5
+          }
+        ],
+        "final": false,
+        "wrapMask": 127
+      },
+      {
+        "key": "main",
+        "stage": "fragment",
+        "slot": 7,
+        "repeat": 1,
+        "scale": 1,
+        "format": "rgba32f",
+        "bindings": [
+          {
+            "binding": 6,
+            "kind": "pass",
+            "index": 6
+          },
+          {
+            "binding": 5,
+            "kind": "pass",
+            "index": 5
+          }
+        ],
+        "final": true,
+        "wrapMask": 127
+      }
+    ],
+    "alreadyAudio": false,
+    "maxEdge": 512,
+    "stateful": true,
+    "flipY": true,
+    "rate": 30,
+    "experimental": false,
+    "alignment": 4
+  },
+  {
+    "id": "gtl4w04i",
+    "title": "Gltch",
+    "origin": "fragcoord",
+    "url": "https://fragcoord.xyz/s/gtl4w04i",
+    "passes": [
+      {
+        "key": "main",
+        "stage": "fragment",
+        "slot": 7,
+        "repeat": 1,
+        "scale": 1,
+        "format": "rgba16f",
+        "bindings": [],
+        "final": true,
+        "wrapMask": 0
+      }
+    ],
+    "alreadyAudio": false,
+    "maxEdge": 1024,
+    "stateful": false,
+    "flipY": true,
+    "rate": 30,
+    "experimental": false
+  },
+  {
+    "id": "sculpted_ribbons",
+    "title": "Fitas de Luz",
+    "origin": "fragcoord",
+    "url": "https://fragcoord.xyz/s/lnbg0175",
+    "passes": [
+      {
+        "key": "main",
+        "stage": "fragment",
+        "slot": 7,
+        "repeat": 1,
+        "scale": 1,
+        "format": "rgba16f",
+        "bindings": [],
+        "final": true,
+        "wrapMask": 0
+      }
+    ],
+    "alreadyAudio": false,
+    "maxEdge": 1024,
+    "stateful": false,
+    "flipY": true,
+    "rate": 30,
+    "experimental": false
+  },
+  {
+    "id": "nj47a5wgexpressive",
+    "title": "Nebula 3 — Tempestade Expressiva",
+    "origin": "fragcoord",
+    "url": "https://fragcoord.xyz/s/nj47a5wg",
+    "passes": [
+      {
+        "key": "main",
+        "stage": "fragment",
+        "slot": 7,
+        "repeat": 1,
+        "scale": 1,
+        "format": "rgba16f",
+        "bindings": [],
+        "final": true,
+        "wrapMask": 0
+      }
+    ],
+    "alreadyAudio": false,
+    "maxEdge": 1024,
+    "stateful": false,
+    "flipY": true,
+    "rate": 30,
+    "experimental": false
+  },
+  {
+    "id": "pnxxz6xp",
+    "title": "Phosphor 2 [318]",
+    "origin": "fragcoord",
+    "url": "https://fragcoord.xyz/s/pnxxz6xp",
+    "passes": [
+      {
+        "key": "main",
+        "stage": "fragment",
+        "slot": 7,
+        "repeat": 1,
+        "scale": 1,
+        "format": "rgba16f",
+        "bindings": [],
+        "final": true,
+        "wrapMask": 0
+      }
+    ],
+    "alreadyAudio": false,
+    "maxEdge": 1024,
+    "stateful": false,
+    "flipY": true,
+    "rate": 30,
+    "experimental": false
+  },
+  {
+    "id": "rw3dfaou",
+    "title": "Radar",
+    "origin": "fragcoord",
+    "url": "https://fragcoord.xyz/s/rw3dfaou",
+    "passes": [
+      {
+        "key": "main",
+        "stage": "fragment",
+        "slot": 7,
+        "repeat": 1,
+        "scale": 1,
+        "format": "rgba16f",
+        "bindings": [],
+        "final": true,
+        "wrapMask": 0
+      }
+    ],
+    "alreadyAudio": false,
+    "maxEdge": 1024,
+    "stateful": false,
+    "flipY": true,
+    "rate": 30,
+    "experimental": false
+  },
+  {
+    "id": "rxhy4i5t",
+    "title": "Rainbow Travel",
+    "origin": "fragcoord",
+    "url": "https://fragcoord.xyz/s/rxhy4i5t",
+    "passes": [
+      {
+        "key": "main",
+        "stage": "fragment",
+        "slot": 7,
+        "repeat": 1,
+        "scale": 1,
+        "format": "rgba16f",
+        "bindings": [],
+        "final": true,
+        "wrapMask": 0
+      }
+    ],
+    "alreadyAudio": false,
+    "maxEdge": 1024,
+    "stateful": false,
+    "flipY": true,
+    "rate": 30,
+    "experimental": false
+  },
+  {
+    "id": "tcsfryp6",
+    "title": "Tile",
+    "origin": "fragcoord",
+    "url": "https://fragcoord.xyz/s/tcsfryp6",
+    "passes": [
+      {
+        "key": "main",
+        "stage": "fragment",
+        "slot": 7,
+        "repeat": 1,
+        "scale": 1,
+        "format": "rgba16f",
+        "bindings": [],
+        "final": true,
+        "wrapMask": 0
+      }
+    ],
+    "alreadyAudio": false,
+    "maxEdge": 1024,
+    "stateful": false,
+    "flipY": true,
+    "rate": 30,
+    "experimental": false
+  },
+  {
+    "id": "u4uhc9b9",
+    "title": "Radiance Cascades 2D GI",
+    "origin": "fragcoord",
+    "url": "https://fragcoord.xyz/s/u4uhc9b9",
+    "passes": [
+      {
+        "key": "pass1",
+        "stage": "fragment",
+        "slot": 0,
+        "repeat": 1,
+        "scale": 1,
+        "format": "rgba16f",
+        "bindings": [
+          {
+            "binding": 0,
+            "kind": "pass",
+            "index": 0
+          },
+          {
+            "binding": 1,
+            "kind": "pass",
+            "index": 1
+          }
+        ],
+        "final": false,
+        "wrapMask": 0
+      },
+      {
+        "key": "pass2",
+        "stage": "fragment",
+        "slot": 1,
+        "repeat": 6,
+        "scale": 1,
+        "format": "rgba16f",
+        "bindings": [
+          {
+            "binding": 0,
+            "kind": "pass",
+            "index": 0
+          },
+          {
+            "binding": 1,
+            "kind": "pass",
+            "index": 1
+          }
+        ],
+        "final": false,
+        "wrapMask": 0
+      },
+      {
+        "key": "main",
+        "stage": "fragment",
+        "slot": 7,
+        "repeat": 1,
+        "scale": 1,
+        "format": "rgba16f",
+        "bindings": [
+          {
+            "binding": 0,
+            "kind": "pass",
+            "index": 0
+          },
+          {
+            "binding": 1,
+            "kind": "pass",
+            "index": 1
+          }
+        ],
+        "final": true,
+        "wrapMask": 0
+      }
+    ],
+    "alreadyAudio": false,
+    "maxEdge": 768,
+    "stateful": true,
+    "flipY": true,
+    "rate": 30,
+    "experimental": false,
+    "alignment": 64
+  },
+  {
+    "id": "3114",
+    "title": "Starship S",
+    "origin": "compute.toys",
+    "url": "https://compute.toys/view/3114",
+    "stateful": false,
+    "flipY": true,
+    "maxEdge": 960,
+    "rate": 30,
+    "experimental": false,
+    "passes": [
+      {
+        "key": "main",
+        "stage": "fragment",
+        "slot": 7,
+        "repeat": 1,
+        "scale": 1,
+        "format": "rgba16f",
+        "bindings": [],
+        "final": true,
+        "wrapMask": 0
+      }
+    ]
+  },
+  {
+    "id": "wXdfzj",
+    "title": "Kerr-Newman Black Hole",
+    "origin": "shadertoy",
+    "url": "https://www.shadertoy.com/view/wXdfzj",
+    "stateful": true,
+    "flipY": true,
+    "maxEdge": 480,
+    "rate": 30,
+    "experimental": true,
+    "passes": [
+      {
+        "key": "a",
+        "stage": "fragment",
+        "slot": 0,
+        "repeat": 1,
+        "scale": 1,
+        "format": "rgba32f",
+        "bindings": [
+          {
+            "binding": 0,
+            "kind": "keyboard"
+          },
+          {
+            "binding": 3,
+            "kind": "pass",
+            "index": 0
+          },
+          {
+            "binding": 2,
+            "kind": "pass",
+            "index": 1
+          }
+        ],
+        "final": false,
+        "wrapMask": 0
+      },
+      {
+        "key": "b",
+        "stage": "fragment",
+        "slot": 1,
+        "repeat": 1,
+        "scale": 1,
+        "format": "rgba32f",
+        "bindings": [
+          {
+            "binding": 3,
+            "kind": "keyboard"
+          },
+          {
+            "binding": 0,
+            "kind": "pass",
+            "index": 0
+          },
+          {
+            "binding": 1,
+            "kind": "pass",
+            "index": 1
+          }
+        ],
+        "final": false,
+        "wrapMask": 0
+      },
+      {
+        "key": "c",
+        "stage": "fragment",
+        "slot": 2,
+        "repeat": 1,
+        "scale": 1,
+        "format": "rgba32f",
+        "bindings": [
+          {
+            "binding": 0,
+            "kind": "pass",
+            "index": 1
+          }
+        ],
+        "final": false,
+        "wrapMask": 0
+      },
+      {
+        "key": "d",
+        "stage": "fragment",
+        "slot": 3,
+        "repeat": 1,
+        "scale": 1,
+        "format": "rgba32f",
+        "bindings": [
+          {
+            "binding": 0,
+            "kind": "pass",
+            "index": 2
+          }
+        ],
+        "final": false,
+        "wrapMask": 0
+      },
+      {
+        "key": "main",
+        "stage": "fragment",
+        "slot": 7,
+        "repeat": 1,
+        "scale": 1,
+        "format": "rgba16f",
+        "bindings": [
+          {
+            "binding": 0,
+            "kind": "pass",
+            "index": 0
+          },
+          {
+            "binding": 1,
+            "kind": "pass",
+            "index": 1
+          },
+          {
+            "binding": 2,
+            "kind": "pass",
+            "index": 2
+          },
+          {
+            "binding": 3,
+            "kind": "pass",
+            "index": 3
+          }
+        ],
+        "final": true,
+        "wrapMask": 0
+      }
+    ]
+  }
+]

@@ -1,0 +1,881 @@
+#include "mastering/api/insert_factory.h"
+
+#include <algorithm>
+#include <cstdint>
+#include <cstring>
+#include <memory>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+#include "mastering/api/named_processor.h"
+#include "mastering/api/processor_params.h"
+#include "mastering/dynamics/brickwall_limiter.h"
+#include "mastering/dynamics/compressor.h"
+#include "mastering/dynamics/deesser.h"
+#include "mastering/dynamics/expander.h"
+#include "mastering/dynamics/gate.h"
+#include "mastering/dynamics/limiter.h"
+#include "mastering/dynamics/parallel_comp.h"
+#include "mastering/dynamics/sidechain_router.h"
+#include "mastering/dynamics/transient_shaper.h"
+#include "mastering/dynamics/upward_compressor.h"
+#include "mastering/dynamics/upward_expander.h"
+#include "mastering/dynamics/vocal_rider.h"
+#include "mastering/eq/api_style.h"
+#include "mastering/eq/band_pass.h"
+#include "mastering/eq/cut_filter.h"
+#include "mastering/eq/dynamic_eq.h"
+#include "mastering/eq/graphic_eq.h"
+#include "mastering/eq/linear_phase.h"
+#include "mastering/eq/mid_side_eq.h"
+#include "mastering/eq/minimum_phase.h"
+#include "mastering/eq/parametric.h"
+#include "mastering/eq/pultec.h"
+#include "mastering/eq/shelving.h"
+#include "mastering/eq/tilt.h"
+#include "mastering/maximizer/adaptive_release.h"
+#include "mastering/maximizer/maximizer.h"
+#include "mastering/maximizer/soft_knee_max.h"
+#include "mastering/maximizer/true_peak_limiter.h"
+#include "mastering/multiband/multiband_compressor.h"
+#include "mastering/multiband/multiband_dynamic_eq.h"
+#include "mastering/multiband/multiband_expander.h"
+#include "mastering/multiband/multiband_imager.h"
+#include "mastering/multiband/multiband_limiter.h"
+#include "mastering/multiband/multiband_saturation.h"
+#include "mastering/saturation/amp_sim.h"
+#include "mastering/saturation/bitcrusher.h"
+#include "mastering/saturation/exciter.h"
+#include "mastering/saturation/hard_clipper.h"
+#include "mastering/saturation/multiband_exciter.h"
+#include "mastering/saturation/soft_clipper.h"
+#include "mastering/saturation/tape.h"
+#include "mastering/saturation/transformer.h"
+#include "mastering/saturation/tube.h"
+#include "mastering/saturation/waveshaper.h"
+#include "mastering/spectral/air_band.h"
+#include "mastering/spectral/low_end_focus.h"
+#include "mastering/spectral/presence_enhancer.h"
+#include "mastering/spectral/spectral_shaper.h"
+#include "mastering/stereo/auto_pan.h"
+#include "mastering/stereo/haas_enhancer.h"
+#include "mastering/stereo/imager.h"
+#include "mastering/stereo/mono_maker.h"
+#include "mastering/stereo/phase_align.h"
+#include "mastering/stereo/stereo_balance.h"
+#include "util/base64.h"
+#include "util/exception.h"
+#include "util/json.h"
+
+#ifdef SONARE_HAVE_FX
+#include <algorithm>
+#include <cmath>
+
+#include "effects/delay/stereo_delay.h"
+#include "effects/modulation/auto_wah.h"
+#include "effects/modulation/chorus.h"
+#include "effects/modulation/ensemble.h"
+#include "effects/modulation/flanger.h"
+#include "effects/modulation/phaser.h"
+#include "effects/modulation/pitch_shifter.h"
+#include "effects/modulation/ring_modulator.h"
+#include "effects/modulation/rotary.h"
+#include "effects/modulation/wah.h"
+#include "effects/reverb/convolution_reverb.h"
+#include "effects/reverb/dattorro_reverb.h"
+#include "effects/reverb/fdn_reverb.h"
+#include "effects/reverb/velvet_reverb.h"
+#ifdef SONARE_HAVE_ACOUSTIC
+#include "effects/acoustic/room_morph.h"
+#include "effects/reverb/room_reverb.h"
+#endif
+#endif
+
+namespace sonare::mastering::api {
+namespace {
+
+using detail::b;
+using detail::compressor_config;
+using detail::crossover_config;
+using detail::f;
+using detail::limiter_config;
+using detail::ParamMap;
+
+std::vector<float> parse_ir_f32_base64_json(const std::string& json_params) {
+  if (json_params.empty()) return {};
+  const auto root = sonare::util::json::parse_strict(json_params);
+  if (!root.is_object()) {
+    throw SonareException(ErrorCode::InvalidParameter, "expected JSON object");
+  }
+  const auto* value = root.find("irF32Base64");
+  if (value == nullptr) return {};
+  if (!value->is_string()) {
+    throw SonareException(ErrorCode::InvalidParameter, "irF32Base64 must be a string");
+  }
+
+  std::vector<uint8_t> bytes;
+  if (!base64_decode(value->as_string(), &bytes)) {
+    throw SonareException(ErrorCode::InvalidParameter, "irF32Base64 is malformed");
+  }
+  if (bytes.size() % sizeof(float) != 0) {
+    throw SonareException(ErrorCode::InvalidParameter,
+                          "irF32Base64 byte length must be f32 aligned");
+  }
+
+  std::vector<float> ir(bytes.size() / sizeof(float), 0.0f);
+  for (size_t i = 0; i < ir.size(); ++i) {
+    const size_t offset = i * sizeof(float);
+    const uint32_t bits = static_cast<uint32_t>(bytes[offset]) |
+                          (static_cast<uint32_t>(bytes[offset + 1]) << 8) |
+                          (static_cast<uint32_t>(bytes[offset + 2]) << 16) |
+                          (static_cast<uint32_t>(bytes[offset + 3]) << 24);
+    float sample = 0.0f;
+    std::memcpy(&sample, &bits, sizeof(sample));
+    if (!std::isfinite(sample)) {
+      throw SonareException(ErrorCode::InvalidParameter, "irF32Base64 contains non-finite samples");
+    }
+    ir[i] = sample;
+  }
+  return ir;
+}
+
+std::vector<Param> parse_insert_params_json(const std::string& json_params) {
+  try {
+    if (json_params.empty()) return {};
+    // Strict parse: insert params are a flat map of `{name: value}` and a
+    // duplicate key would silently shadow the earlier value, which is almost
+    // certainly a caller bug worth surfacing.
+    const auto root = sonare::util::json::parse_strict(json_params);
+    if (!root.is_object())
+      throw SonareException(ErrorCode::InvalidParameter, "expected JSON object");
+    std::vector<Param> params;
+    params.reserve(root.as_object().size());
+    for (const auto& [key, value] : root.as_object()) {
+      if (value.is_bool()) {
+        params.push_back(Param{key, value.as_bool() ? 1.0 : 0.0});
+      } else if (value.is_number()) {
+        params.push_back(Param{key, value.as_number()});
+      } else if (key == "irF32Base64" && value.is_string()) {
+        continue;
+      } else {
+        throw SonareException(ErrorCode::InvalidParameter,
+                              "JSON params values must be numbers or booleans");
+      }
+    }
+    return params;
+  } catch (const std::invalid_argument& e) {
+    throw SonareException(ErrorCode::InvalidParameter, std::string("make_insert: ") + e.what());
+  } catch (const sonare::util::json::JsonError& e) {
+    throw SonareException(ErrorCode::InvalidParameter, std::string("make_insert: ") + e.what());
+  }
+}
+
+using Processor = sonare::rt::ProcessorBase;
+
+template <typename T, typename... Args>
+std::unique_ptr<Processor> make(Args&&... args) {
+  return std::make_unique<T>(std::forward<Args>(args)...);
+}
+
+std::unique_ptr<Processor> build_dynamics(const std::string& name, const ParamMap& params) {
+  if (name == "dynamics.brickwallLimiter") {
+    return make<dynamics::BrickwallLimiter>(detail::brickwall_limiter_config(params));
+  }
+  if (name == "dynamics.compressor") {
+    return make<dynamics::Compressor>(compressor_config(params));
+  }
+  if (name == "dynamics.deesser") {
+    return make<dynamics::DeEsser>(detail::deesser_config(params));
+  }
+  if (name == "dynamics.expander") {
+    return make<dynamics::Expander>(detail::expander_config(params));
+  }
+  if (name == "dynamics.gate") {
+    return make<dynamics::Gate>(detail::gate_config(params));
+  }
+  if (name == "dynamics.limiter") {
+    return make<dynamics::Limiter>(limiter_config(params));
+  }
+  if (name == "dynamics.parallelComp") {
+    return make<dynamics::ParallelComp>(detail::parallel_comp_config(params));
+  }
+  if (name == "dynamics.sidechainRouter") {
+    return make<dynamics::SidechainRouter>(detail::sidechain_router_config(params));
+  }
+  if (name == "dynamics.duckingProcessor") {
+    return make<dynamics::DuckingProcessor>(detail::ducking_config(params));
+  }
+  if (name == "dynamics.transientShaper") {
+    return make<dynamics::TransientShaper>(detail::transient_shaper_config(params));
+  }
+  if (name == "dynamics.upwardCompressor") {
+    return make<dynamics::UpwardCompressor>(detail::upward_compressor_config(params));
+  }
+  if (name == "dynamics.upwardExpander") {
+    return make<dynamics::UpwardExpander>(detail::upward_expander_config(params));
+  }
+  if (name == "dynamics.vocalRider") {
+    return make<dynamics::VocalRider>(detail::vocal_rider_config(params));
+  }
+  return nullptr;
+}
+
+std::unique_ptr<Processor> build_eq(const std::string& name, const ParamMap& params) {
+  if (name == "eq.tilt") {
+    auto p = std::make_unique<eq::TiltEq>();
+    detail::configure_tilt(*p, params);
+    return p;
+  }
+  if (name == "eq.apiStyle") {
+    auto p = std::make_unique<eq::ApiStyleEq>();
+    detail::configure_api_style(*p, params);
+    return p;
+  }
+  if (name == "eq.parametric") {
+    auto p = std::make_unique<eq::ParametricEq>();
+    detail::configure_parametric(*p, params);
+    return p;
+  }
+  if (name == "eq.equalizer") {
+    auto p = std::make_unique<eq::EqualizerProcessor>(detail::equalizer_config(params, 2));
+    detail::configure_equalizer(*p, params);
+    return p;
+  }
+  if (name == "eq.minimumPhase") {
+    auto p = std::make_unique<eq::MinimumPhaseEq>();
+    detail::configure_minimum_phase(*p, params);
+    return p;
+  }
+  if (name == "eq.linearPhase") {
+    auto p = std::make_unique<eq::LinearPhaseEq>(detail::linear_phase_config(params));
+    detail::configure_linear_phase_bands(*p, params);
+    return p;
+  }
+  if (name == "eq.dynamic") {
+    auto p = std::make_unique<eq::DynamicEq>();
+    detail::configure_dynamic_eq_bands(*p, params);
+    return p;
+  }
+  if (name == "eq.pultec") {
+    auto p = std::make_unique<eq::PultecEq>();
+    detail::configure_pultec(*p, params);
+    return p;
+  }
+  if (name == "eq.cutFilter") {
+    auto p = std::make_unique<eq::CutFilter>();
+    detail::configure_cut_filter(*p, params);
+    return p;
+  }
+  if (name == "eq.bandPass") {
+    auto p = std::make_unique<eq::BandPassEq>();
+    detail::configure_band_pass(*p, params);
+    return p;
+  }
+  if (name == "eq.shelving") {
+    auto p = std::make_unique<eq::ShelvingEq>();
+    detail::configure_shelving(*p, params);
+    return p;
+  }
+  if (name == "eq.graphic") {
+    auto p = std::make_unique<eq::GraphicEq>();
+    detail::configure_graphic(*p, params);
+    return p;
+  }
+  if (name == "eq.midSide") {
+    auto p = std::make_unique<eq::MidSideEq>();
+    detail::configure_mid_side(*p, params);
+    return p;
+  }
+  return nullptr;
+}
+
+std::unique_ptr<Processor> build_saturation(const std::string& name, const ParamMap& params) {
+  if (name == "saturation.tape") {
+    return make<saturation::Tape>(detail::tape_config(params));
+  }
+  if (name == "saturation.exciter") {
+    return make<saturation::Exciter>(detail::exciter_config(params));
+  }
+  if (name == "saturation.bitcrusher") {
+    return make<saturation::BitCrusher>(detail::bitcrusher_config(params));
+  }
+  if (name == "saturation.hardClipper") {
+    return make<saturation::HardClipper>(detail::hard_clipper_config(params));
+  }
+  if (name == "saturation.softClipper") {
+    return make<saturation::SoftClipper>(detail::soft_clipper_config(params));
+  }
+  if (name == "saturation.waveshaper") {
+    return make<saturation::Waveshaper>(detail::waveshaper_config(params));
+  }
+  if (name == "saturation.tube") {
+    return make<saturation::Tube>(detail::tube_config(params));
+  }
+  if (name == "saturation.transformer") {
+    return make<saturation::Transformer>(detail::transformer_config(params));
+  }
+  if (name == "saturation.multibandExciter") {
+    return make<saturation::MultibandExciter>(detail::multiband_exciter_config(params));
+  }
+  if (name == "saturation.ampSim") {
+    // Guitar amp-sim: drive -> tone stack -> cab-EQ (the track-insert layer of
+    // the electric-guitar sound; the string itself is the KS synth voice).
+    return make<saturation::AmpSim>(detail::amp_sim_config(params));
+  }
+  return nullptr;
+}
+
+std::unique_ptr<Processor> build_spectral(const std::string& name, const ParamMap& params) {
+  if (name == "spectral.airBand") {
+    return make<spectral::AirBand>(detail::air_band_config(params));
+  }
+  if (name == "spectral.lowEndFocus") {
+    return make<spectral::LowEndFocus>(detail::low_end_focus_config(params));
+  }
+  if (name == "spectral.presenceEnhancer") {
+    return make<spectral::PresenceEnhancer>(detail::presence_enhancer_config(params));
+  }
+  if (name == "spectral.spectralShaper") {
+    return make<spectral::SpectralShaper>(detail::spectral_shaper_config(params));
+  }
+  return nullptr;
+}
+
+std::unique_ptr<Processor> build_stereo(const std::string& name, const ParamMap& params) {
+  if (name == "stereo.autoPan") {
+    return make<stereo::AutoPan>(detail::auto_pan_config(params));
+  }
+  if (name == "stereo.haasEnhancer") {
+    return make<stereo::HaasEnhancer>(detail::haas_enhancer_config(params));
+  }
+  if (name == "stereo.imager") {
+    return make<stereo::Imager>(detail::imager_config(params));
+  }
+  if (name == "stereo.monoMaker") {
+    return make<stereo::MonoMaker>(detail::mono_maker_config(params));
+  }
+  if (name == "stereo.phaseAlign") {
+    return make<stereo::PhaseAlign>(detail::phase_align_config(params));
+  }
+  if (name == "stereo.stereoBalance") {
+    return make<stereo::StereoBalance>(detail::stereo_balance_config(params));
+  }
+  return nullptr;
+}
+
+std::unique_ptr<Processor> build_maximizer(const std::string& name, const ParamMap& params) {
+  if (name == "maximizer.maximizer") {
+    return make<maximizer::Maximizer>(detail::maximizer_config(params));
+  }
+  // Note: there is intentionally no "maximizer.loudnessOptimize" insert. LUFS
+  // normalization is an offline/whole-signal operation (it needs the full
+  // integrated-loudness measurement before it can pick a gain) and cannot be
+  // expressed as a streaming block processor. Exposing it here would silently
+  // drop `targetLufs` and degrade to a bare true-peak limiter, which is
+  // surprising. Callers who want true-peak limiting as an insert should use
+  // "maximizer.truePeakLimiter"; LUFS targeting lives in the offline mastering
+  // chain (loudness.* config).
+  if (name == "maximizer.truePeakLimiter") {
+    return make<maximizer::TruePeakLimiter>(detail::true_peak_limiter_config(params));
+  }
+  if (name == "maximizer.softKneeMax") {
+    return make<maximizer::SoftKneeMax>(detail::soft_knee_max_config(params));
+  }
+  if (name == "maximizer.adaptiveRelease") {
+    return make<maximizer::AdaptiveRelease>(detail::adaptive_release_config(params));
+  }
+  return nullptr;
+}
+
+std::unique_ptr<Processor> build_multiband(const std::string& name, const ParamMap& params) {
+  if (name == "multiband.compressor") {
+    multiband::MultibandCompressorConfig config;
+    config.crossover = crossover_config(params);
+    detail::populate_compressor_bands(config, params);
+    return make<multiband::MultibandCompressor>(config);
+  }
+  if (name == "multiband.expander") {
+    multiband::MultibandExpanderConfig config;
+    config.crossover = crossover_config(params);
+    detail::populate_expander_bands(config, params);
+    return make<multiband::MultibandExpander>(config);
+  }
+  if (name == "multiband.limiter") {
+    multiband::MultibandLimiterConfig config;
+    config.crossover = crossover_config(params);
+    detail::populate_limiter_bands(config, params);
+    return make<multiband::MultibandLimiter>(config);
+  }
+  if (name == "multiband.imager") {
+    multiband::MultibandImagerConfig config;
+    config.crossover = crossover_config(params);
+    detail::populate_imager_bands(config, params);
+    return make<multiband::MultibandImager>(config);
+  }
+  if (name == "multiband.saturation") {
+    multiband::MultibandSaturationConfig config;
+    config.crossover = crossover_config(params);
+    detail::populate_saturation_bands(config, params);
+    return make<multiband::MultibandSaturation>(config);
+  }
+  if (name == "multiband.dynamicEq") {
+    multiband::MultibandDynamicEqConfig config;
+    config.crossover = crossover_config(params);
+    detail::populate_dynamic_eq_bands(config, params);
+    return make<multiband::MultibandDynamicEq>(config);
+  }
+  return nullptr;
+}
+
+#ifdef SONARE_HAVE_FX
+std::unique_ptr<Processor> build_effects(const std::string& name, const ParamMap& params,
+                                         const std::string* json_params) {
+  using namespace sonare::effects::reverb;
+  // "effects.reverb.plate" is an alias for "effects.reverb.dattorro": both names
+  // construct the same DattorroReverb processor with identical parameters.
+  if (name == "effects.reverb.plate" || name == "effects.reverb.dattorro") {
+    DattorroReverbConfig config;
+    // decaySec is a tail-length intent in seconds; DattorroReverbConfig.decay is
+    // a normalized tank feedback clamped internally to [0, 0.98]. The plate tank
+    // has no closed-form RT60, but we map decaySec to an APPROXIMATE T60 so it
+    // tracks roughly the same seconds as FDN/velvet/convolution instead of being
+    // an unrelated 0..0.98 knob. Model: the figure-8 tank circulates once every
+    // ~21589 samples (sum of both halves' allpass+delay lengths at the 29761 Hz
+    // reference rate) and multiplies energy by decay^4 per full round trip (decay
+    // is applied twice per half). Requiring the amplitude to reach 1e-3 (-60 dB)
+    // after T60 seconds gives decay = exp(-ln(1000) * Tloop / (4 * T60)).
+    if (params.find("decaySec") != params.end()) {
+      constexpr float kTankLoopSeconds = 21589.0f / 29761.0f;  // both halves at ref rate
+      const float decay_sec = std::max(0.05f, f(params, "decaySec", 5.0f));
+      const float feedback = std::exp(-6.907755f * kTankLoopSeconds / (4.0f * decay_sec));
+      config.decay = std::min(0.98f, std::max(0.0f, feedback));
+    } else {
+      config.decay = f(params, "decay", config.decay);
+    }
+    config.damping = f(params, "damping", config.damping);
+    config.dry_wet = f(params, "dryWet", config.dry_wet);
+    // Figure-8 tank modulation (the plate's chorused tail); wire both fields so
+    // they are reachable at construction, matching Velvet's full-field mapping.
+    config.mod_rate_hz = f(params, "modRateHz", config.mod_rate_hz);
+    config.mod_depth_samples = f(params, "modDepthSamples", config.mod_depth_samples);
+    // pre_delay_samples is defined at the reverb's reference rate (header
+    // comment), so convert preDelayMs using kReferenceSampleRate; prepare()
+    // rescales the resulting sample count to the working sample rate.
+    if (params.find("preDelayMs") != params.end()) {
+      config.pre_delay_samples = f(params, "preDelayMs", 0.0f) *
+                                 static_cast<float>(DattorroReverb::kReferenceSampleRate) / 1000.0f;
+    }
+    return make<DattorroReverb>(config);
+  }
+  if (name == "effects.reverb.fdn") {
+    // Construction-time keys only: decaySec (seconds -> decay/10) and hfDamping
+    // are convenience aliases parsed here. The RT-automatable parameter surface
+    // (parameter_descriptors / set_parameter) exposes the unit-normalized keys
+    // decay (0..1.5), damping (0..1) and dryWet instead — a host automating the
+    // tail at audio rate must target those, not decaySec/hfDamping.
+    FdnReverbConfig config;
+    if (params.find("decaySec") != params.end()) {
+      // decaySec is the approximate RT60 tail length in seconds. The FDN's
+      // T60_lf = max(0.01, clamp(decay, 0, 1.5) * 10), so decaySec maps to
+      // T60 directly via decay = decaySec / 10. The core clamps decay to 1.5
+      // (T60 = 15 s); clamp here too so an out-of-range request like
+      // {decaySec:40} resolves to the documented 15 s ceiling rather than being
+      // silently truncated only after construction.
+      config.decay = std::clamp(f(params, "decaySec", 5.5f) / 10.0f, 0.0f, 1.5f);
+    } else {
+      config.decay = f(params, "decay", config.decay);
+    }
+    config.hf_damping = f(params, "damping", f(params, "hfDamping", config.hf_damping));
+    config.dry_wet = f(params, "dryWet", config.dry_wet);
+    return make<FdnReverb>(config);
+  }
+  if (name == "effects.reverb.velvet") {
+    VelvetReverbConfig config;
+    config.decay = f(params, "decay", config.decay);
+    config.dry_wet = f(params, "dryWet", config.dry_wet);
+    if (params.find("decaySec") != params.end()) {
+      // Velvet's effective T60 = reverb_time_s * (0.5 + decay). To make decaySec
+      // mean approximately the same RT60 as FDN (decaySec == ~T60), set
+      // reverb_time_s = decaySec / (0.5 + decay) so the product lands on decaySec.
+      const float decay_factor = 0.5f + std::clamp(config.decay, 0.0f, 1.0f);
+      config.reverb_time_s = std::max(0.0f, f(params, "decaySec", config.reverb_time_s)) /
+                             std::max(0.01f, decay_factor);
+    } else {
+      config.reverb_time_s = f(params, "reverbTimeS", config.reverb_time_s);
+    }
+    config.density_hz = f(params, "densityHz", config.density_hz);
+    config.enable_shelf = b(params, "enableShelf", config.enable_shelf);
+    return make<VelvetReverb>(config);
+  }
+  if (name == "effects.reverb.convolution") {
+    // When no explicit IR is injected (make_insert_with_ir), the convolver
+    // synthesizes a decaying-noise IR from these scalar params at prepare() time
+    // so the insert produces an actual reverb tail just like its algorithmic
+    // siblings. decaySec is the approximate RT60 tail length in seconds (matched
+    // to effects.reverb.fdn, where decaySec maps directly to ~T60).
+    ConvolutionReverbConfig config;
+    if (params.find("decaySec") != params.end()) {
+      // Clamp to the synthesizer's ceiling at construction so an out-of-range
+      // request like {decaySec:40} resolves to the documented maximum tail
+      // rather than being silently truncated only later in prepare().
+      config.decay_sec = std::clamp(f(params, "decaySec", config.decay_sec), 0.0f,
+                                    ConvolutionReverbConfig::kMaxDecaySeconds);
+    }
+    config.pre_delay_ms = f(params, "preDelayMs", config.pre_delay_ms);
+    config.dry_wet = f(params, "dryWet", config.dry_wet);
+    config.seed = static_cast<uint32_t>(std::max(0, detail::i(params, "seed", config.seed)));
+    auto reverb = std::make_unique<ConvolutionReverb>(config);
+    std::vector<float> ir =
+        json_params ? parse_ir_f32_base64_json(*json_params) : std::vector<float>{};
+    if (!ir.empty()) {
+      reverb->load_ir(ir);
+    }
+    return reverb;
+  }
+#ifdef SONARE_HAVE_ACOUSTIC
+  if (name == "effects.reverb.room") {
+    // Geometry-driven 5th engine: the RIR is synthesized from the shoebox
+    // dimensions + uniform absorption at prepare() time, then convolved.
+    RoomReverbConfig config;
+    config.dims = {f(params, "lengthM", config.dims.length), f(params, "widthM", config.dims.width),
+                   f(params, "heightM", config.dims.height)};
+    config.source = {f(params, "sourceX", config.source.x), f(params, "sourceY", config.source.y),
+                     f(params, "sourceZ", config.source.z)};
+    config.listener = {f(params, "listenerX", config.listener.x),
+                       f(params, "listenerY", config.listener.y),
+                       f(params, "listenerZ", config.listener.z)};
+    config.absorption = f(params, "absorption", config.absorption);
+    config.ism_order = std::max(0, detail::i(params, "ismOrder", config.ism_order));
+    config.seed = static_cast<unsigned>(
+        std::max(0, detail::i(params, "seed", static_cast<int>(config.seed))));
+    config.max_seconds = f(params, "maxSeconds", config.max_seconds);
+    config.dry_wet = f(params, "dryWet", config.dry_wet);
+    return make<RoomReverb>(config);
+  }
+  if (name == "effects.acoustic.roomMorph") {
+    // Source-reverb tail suppression in front of a target-room convolution. The
+    // target room's RIR is synthesized from its geometry + uniform absorption.
+    effects::acoustic::RoomMorphConfig config;
+    config.target = sonare::acoustic::uniform_shoebox(
+        {f(params, "lengthM", 7.0f), f(params, "widthM", 5.0f), f(params, "heightM", 3.0f)},
+        f(params, "absorption", 0.2f));
+    config.placement.source = {f(params, "sourceX", 1.0f), f(params, "sourceY", 1.0f),
+                               f(params, "sourceZ", 1.2f)};
+    config.placement.listener = {f(params, "listenerX", 5.0f), f(params, "listenerY", 4.0f),
+                                 f(params, "listenerZ", 1.7f)};
+    config.source_tail_suppression =
+        f(params, "sourceTailSuppression", config.source_tail_suppression);
+    config.wet = f(params, "dryWet", config.wet);
+    config.ism_order = std::max(0, detail::i(params, "ismOrder", config.ism_order));
+    config.seed = static_cast<unsigned>(
+        std::max(0, detail::i(params, "seed", static_cast<int>(config.seed))));
+    config.max_seconds = f(params, "maxSeconds", config.max_seconds);
+    return make<effects::acoustic::RoomMorphProcessor>(config);
+  }
+#endif
+  if (name == "effects.modulation.chorus") {
+    effects::modulation::ChorusConfig config;
+    config.rate_hz = f(params, "rateHz", config.rate_hz);
+    config.depth_ms = f(params, "depthMs", config.depth_ms);
+    config.center_delay_ms = f(params, "centerDelayMs", config.center_delay_ms);
+    config.dry_wet = f(params, "dryWet", config.dry_wet);
+    return make<effects::modulation::Chorus>(config);
+  }
+  if (name == "effects.modulation.ensemble") {
+    effects::modulation::EnsembleConfig config;
+    config.rate_slow_hz = f(params, "rateSlowHz", config.rate_slow_hz);
+    config.rate_fast_hz = f(params, "rateFastHz", config.rate_fast_hz);
+    config.depth_slow_ms = f(params, "depthSlowMs", config.depth_slow_ms);
+    config.depth_fast_ms = f(params, "depthFastMs", config.depth_fast_ms);
+    config.center_delay_ms = f(params, "centerDelayMs", config.center_delay_ms);
+    config.tone_hz = f(params, "toneHz", config.tone_hz);
+    config.dry_wet = f(params, "dryWet", config.dry_wet);
+    return make<effects::modulation::Ensemble>(config);
+  }
+  if (name == "effects.modulation.flanger") {
+    effects::modulation::FlangerConfig config;
+    config.rate_hz = f(params, "rateHz", config.rate_hz);
+    config.depth_ms = f(params, "depthMs", config.depth_ms);
+    config.center_delay_ms = f(params, "centerDelayMs", config.center_delay_ms);
+    config.feedback = f(params, "feedback", config.feedback);
+    config.dry_wet = f(params, "dryWet", config.dry_wet);
+    return make<effects::modulation::Flanger>(config);
+  }
+  if (name == "effects.modulation.phaser") {
+    effects::modulation::PhaserConfig config;
+    config.rate_hz = f(params, "rateHz", config.rate_hz);
+    config.min_hz = f(params, "minHz", config.min_hz);
+    config.max_hz = f(params, "maxHz", config.max_hz);
+    config.stages = detail::i(params, "stages", config.stages);
+    config.dry_wet = f(params, "dryWet", config.dry_wet);
+    return make<effects::modulation::Phaser>(config);
+  }
+  if (name == "effects.modulation.wah") {
+    effects::modulation::WahConfig config;
+    config.rate_hz = f(params, "rateHz", config.rate_hz);
+    config.min_hz = f(params, "minHz", config.min_hz);
+    config.max_hz = f(params, "maxHz", config.max_hz);
+    config.resonance = f(params, "resonance", config.resonance);
+    config.dry_wet = f(params, "dryWet", config.dry_wet);
+    return make<effects::modulation::Wah>(config);
+  }
+  if (name == "effects.modulation.autoWah") {
+    effects::modulation::AutoWahConfig config;
+    config.sensitivity = f(params, "sensitivity", config.sensitivity);
+    config.min_hz = f(params, "minHz", config.min_hz);
+    config.max_hz = f(params, "maxHz", config.max_hz);
+    config.resonance = f(params, "resonance", config.resonance);
+    config.attack_ms = f(params, "attackMs", config.attack_ms);
+    config.release_ms = f(params, "releaseMs", config.release_ms);
+    config.dry_wet = f(params, "dryWet", config.dry_wet);
+    return make<effects::modulation::AutoWah>(config);
+  }
+  if (name == "effects.modulation.rotary") {
+    effects::modulation::RotaryConfig config;
+    config.rate_hz = f(params, "rateHz", config.rate_hz);
+    config.depth_ms = f(params, "depthMs", config.depth_ms);
+    config.tremolo = f(params, "tremolo", config.tremolo);
+    config.stereo_spread = f(params, "stereoSpread", config.stereo_spread);
+    config.dry_wet = f(params, "dryWet", config.dry_wet);
+    return make<effects::modulation::Rotary>(config);
+  }
+  if (name == "effects.modulation.ringModulator") {
+    effects::modulation::RingModulatorConfig config;
+    config.carrier_hz = f(params, "carrierHz", config.carrier_hz);
+    config.dry_wet = f(params, "dryWet", config.dry_wet);
+    return make<effects::modulation::RingModulator>(config);
+  }
+  if (name == "effects.modulation.pitchShifter") {
+    effects::modulation::PitchShifterConfig config;
+    config.semitones = f(params, "semitones", config.semitones);
+    config.dry_wet = f(params, "dryWet", config.dry_wet);
+    return make<effects::modulation::PitchShifter>(config);
+  }
+  if (name == "effects.delay.stereo") {
+    effects::delay::StereoDelayConfig config;
+    config.delay_time_l_ms = f(params, "delayTimeLMs", config.delay_time_l_ms);
+    config.delay_time_r_ms = f(params, "delayTimeRMs", config.delay_time_r_ms);
+    config.feedback = f(params, "feedback", config.feedback);
+    config.ping_pong = f(params, "pingPong", config.ping_pong);
+    config.dry_wet = f(params, "dryWet", config.dry_wet);
+    return make<effects::delay::StereoDelay>(config);
+  }
+  return nullptr;
+}
+#endif  // SONARE_HAVE_FX
+
+}  // namespace
+
+namespace {
+
+std::unique_ptr<Processor> build_insert(const std::string& name, const ParamMap& params,
+                                        const std::string* json_params = nullptr) {
+  if (auto p = build_dynamics(name, params)) return p;
+  if (auto p = build_eq(name, params)) return p;
+  if (auto p = build_saturation(name, params)) return p;
+  if (auto p = build_spectral(name, params)) return p;
+  if (auto p = build_stereo(name, params)) return p;
+  if (auto p = build_maximizer(name, params)) return p;
+  if (auto p = build_multiband(name, params)) return p;
+#ifdef SONARE_HAVE_FX
+  if (auto p = build_effects(name, params, json_params)) return p;
+#endif
+  return nullptr;
+}
+
+}  // namespace
+
+std::unique_ptr<sonare::rt::ProcessorBase> make_insert(const std::string& name,
+                                                       const std::string& json_params,
+                                                       std::vector<std::string>* out_unknown_keys) {
+  const std::vector<Param> param_list = parse_insert_params_json(json_params);
+  const ParamMap params = detail::make_map(param_list);
+  auto processor = build_insert(name, params, &json_params);
+  // Only report ignored keys for a recognized processor: build_insert() probes
+  // every key the processor reads (even absent ones), so any supplied key it
+  // never touched took no effect. An unknown name is surfaced as a hard error by
+  // the caller, not as an ignored-keys warning.
+  if (out_unknown_keys != nullptr && processor != nullptr) {
+    *out_unknown_keys = params.unprobed_keys();
+  }
+  return processor;
+}
+
+std::unique_ptr<sonare::rt::ProcessorBase> make_insert_from_params(
+    const std::string& name, const std::vector<Param>& param_list) {
+  const ParamMap params = detail::make_map(param_list);
+  return build_insert(name, params);
+}
+
+std::unique_ptr<sonare::rt::ProcessorBase> make_insert_with_ir(const std::string& name,
+                                                               const std::string& json_params,
+                                                               const float* impulse_response,
+                                                               int ir_num_samples) {
+  if (ir_num_samples < 0 || (ir_num_samples > 0 && impulse_response == nullptr)) {
+    throw SonareException(ErrorCode::InvalidParameter, "make_insert_with_ir: invalid IR");
+  }
+#ifdef SONARE_HAVE_FX
+  if (name == "effects.reverb.convolution") {
+    // Validate params for malformed JSON parity with make_insert(), then build a
+    // real, IR-loaded convolution insert. load_ir() stores the IR and is safe to
+    // call before prepare(); prepare() reapplies it to the FFT convolvers.
+    const std::vector<Param> param_list = parse_insert_params_json(json_params);
+    const ParamMap params = detail::make_map(param_list);
+    effects::reverb::ConvolutionReverbConfig config;
+    config.dry_wet = f(params, "dryWet", config.dry_wet);
+    auto reverb = std::make_unique<effects::reverb::ConvolutionReverb>(config);
+    reverb->load_ir(impulse_response, ir_num_samples);
+    return reverb;
+  }
+#endif
+  // Every other insert ignores the IR and falls back to the standard factory.
+  return make_insert(name, json_params);
+}
+
+std::vector<std::string> insert_factory_names() {
+  return {
+      "dynamics.brickwallLimiter",
+      "dynamics.compressor",
+      "dynamics.deesser",
+      "dynamics.expander",
+      "dynamics.gate",
+      "dynamics.limiter",
+      "dynamics.parallelComp",
+      "dynamics.sidechainRouter",
+      "dynamics.duckingProcessor",
+      "dynamics.transientShaper",
+      "dynamics.upwardCompressor",
+      "dynamics.upwardExpander",
+      "dynamics.vocalRider",
+      "eq.tilt",
+      "eq.apiStyle",
+      "eq.parametric",
+      "eq.minimumPhase",
+      "eq.linearPhase",
+      "eq.dynamic",
+      "eq.equalizer",
+      "eq.pultec",
+      "eq.cutFilter",
+      "eq.bandPass",
+      "eq.shelving",
+      "eq.graphic",
+      "eq.midSide",
+      "saturation.tape",
+      "saturation.exciter",
+      "saturation.bitcrusher",
+      "saturation.hardClipper",
+      "saturation.softClipper",
+      "saturation.waveshaper",
+      "saturation.tube",
+      "saturation.transformer",
+      "saturation.multibandExciter",
+      "saturation.ampSim",
+      "spectral.airBand",
+      "spectral.lowEndFocus",
+      "spectral.presenceEnhancer",
+      "spectral.spectralShaper",
+      "stereo.autoPan",
+      "stereo.haasEnhancer",
+      "stereo.imager",
+      "stereo.monoMaker",
+      "stereo.phaseAlign",
+      "stereo.stereoBalance",
+      "maximizer.maximizer",
+      "maximizer.truePeakLimiter",
+      "maximizer.softKneeMax",
+      "maximizer.adaptiveRelease",
+      "multiband.compressor",
+      "multiband.expander",
+      "multiband.limiter",
+      "multiband.imager",
+      "multiband.saturation",
+      "multiband.dynamicEq",
+#ifdef SONARE_HAVE_FX
+      // "effects.reverb.plate" is an alias for "effects.reverb.dattorro" (same
+      // processor); both names are listed so either resolves via make_insert.
+      "effects.reverb.plate",
+      "effects.reverb.dattorro",
+      "effects.reverb.fdn",
+      "effects.reverb.velvet",
+      "effects.reverb.convolution",
+#ifdef SONARE_HAVE_ACOUSTIC
+      "effects.reverb.room",
+      "effects.acoustic.roomMorph",
+#endif
+      "effects.modulation.chorus",
+      "effects.modulation.ensemble",
+      "effects.modulation.flanger",
+      "effects.modulation.phaser",
+      "effects.modulation.wah",
+      "effects.modulation.autoWah",
+      "effects.modulation.rotary",
+      "effects.modulation.ringModulator",
+      "effects.modulation.pitchShifter",
+      "effects.delay.stereo",
+#endif
+  };
+}
+
+std::vector<std::string> insert_param_names(const std::string& name) {
+  // Build the processor against an empty param map: every config builder probes
+  // the keys it reads (falling back to defaults when absent), so the probed set
+  // is exactly the parameter names this processor consumes. The throwaway
+  // processor is discarded immediately.
+  ParamMap params;
+  auto processor = build_insert(name, params);
+  if (processor == nullptr) {
+    return {};
+  }
+  const auto& probed = params.probed_keys();
+  std::vector<std::string> names(probed.begin(), probed.end());
+  std::sort(names.begin(), names.end());
+  return names;
+}
+
+std::string insert_param_info_json(const std::string& name) {
+  // Build a throwaway processor (like insert_param_names) and read its published
+  // JSON-key -> param_id descriptor table. rtSafe is derived per id so hosts can
+  // tell which params accept realtime changes from the audio thread.
+  ParamMap params;
+  auto processor = build_insert(name, params);
+  std::string out = "[";
+  if (processor != nullptr) {
+    const auto descriptors = processor->parameter_descriptors();
+    for (size_t index = 0; index < descriptors.size(); ++index) {
+      if (index > 0) out += ',';
+      out += "{\"name\":\"";
+      out += descriptors[index].key;
+      out += "\",\"id\":";
+      out += std::to_string(descriptors[index].id);
+      out += ",\"rtSafe\":";
+      out += processor->parameter_is_realtime_safe(descriptors[index].id) ? "true" : "false";
+      out += '}';
+    }
+  }
+  out += ']';
+  return out;
+}
+
+std::string insert_param_defaults_json(const std::string& name) {
+  ParamMap params;
+  auto processor = build_insert(name, params);
+  if (processor == nullptr) return "{}";
+  std::vector<std::pair<std::string, double>> values(
+      params.default_values().begin(), params.default_values().end());
+  std::sort(values.begin(), values.end(), [](const auto& left, const auto& right) {
+    return left.first < right.first;
+  });
+  std::ostringstream out;
+  out.precision(17);
+  out << '{';
+  for (size_t index = 0; index < values.size(); ++index) {
+    if (index != 0) out << ',';
+    out << '\"' << values[index].first << "\":" << values[index].second;
+  }
+  out << '}';
+  return out.str();
+}
+
+}  // namespace sonare::mastering::api

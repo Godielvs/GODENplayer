@@ -1,0 +1,350 @@
+import { addon } from './native.js';
+import type { ValidateOptions } from './validation.js';
+import { assertSamples } from './validation.js';
+
+/** One contiguous run of clipped samples reported by `meteringDetectClipping`. */
+export interface ClippingRegion {
+  startSample: number;
+  endSample: number;
+  length: number;
+  peak: number;
+}
+
+/** Aggregated clipping report (mirrors C SonareClippingResult). */
+export interface ClippingReport {
+  clippedSamples: number;
+  clippingRatio: number;
+  maxClippedPeak: number;
+  regions: ClippingRegion[];
+}
+
+/** Options for {@link meteringDetectClipping}. All fields are optional. */
+export interface MeteringDetectClippingOptions extends ValidateOptions {
+  /** Linear absolute threshold. Default 0.999. */
+  threshold?: number;
+  /** Minimum run length to report. Default 1. */
+  minRegionSamples?: number;
+}
+
+/** Options for {@link meteringDynamicRange}. All fields are optional. */
+export interface MeteringDynamicRangeOptions extends ValidateOptions {
+  /** Window length in seconds (0 = library default, 3 s). Default 0. */
+  windowSec?: number;
+  /** Hop length in seconds (0 = library default, 1 s). Default 0. */
+  hopSec?: number;
+  /** Low percentile in [0,1] (negative = library default, 0.10). Default -1. */
+  lowPercentile?: number;
+  /** High percentile in [0,1] (negative = library default, 0.95). Default -1. */
+  highPercentile?: number;
+}
+
+/** Sliding-window dynamic range report (mirrors C SonareDynamicRangeResult). */
+export interface DynamicRangeReport {
+  dynamicRangeDb: number;
+  lowPercentileDb: number;
+  highPercentileDb: number;
+  windowRmsDb: Float32Array;
+}
+
+export function meteringPeakDb(
+  samples: Float32Array,
+  sampleRate = 22050,
+  options: ValidateOptions = {},
+): number {
+  assertSamples('meteringPeakDb', samples, options.validate !== false);
+  return addon.meteringPeakDb(samples, sampleRate);
+}
+
+export function meteringRmsDb(
+  samples: Float32Array,
+  sampleRate = 22050,
+  options: ValidateOptions = {},
+): number {
+  assertSamples('meteringRmsDb', samples, options.validate !== false);
+  return addon.meteringRmsDb(samples, sampleRate);
+}
+
+export function meteringCrestFactorDb(
+  samples: Float32Array,
+  sampleRate = 22050,
+  options: ValidateOptions = {},
+): number {
+  assertSamples('meteringCrestFactorDb', samples, options.validate !== false);
+  return addon.meteringCrestFactorDb(samples, sampleRate);
+}
+
+export function meteringDcOffset(
+  samples: Float32Array,
+  sampleRate = 22050,
+  options: ValidateOptions = {},
+): number {
+  assertSamples('meteringDcOffset', samples, options.validate !== false);
+  return addon.meteringDcOffset(samples, sampleRate);
+}
+
+/**
+ * Inter-sample (true) peak in dBFS. `oversampleFactor` must be a power of two
+ * in [1, 16]; pass 0 to use the library default (4).
+ */
+export function meteringTruePeakDb(
+  samples: Float32Array,
+  sampleRate = 22050,
+  oversampleFactor = 4,
+  options: ValidateOptions = {},
+): number {
+  assertSamples('meteringTruePeakDb', samples, options.validate !== false);
+  return addon.meteringTruePeakDb(samples, sampleRate, oversampleFactor);
+}
+
+/**
+ * Detect contiguous runs of clipped samples.
+ *
+ * @param threshold Linear absolute threshold (default 0.999).
+ * @param minRegionSamples Minimum run length to report (default 1).
+ */
+export function meteringDetectClipping(
+  samples: Float32Array,
+  sampleRate = 22050,
+  options: MeteringDetectClippingOptions = {},
+): ClippingReport {
+  assertSamples('meteringDetectClipping', samples, options.validate !== false);
+  return addon.meteringDetectClipping(
+    samples,
+    sampleRate,
+    options.threshold ?? 0.999,
+    options.minRegionSamples ?? 1,
+  );
+}
+
+/**
+ * Sliding-window dynamic range (high_percentile_db - low_percentile_db).
+ * Pass 0 for window/hop to use the library default (window=3 s, hop=1 s). The
+ * percentiles use a NEGATIVE sentinel for "use the library default" (low=0.10,
+ * high=0.95) because 0 is a literal 0th percentile; omitted percentiles default
+ * to -1.
+ */
+export function meteringDynamicRange(
+  samples: Float32Array,
+  sampleRate = 22050,
+  options: MeteringDynamicRangeOptions = {},
+): DynamicRangeReport {
+  assertSamples('meteringDynamicRange', samples, options.validate !== false);
+  return addon.meteringDynamicRange(
+    samples,
+    sampleRate,
+    options.windowSec ?? 0,
+    options.hopSec ?? 0,
+    options.lowPercentile ?? -1,
+    options.highPercentile ?? -1,
+  );
+}
+
+/** Mid/side vectorscope point series for a (left, right) stereo pair. */
+export interface VectorscopeReport {
+  mid: Float32Array;
+  side: Float32Array;
+}
+
+/** Phase-scope (Lissajous) point series plus summary stats. */
+export interface PhaseScopeReport {
+  mid: Float32Array;
+  side: Float32Array;
+  radius: Float32Array;
+  angleRad: Float32Array;
+  correlation: number;
+  averageAbsAngleRad: number;
+  maxRadius: number;
+}
+
+/** Options for `meteringSpectrum`. */
+export interface SpectrumOptions {
+  /** FFT size. Pass 0 / omit for the library default (2048). */
+  nFft?: number;
+  /** Apply fractional-octave smoothing to magnitude. */
+  applyOctaveSmoothing?: boolean;
+  /** Smoothing fraction (e.g. 3 = 1/3-octave). 0 / omit = library default (3). */
+  octaveFraction?: number;
+  /** Linear reference for the dB conversion. 0 / omit = 1.0. */
+  dbRef?: number;
+  /** Linear floor used to avoid log(0). 0 / omit = library default. */
+  dbAmin?: number;
+}
+
+/** Magnitude / power / dB spectrum returned by the metering spectrum functions. */
+export interface SpectrumReport {
+  frequencies: Float32Array;
+  magnitude: Float32Array;
+  power: Float32Array;
+  db: Float32Array;
+  nFft: number;
+  sampleRate: number;
+}
+
+/** Options for {@link waveformPeaks}. All fields are optional. */
+export interface WaveformPeaksOptions extends ValidateOptions {
+  /** Bucket width in frames. Default 512. */
+  samplesPerBucket?: number;
+}
+
+/** Options for {@link waveformPeakPyramid}. All fields are optional. */
+export interface WaveformPeakPyramidOptions extends ValidateOptions {
+  /** Bucket widths in frames, one per zoom level. Default [512, 1024, 2048, 4096]. */
+  samplesPerBucketLevels?: number[];
+}
+
+/** Per-channel min/max waveform buckets. Arrays are channel-major. */
+export interface WaveformPeaksReport {
+  min: Float32Array;
+  max: Float32Array;
+  channels: number;
+  bucketCount: number;
+  samplesPerBucket: number;
+}
+
+/** Pearson correlation in [-1, 1] between two equal-length channels. */
+export function meteringStereoCorrelation(
+  left: Float32Array,
+  right: Float32Array,
+  sampleRate = 22050,
+  options: ValidateOptions = {},
+): number {
+  const validate = options.validate !== false;
+  assertSamples('meteringStereoCorrelation', left, validate, 'left');
+  assertSamples('meteringStereoCorrelation', right, validate, 'right');
+  return addon.meteringStereoCorrelation(left, right, sampleRate);
+}
+
+/**
+ * Side / mid energy ratio, clamped to `[0, 2]`: 0 = pure mono, ~1 = wide
+ * stereo, 2 = fully decorrelated / out-of-phase.
+ */
+export function meteringStereoWidth(
+  left: Float32Array,
+  right: Float32Array,
+  sampleRate = 22050,
+  options: ValidateOptions = {},
+): number {
+  const validate = options.validate !== false;
+  assertSamples('meteringStereoWidth', left, validate, 'left');
+  assertSamples('meteringStereoWidth', right, validate, 'right');
+  return addon.meteringStereoWidth(left, right, sampleRate);
+}
+
+/** Options for the decimated scope functions. */
+export interface ScopeOptions extends ValidateOptions {
+  /**
+   * Upper bound on the returned point count. Omit / `0` (or a value `>= length`)
+   * yields one point per input sample; otherwise the point cloud is
+   * deterministically decimated to at most `maxPoints` points (keeping the
+   * largest-radius sample per bucket) for display-sized output.
+   */
+  maxPoints?: number;
+}
+
+/**
+ * Mid/side vectorscope point series. By default emits one point per input
+ * sample; pass `maxPoints` to get a display-sized decimated point set.
+ */
+export function meteringVectorscope(
+  left: Float32Array,
+  right: Float32Array,
+  sampleRate = 22050,
+  options: ScopeOptions = {},
+): VectorscopeReport {
+  const validate = options.validate !== false;
+  assertSamples('meteringVectorscope', left, validate, 'left');
+  assertSamples('meteringVectorscope', right, validate, 'right');
+  return addon.meteringVectorscope(left, right, sampleRate, options.maxPoints ?? 0);
+}
+
+/**
+ * Phase-scope point series plus summary stats. By default emits one point per
+ * input sample; pass `maxPoints` to decimate the point cloud for display. The
+ * summary stats are always computed over the full-resolution signal.
+ */
+export function meteringPhaseScope(
+  left: Float32Array,
+  right: Float32Array,
+  sampleRate = 22050,
+  options: ScopeOptions = {},
+): PhaseScopeReport {
+  const validate = options.validate !== false;
+  assertSamples('meteringPhaseScope', left, validate, 'left');
+  assertSamples('meteringPhaseScope', right, validate, 'right');
+  return addon.meteringPhaseScope(left, right, sampleRate, options.maxPoints ?? 0);
+}
+
+/**
+ * Welch-averaged magnitude / power / dB spectrum over the WHOLE signal. This is
+ * NOT a single-frame snapshot: the signal is split into Hann-windowed,
+ * 50%-overlapping `nFft`-length frames whose power spectra are averaged across
+ * the entire input, so transients are smeared by the averaging. For a true
+ * single-frame FFT of one window, use {@link meteringSpectrumFrame}.
+ */
+export function meteringSpectrum(
+  samples: Float32Array,
+  sampleRate = 22050,
+  options?: SpectrumOptions & ValidateOptions,
+): SpectrumReport {
+  const validate = options?.validate !== false;
+  assertSamples('meteringSpectrum', samples, validate);
+  return addon.meteringSpectrum(samples, sampleRate, options ?? {});
+}
+
+/**
+ * True single-frame magnitude / power / dB spectrum (one Hann-windowed
+ * `nFft`-length FFT), for spectrum-analyzer "moment" snapshots that must not be
+ * time-averaged like {@link meteringSpectrum}. The analysis frame spans
+ * `[frameOffset, frameOffset + nFft)`; samples past the end are zero-padded.
+ */
+export function meteringSpectrumFrame(
+  samples: Float32Array,
+  sampleRate = 22050,
+  frameOffset = 0,
+  options?: SpectrumOptions & ValidateOptions,
+): SpectrumReport {
+  const validate = options?.validate !== false;
+  assertSamples('meteringSpectrumFrame', samples, validate);
+  return addon.meteringSpectrumFrame(samples, sampleRate, frameOffset, options ?? {});
+}
+
+/** Compute per-channel min/max waveform buckets from interleaved audio. */
+export function waveformPeaks(
+  samples: Float32Array,
+  channels: number,
+  options: WaveformPeaksOptions = {},
+): WaveformPeaksReport {
+  assertSamples('waveformPeaks', samples, options.validate !== false);
+  if (channels <= 0 || samples.length % channels !== 0) {
+    throw new RangeError('waveformPeaks: samples length must be a multiple of channels');
+  }
+  const samplesPerBucket = options.samplesPerBucket ?? 512;
+  if (samplesPerBucket <= 0) {
+    throw new RangeError('waveformPeaks: samplesPerBucket must be > 0');
+  }
+  return addon.waveformPeaks(samples, channels, samplesPerBucket);
+}
+
+/** Compute waveform peak buckets for several zoom levels. */
+export function waveformPeakPyramid(
+  samples: Float32Array,
+  channels: number,
+  options: WaveformPeakPyramidOptions = {},
+): WaveformPeaksReport[] {
+  assertSamples('waveformPeakPyramid', samples, options.validate !== false);
+  if (channels <= 0 || samples.length % channels !== 0) {
+    throw new RangeError('waveformPeakPyramid: samples length must be a multiple of channels');
+  }
+  const levels = options.samplesPerBucketLevels ?? [512, 1024, 2048, 4096];
+  if (levels.length === 0 || levels.some((level) => level <= 0)) {
+    throw new RangeError('waveformPeakPyramid: samplesPerBucketLevels must be non-empty and > 0');
+  }
+  return addon.waveformPeakPyramid(samples, channels, levels);
+}
+
+/**
+ * Snap a MIDI value to the nearest pitch class enabled by `modeMask`.
+ *
+ * `modeMask` is a 12-bit mask. For natural C major use `0b101010110101`.
+ * `referenceMidi` defaults to A4 (69) when passed as 0.
+ */

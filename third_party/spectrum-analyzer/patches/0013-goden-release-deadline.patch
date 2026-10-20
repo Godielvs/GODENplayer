@@ -1,0 +1,88 @@
+diff --git a/Component.cpp b/Component.cpp
+--- a/Component.cpp
++++ b/Component.cpp
+@@ -27,7 +27,7 @@ namespace
+             STR_COMPONENT_COMMENT "\n"
+             "\n"
+             "Built with foobar2000 SDK " TOSTRING(FOOBAR2000_SDK_VERSION) "\n"
+-            "Goden scheduler, legacy ballistics, Double Exposure renderer and coalesced transport-release patch 8; upstream 3bbc2206591b48ea0bb2c3578bb0db34a37d84d8."
++            "Goden scheduler, legacy ballistics, Double Exposure renderer and bounded transport-release patch 9; upstream 3bbc2206591b48ea0bb2c3578bb0db34a37d84d8."
+     )
+     VALIDATE_COMPONENT_FILENAME(STR_COMPONENT_FILENAME)
+ }
+diff --git a/Resources.h b/Resources.h
+--- a/Resources.h
++++ b/Resources.h
+@@ -16,5 +16,5 @@
+ #define NUM_PRODUCT_PATCH       0
+ #define NUM_PRODUCT_PRERELEASE  0
+ 
+-#define STR_RELEASE_TAG         "-goden4"
++#define STR_RELEASE_TAG         "-goden5"
+ 
+ /** Component specific **/
+diff --git a/UIElement.h b/UIElement.h
+--- a/UIElement.h
++++ b/UIElement.h
+@@ -244,6 +244,7 @@ private:
+     grid_t _Grid;
+     bool _PauseReleaseActive { false };
+     bool _PauseReleaseFinalFrame { false };
++    ULONGLONG _PauseReleaseDeadlineTick { 0 };
+ 
+     #pragma endregion
+ 
+diff --git a/UIElementRendering.cpp b/UIElementRendering.cpp
+--- a/UIElementRendering.cpp
++++ b/UIElementRendering.cpp
+@@ -261,6 +261,8 @@ void uielement_t::ProcessEvents() noexcept
+         // they could decay. A new track remains an immediate hard boundary.
+         _PauseReleaseActive = stopped;
+         _PauseReleaseFinalFrame = false;
++        _PauseReleaseDeadlineTick = stopped
++            ? ::GetTickCount64() + 1500ULL : 0ULL;
+         _RenderState._PlaybackTime = 0.;
+         _RenderState._TrackTime = 0.;
+ 
+@@ -278,6 +280,8 @@ void uielement_t::ProcessEvents() noexcept
+         _RenderState._IsPaused = _PlaybackPaused.load(std::memory_order_acquire);
+         _PauseReleaseActive = _RenderState._IsPaused;
+         _PauseReleaseFinalFrame = false;
++        _PauseReleaseDeadlineTick = _PauseReleaseActive
++            ? ::GetTickCount64() + 1500ULL : 0ULL;
+     }
+     else
+     if (event_t::IsRaised(Flags, event_t::PlaybackResumed))
+@@ -285,6 +289,7 @@ void uielement_t::ProcessEvents() noexcept
+         _RenderState._IsPaused = _PlaybackPaused.load(std::memory_order_acquire);
+         _PauseReleaseActive = false;
+         _PauseReleaseFinalFrame = false;
++        _PauseReleaseDeadlineTick = 0ULL;
+     }
+ 
+     if (event_t::IsRaised(Flags, event_t::PlaybackStartedNewTrack))
+@@ -400,6 +405,7 @@ void uielement_t::Animate() noexcept
+     if (_PauseReleaseFinalFrame)
+     {
+         _PauseReleaseFinalFrame = false;
++        _PauseReleaseDeadlineTick = 0ULL;
+         return;
+     }
+ 
+@@ -412,12 +418,15 @@ void uielement_t::Animate() noexcept
+         bool active = false;
+         for (auto & Iter : _Grid)
+             active = Iter._Graph->ReleaseToSilence(frameSeconds) || active;
+-        if (!active)
++        const bool deadlineReached = _PauseReleaseDeadlineTick != 0ULL &&
++            ::GetTickCount64() >= _PauseReleaseDeadlineTick;
++        if (!active || deadlineReached)
+         {
+             for (auto & Iter : _Grid)
+                 Iter._Graph->Reset();
+             _PauseReleaseActive = false;
+             _PauseReleaseFinalFrame = true;
++            _PauseReleaseDeadlineTick = 0ULL;
+         }
+         return;
+     }

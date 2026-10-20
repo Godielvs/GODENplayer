@@ -1,0 +1,56 @@
+{
+  "schema": "goden.c1.originals.v1",
+  "upstreamRepository": "compute-toys/wgpu-compute-toy",
+  "upstreamCommit": "60d0bec4bd912a54d5049f2c28c1bd6a0916e5ec",
+  "files": [
+    {
+      "path": "originals/caustics.wgsl",
+      "upstreamPath": "examples/davidar/caustics.wgsl",
+      "upstreamCommit": "60d0bec4bd912a54d5049f2c28c1bd6a0916e5ec",
+      "url": "https://raw.githubusercontent.com/compute-toys/wgpu-compute-toy/60d0bec4bd912a54d5049f2c28c1bd6a0916e5ec/examples/davidar/caustics.wgsl",
+      "gitBlob": "0ec390536f15b939caf4d843e377d1980c4b07e5",
+      "expectedGitBlob": "0ec390536f15b939caf4d843e377d1980c4b07e5",
+      "expectedBlobVerified": true,
+      "sha256": "9d1b40b43486e407a54a648b7f07c38636a9a872f01005ad94df6264e7828006",
+      "bytes": 3460,
+      "retrieval": "preserved-GitHub-connector-content"
+    },
+    {
+      "path": "originals/2d-field-lagrangian-integrator.wgsl",
+      "upstreamPath": "examples/michael0884/2d-field-lagrangian-integrator.wgsl",
+      "upstreamCommit": "60d0bec4bd912a54d5049f2c28c1bd6a0916e5ec",
+      "url": "https://raw.githubusercontent.com/compute-toys/wgpu-compute-toy/60d0bec4bd912a54d5049f2c28c1bd6a0916e5ec/examples/michael0884/2d-field-lagrangian-integrator.wgsl",
+      "gitBlob": "193d73a2f53921906eb8cc447fa548dc5ba45b28",
+      "expectedGitBlob": "193d73a2f53921906eb8cc447fa548dc5ba45b28",
+      "expectedBlobVerified": true,
+      "sha256": "18cb1f7995072b9863caf78b32a9de7169a8ad0b8fc15cfb72ce83871f71817b",
+      "bytes": 4810,
+      "retrieval": "preserved-GitHub-connector-content"
+    },
+    {
+      "path": "originals/2d-field-lagrangian-integrator.wgsl.json",
+      "upstreamPath": "examples/michael0884/2d-field-lagrangian-integrator.wgsl.json",
+      "upstreamCommit": "60d0bec4bd912a54d5049f2c28c1bd6a0916e5ec",
+      "url": "https://raw.githubusercontent.com/compute-toys/wgpu-compute-toy/60d0bec4bd912a54d5049f2c28c1bd6a0916e5ec/examples/michael0884/2d-field-lagrangian-integrator.wgsl.json",
+      "gitBlob": "10376f5505c51c83a963080820342aa08dfaca94",
+      "expectedGitBlob": "10376f5505c51c83a963080820342aa08dfaca94",
+      "expectedBlobVerified": true,
+      "sha256": "fb647e7ca39c32b2b012ed37de3ed11fb69dc7f8d486c3d6aa8d83e30d973cb4",
+      "bytes": 431,
+      "retrieval": "preserved-GitHub-connector-content"
+    },
+    {
+      "path": "originals/LICENSE",
+      "upstreamPath": "LICENSE",
+      "upstreamCommit": "60d0bec4bd912a54d5049f2c28c1bd6a0916e5ec",
+      "url": "https://raw.githubusercontent.com/compute-toys/wgpu-compute-toy/60d0bec4bd912a54d5049f2c28c1bd6a0916e5ec/LICENSE",
+      "gitBlob": "8798fa863ae13504386860a97eeb7064c9a98f31",
+      "expectedGitBlob": "8798fa863ae13504386860a97eeb7064c9a98f31",
+      "expectedBlobVerified": true,
+      "sha256": "88f7709d9070541d7779b09f7e15be5ea294e00f075a8edfb7e17757820eb15e",
+      "bytes": 1094,
+      "retrieval": "preserved-GitHub-connector-content"
+    }
+  ],
+  "allGitBlobsVerified": true
+}

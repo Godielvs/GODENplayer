@@ -1,0 +1,334 @@
+#include "mixing/meter.h"
+
+#include <algorithm>
+#include <cmath>
+
+#include "metering/bs1770_weighting.h"
+#include "rt/biquad_design.h"
+#include "util/constants.h"
+#include "util/db.h"
+
+namespace sonare::mixing {
+
+using sonare::constants::kEpsilon;
+using sonare::constants::kFloorDb;
+
+namespace {
+// Map a requested true-peak oversample factor to one the realtime polyphase
+// TruePeakFilter implements (2, 4, 8). The offline metering::true_peak path
+// additionally supports 16x, but the RT filter has no 16x design, so 16 is
+// resolved to 8 (the highest RT-compliant factor) instead of silently
+// substituting a mislabeled filter. Factors below the BS.1770-4 4x minimum that
+// the RT filter does not support (1, 3) are raised to 4; an explicit 2x request
+// is honored (it previously fell through to 4x). Use the offline
+// metering::true_peak when a genuine 16x measurement is required.
+int resolve_true_peak_oversample(int requested) noexcept {
+  if (requested >= 16) return 8;
+  if (requested >= 8) return 8;
+  if (requested == 2) return 2;
+  return 4;
+}
+}  // namespace
+
+float mono_compat_width_from_energy(double mid_energy, double side_energy) noexcept {
+  if (mid_energy > static_cast<double>(kEpsilon)) {
+    return static_cast<float>(std::sqrt(side_energy / mid_energy));
+  }
+  return side_energy > static_cast<double>(kEpsilon) ? kMaxMonoCompatWidth : 0.0f;
+}
+
+double MeterProcessor::filter_sample(int channel, double x) noexcept {
+  const size_t c = static_cast<size_t>(channel);
+  // Pre-filter (high shelf) then RLB high-pass, both Direct Form II transposed
+  // with externally-owned coefficients (set in prepare()).
+  const double y0 = k_state_pre_[c].process(x);
+  return k_state_rlb_[c].process(y0);
+}
+
+float MeterProcessor::energy_to_lufs(double energy) const noexcept {
+  // Finite floor instead of -inf so the meter always shows a bounded value.
+  return power_to_offset_db(energy, rt::kLoudnessOffset, static_cast<double>(kEpsilon), kFloorDb);
+}
+
+void MeterProcessor::prepare(double sample_rate, int max_block_size) {
+  sample_rate_ = sample_rate;
+  max_block_size_ = std::max(0, max_block_size);
+  if (config_.measure_true_peak) {
+    // Resolve the requested factor to one the RT TruePeakFilter implements.
+    // See resolve_true_peak_oversample(): 16x is offline-only and clamps to 8x
+    // here, 2x is honored, and unsupported low factors are raised to the
+    // BS.1770-4 4x minimum.
+    const int oversample = resolve_true_peak_oversample(config_.true_peak_oversample);
+    true_peak_filter_ = rt::TruePeakFilter(kTruePeakChannels, oversample);
+    // Pre-size the filter's cross-block history + scratch so the per-block
+    // upsample path is allocation-free, and preallocate our own oversampled
+    // output scratch (one buffer per meter channel).
+    true_peak_filter_.prepare(kTruePeakChannels, max_block_size_);
+    const size_t oversampled_capacity =
+        static_cast<size_t>(max_block_size_) * static_cast<size_t>(oversample);
+    for (auto& buffer : true_peak_oversampled_) buffer.assign(oversampled_capacity, 0.0f);
+    true_peak_zero_in_.assign(static_cast<size_t>(max_block_size_), 0.0f);
+  }
+
+  if (config_.measure_lufs && sample_rate_ > 0.0) {
+    const auto coeffs = rt::k_weighting_coefficients(sample_rate_);
+    const rt::BiquadCoeffsD pre{coeffs.pre.b0, coeffs.pre.b1, coeffs.pre.b2, coeffs.pre.a1,
+                                coeffs.pre.a2};
+    const rt::BiquadCoeffsD rlb{coeffs.rlb.b0, coeffs.rlb.b1, coeffs.rlb.b2, coeffs.rlb.a1,
+                                coeffs.rlb.a2};
+    for (auto& s : k_state_pre_) s.set(pre);
+    for (auto& s : k_state_rlb_) s.set(rlb);
+
+    momentary_len_ = std::max<size_t>(1, static_cast<size_t>(std::lround(0.400 * sample_rate_)));
+    short_term_len_ = std::max<size_t>(1, static_cast<size_t>(std::lround(3.0 * sample_rate_)));
+    gate_hop_ = std::max<size_t>(1, static_cast<size_t>(std::lround(0.100 * sample_rate_)));
+    energy_ring_.assign(short_term_len_, 0.0);  // ring sized to the longer window
+  } else {
+    energy_ring_.clear();
+    momentary_len_ = 0;
+    short_term_len_ = 0;
+    gate_hop_ = 0;
+  }
+
+  reset();
+}
+
+void MeterProcessor::reset() {
+  snapshot_.store(MeterSnapshot{});
+  seq_ = 0;
+  gain_reduction_db_.store(0.0f, std::memory_order_relaxed);
+
+  // Clear only the filter delay state; the K-weighting coefficients are owned by
+  // the BiquadStateD instances and set in prepare(), so they must survive reset()
+  // (prepare() calls reset() after installing them).
+  for (auto& s : k_state_pre_) s.reset();
+  for (auto& s : k_state_rlb_) s.reset();
+  // Clear the true-peak filter's cross-block history so a fresh run does not
+  // see stale tail samples from a previous stream (no reallocation).
+  true_peak_filter_.reset();
+  std::fill(energy_ring_.begin(), energy_ring_.end(), 0.0);
+  ring_pos_ = 0;
+  filled_ = 0;
+  momentary_sum_ = 0.0;
+  short_term_sum_ = 0.0;
+  gate_hop_counter_ = 0;
+  reset_integrated();
+}
+
+void MeterProcessor::reset_integrated() noexcept {
+  hist_count_.fill(0);
+  hist_energy_.fill(0.0);
+  integrated_lufs_ = kFloorDb;
+  histogram_dirty_ = false;
+}
+
+void MeterProcessor::process(float* const* channels, int num_channels, int num_samples) {
+  if (channels == nullptr || num_channels <= 0 || num_samples <= 0) {
+    return;
+  }
+
+  MeterSnapshot next;
+  next.gain_reduction_db = gain_reduction_db_.load(std::memory_order_relaxed);
+  double sum_l = 0.0;
+  double sum_r = 0.0;
+  double sum_lr = 0.0;
+  double mid_energy = 0.0;
+  double side_energy = 0.0;
+
+  // Per-plane peak/RMS up to the surround width. Stereo stays bit-identical
+  // (meters == 2); a 5.1/7.1 bus now fills planes 2..N-1 too.
+  const int meters = std::min(num_channels, kMaxMeterChannels);
+  next.channel_count = meters;
+  std::array<float, kMaxMeterChannels> sample_peaks{};
+  for (int ch = 0; ch < meters; ++ch) {
+    if (channels[ch] == nullptr) {
+      continue;
+    }
+    float peak = 0.0f;
+    double sum_square = 0.0;
+    for (int i = 0; i < num_samples; ++i) {
+      const float sample = channels[ch][i];
+      peak = std::max(peak, std::abs(sample));
+      sum_square += static_cast<double>(sample) * sample;
+    }
+    sample_peaks[static_cast<size_t>(ch)] = peak;
+    next.peak_db[static_cast<size_t>(ch)] = linear_to_db(peak);
+    next.rms_db[static_cast<size_t>(ch)] =
+        linear_to_db(std::sqrt(sum_square / static_cast<double>(num_samples)));
+  }
+
+  if (config_.measure_true_peak) {
+    // History-preserving RT-safe path: upsample each meter channel through the
+    // filter's internal cross-block history (sized in prepare()) into the
+    // preallocated oversampled scratch, then take max(|sample|). This keeps the
+    // measurement block-size- and phase-independent and catches inter-sample
+    // peaks that straddle block boundaries (the stateless path zero-padded the
+    // taps at every block edge and kept no history). Bounded to kTruePeak
+    // channels. The public snapshot keeps per-channel L/R compatibility, but
+    // max_true_peak_db must include surround channels so rear/LFE overs are not
+    // hidden on multichannel buses.
+    const int tp_channels = std::min(num_channels, kTruePeakChannels);
+    // Guard against a block larger than the prepared capacity (would otherwise
+    // grow the scratch and allocate on the audio thread); clamp instead.
+    const int tp_samples = std::min(num_samples, max_block_size_);
+    float max_true_peak = 0.0f;
+    for (int ch = 0; ch < tp_channels; ++ch) {
+      const size_t c = static_cast<size_t>(ch);
+      // A null meter channel is fed silence so the filter's positional history
+      // stays aligned to each channel slot (the upsampler rejects null inputs).
+      true_peak_in_ptrs_[c] = channels[ch] != nullptr ? channels[ch] : true_peak_zero_in_.data();
+      true_peak_out_ptrs_[c] = true_peak_oversampled_[c].data();
+    }
+    if (tp_samples > 0) {
+      // Upsample all meter channels in one allocation-free call.
+      true_peak_filter_.upsample_with_history(true_peak_in_ptrs_.data(), true_peak_out_ptrs_.data(),
+                                              tp_channels, tp_samples);
+    }
+    const int oversample = true_peak_filter_.factor();
+    const size_t oversampled = static_cast<size_t>(tp_samples) * static_cast<size_t>(oversample);
+    for (int ch = 0; ch < tp_channels; ++ch) {
+      if (channels[ch] == nullptr) {
+        continue;
+      }
+      const auto& os = true_peak_oversampled_[static_cast<size_t>(ch)];
+      float peak = ch < meters ? sample_peaks[static_cast<size_t>(ch)] : 0.0f;
+      for (size_t i = 0; i < oversampled; ++i) {
+        peak = std::max(peak, std::abs(os[i]));
+      }
+      if (ch < static_cast<int>(next.true_peak_db.size())) {
+        next.true_peak_db[static_cast<size_t>(ch)] = linear_to_db(peak);
+      }
+      max_true_peak = std::max(max_true_peak, peak);
+    }
+    next.max_true_peak_db = linear_to_db(max_true_peak);
+  }
+
+  if (num_channels >= 2 && channels[0] != nullptr && channels[1] != nullptr) {
+    double side_sq_sum = 0.0;
+    for (int i = 0; i < num_samples; ++i) {
+      const double left = channels[0][i];
+      const double right = channels[1][i];
+      sum_l += left * left;
+      sum_r += right * right;
+      sum_lr += left * right;
+
+      const double mono = 0.5 * (left + right);
+      const double side = 0.5 * (left - right);
+      next.mono_compat_peak = std::max(next.mono_compat_peak, static_cast<float>(std::abs(mono)));
+      side_sq_sum += side * side;
+
+      const double mid = (left + right) * constants::kInvSqrt2D;
+      const double side_scaled = (left - right) * constants::kInvSqrt2D;
+      mid_energy += mid * mid;
+      side_energy += side_scaled * side_scaled;
+    }
+    const double denom = std::sqrt(sum_l * sum_r);
+    next.correlation =
+        denom > static_cast<double>(kEpsilon) ? static_cast<float>(sum_lr / denom) : 0.0f;
+    next.mono_compat_side_rms = static_cast<float>(std::sqrt(side_sq_sum / num_samples));
+    next.mono_compat_width = mono_compat_width_from_energy(mid_energy, side_energy);
+    next.likely_mono_compatible = next.correlation >= config_.mono_compat_correlation_threshold;
+  }
+
+  if (config_.measure_lufs && !energy_ring_.empty()) {
+    const int lufs_channels = std::min(num_channels, kLufsChannels);
+    // Combined K-weighted squared energy summed across the present channels, each
+    // scaled by its BS.1770-4 weight. This matches the offline reference exactly
+    // (metering::lufs / the C-ABI lufs_interleaved oracle): a true-mono bus
+    // (single non-null channel) is measured as one unity-weighted channel and so
+    // reads ~3 LU below the equivalent dual-mono pair, with no mono-to-dual-mono
+    // compensation applied. The live meter and the offline measurement therefore
+    // agree on identical channel layouts.
+    for (int i = 0; i < num_samples; ++i) {
+      double combined = 0.0;
+      for (int ch = 0; ch < lufs_channels; ++ch) {
+        if (channels[ch] == nullptr) continue;
+        const double y = filter_sample(ch, static_cast<double>(channels[ch][i]));
+        combined += metering::bs1770_channel_weight(ch, lufs_channels) * y * y;
+      }
+
+      // Slide both running sums over the single ring; subtract the value leaving each window.
+      const double leaving_short = energy_ring_[ring_pos_];
+      short_term_sum_ += combined - leaving_short;
+
+      size_t out_pos = ring_pos_ + short_term_len_ - momentary_len_;
+      if (out_pos >= short_term_len_) out_pos -= short_term_len_;
+      const double leaving_mom = energy_ring_[out_pos];
+      momentary_sum_ += combined - leaving_mom;
+
+      energy_ring_[ring_pos_] = combined;
+      ring_pos_ = (ring_pos_ + 1 == short_term_len_) ? 0 : ring_pos_ + 1;
+      if (filled_ < short_term_len_) ++filled_;
+
+      // Integrated: take a 400 ms gating block every 100 ms once the momentary window is full.
+      if (++gate_hop_counter_ >= gate_hop_) {
+        gate_hop_counter_ = 0;
+        if (filled_ >= momentary_len_) {
+          const double block_energy = momentary_sum_ / static_cast<double>(momentary_len_);
+          const float block_lufs = energy_to_lufs(block_energy);
+          if (block_lufs >= static_cast<float>(kHistLowLufs)) {
+            int bin = static_cast<int>((block_lufs - kHistLowLufs) / kHistBinLu);
+            if (bin >= 0 && bin < kHistBins) {
+              ++hist_count_[static_cast<size_t>(bin)];
+              hist_energy_[static_cast<size_t>(bin)] += block_energy;
+              histogram_dirty_ = true;
+            }
+          }
+        }
+      }
+    }
+
+    if (filled_ >= momentary_len_) {
+      next.momentary_lufs = energy_to_lufs(momentary_sum_ / static_cast<double>(momentary_len_));
+    }
+    if (filled_ >= short_term_len_) {
+      next.short_term_lufs = energy_to_lufs(short_term_sum_ / static_cast<double>(short_term_len_));
+    }
+
+    // Gated integrated loudness via the bounded histogram (libebur128-style).
+    // The two O(kHistBins) scans only need to run when a new gating block was
+    // committed this block; otherwise the cached value is reused unchanged.
+    if (histogram_dirty_) {
+      histogram_dirty_ = false;
+      uint64_t abs_count = 0;
+      double abs_energy = 0.0;
+      for (int b = 0; b < kHistBins; ++b) {
+        abs_count += hist_count_[static_cast<size_t>(b)];
+        abs_energy += hist_energy_[static_cast<size_t>(b)];
+      }
+      if (abs_count > 0) {
+        const double preliminary = abs_energy / static_cast<double>(abs_count);
+        const double relative_gate_lufs = static_cast<double>(energy_to_lufs(preliminary)) - 10.0;
+        const int gate_bin =
+            static_cast<int>(std::ceil((relative_gate_lufs - kHistLowLufs) / kHistBinLu));
+
+        uint64_t rel_count = 0;
+        double rel_energy = 0.0;
+        for (int b = std::max(0, gate_bin); b < kHistBins; ++b) {
+          rel_count += hist_count_[static_cast<size_t>(b)];
+          rel_energy += hist_energy_[static_cast<size_t>(b)];
+        }
+        if (rel_count > 0) {
+          integrated_lufs_ = energy_to_lufs(rel_energy / static_cast<double>(rel_count));
+        }
+      }
+    }
+    next.integrated_lufs = integrated_lufs_;
+  }
+
+  publish(next);
+}
+
+void MeterProcessor::publish(const MeterSnapshot& next) noexcept {
+  MeterSnapshot stamped = next;
+  stamped.seq = ++seq_;
+  snapshot_.store(stamped);
+}
+
+MeterSnapshot MeterProcessor::snapshot() const noexcept { return snapshot_.load(); }
+
+void MeterProcessor::set_gain_reduction_db(float db) noexcept {
+  gain_reduction_db_.store(std::min(0.0f, db), std::memory_order_relaxed);
+}
+
+}  // namespace sonare::mixing

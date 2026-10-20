@@ -1,0 +1,285 @@
+{
+  "schema": "goden.dependencies.v1",
+  "workers": 1,
+  "dependencies": [
+    {
+      "name": "foobar2000",
+      "version": "2.25.10 x64",
+      "url": "https://www.foobar2000.org/downloads/foobar2000-x64_v2.25.10.exe",
+      "license": "proprietary; unmodified installer redistribution only",
+      "sha256": "530e6c9db829874bc250af038c1d07f8b42fef61c5dd99f7edcde6393a93ee23",
+      "hostSha256": "653cc120c146aaae9e6db9b6f19e5a1588407b8940bc1521f0ced739ff8924b0",
+      "bundled": "official installer, intact"
+    },
+    {
+      "name": "foobar2000 SDK",
+      "version": "2025-03-07",
+      "url": "https://www.foobar2000.org/downloads/SDK-2025-03-07.7z",
+      "license": "foobar2000 SDK license",
+      "sha256": "ccda3c5840e66e0e28a7e4fe36407c4e78581aa30c40c362a188fcbaae799a3e",
+      "usage": "Spectrum/build only; official download"
+    },
+    {
+      "name": "Playback Statistics",
+      "version": "3.1.11",
+      "url": "https://www.foobar2000.org/getcomponent/31048989d7d7873a52cb371510188ac4/foo_playcount.fb2k-component",
+      "license": "redistribution permission unverified; download only",
+      "sha256": "4e47c44b8624544ef618fc02999c1fbbc212534507888a871625b83e949e4014",
+      "x64Sha256": "68718dbf463e8dc1402261f11b0cdc39bd6e5291971deaa8b91ecd4af9cd7466",
+      "bundled": false
+    },
+    {
+      "name": "Columns UI",
+      "version": "3.6.0",
+      "url": "https://github.com/reupen/columns_ui.git",
+      "license": "per-file licenses, including permissive COPYRIGHT and GPL/LGPL legacy notices; exact source retained",
+      "commit": "9cb461bdf130baa3f07aeea9ddef081de3f8ac7f",
+      "patches": [
+        {
+          "path": "third_party/columns-ui/0001-goden-pmv2-window-context.patch",
+          "sha256": "752b6e58e4b0e87e5e278402dff00f9af3c1d99ed0d1dac249b914dff792a2ab"
+        }
+      ],
+      "source": "out/dependencies/columns-ui; corresponding archive includes modified sources"
+    },
+    {
+      "name": "Columns UI SDK",
+      "version": "3.6.0 build set",
+      "url": "https://github.com/reupen/columns_ui-sdk.git",
+      "license": "0BSD-style permissive; exact LICENCE text retained",
+      "commit": "2ac32c02dcf4685c120e4a3a8eaf2ea58a7df89d",
+      "source": "vendor/columns_ui-sdk",
+      "inventory": "third_party/inventories/columns-ui-sdk.json",
+      "contentSha256": "83a2e04ed1f2ce315fc6e57e4c44ef886cc01935b3f959bb229cfb668ac20339"
+    },
+    {
+      "name": "foobar2000 SDK modified",
+      "version": "Columns UI 3.6.0 build set",
+      "url": "https://github.com/reupen/foobar2000-sdk-modified.git",
+      "license": "foobar2000 SDK license",
+      "commit": "85f56870d5e8e5dc7bb8cd07179a44e3a6e5d834",
+      "source": "vendor/foobar2000",
+      "inventory": "third_party/inventories/foobar2000-sdk-modified.json",
+      "contentSha256": "8cd943926317a522b39b466567c705e6a7e32ef526ff80556a3698734cae3b55"
+    },
+    {
+      "name": "PFC modified",
+      "version": "Columns UI 3.6.0 build set",
+      "url": "https://github.com/reupen/pfc-modified.git",
+      "license": "PFC license in source",
+      "commit": "3d3e10ac27d6dce36de4a63dc82a54613b6edd9a",
+      "source": "vendor/pfc",
+      "inventory": "third_party/inventories/pfc-modified.json",
+      "contentSha256": "c6c6b5e8802ba9234074c687c79d972907d4191ec4ba38f479b7a328dc93f218"
+    },
+    {
+      "name": "Spectrum Analyzer",
+      "version": "0.10.0.0-goden6",
+      "url": "https://github.com/stuerp/foo_vis_spectrum_analyzer.git",
+      "license": "MIT",
+      "commit": "3bbc2206591b48ea0bb2c3578bb0db34a37d84d8",
+      "patches": [
+        {
+          "path": "third_party/spectrum-analyzer/patches/0001-nekorox-adaptive-scheduler.patch",
+          "sha256": "3d9ade638faafbcb615719e2b67ddfdb152654e0c6c43b1ec33916034c639222"
+        },
+        {
+          "path": "third_party/spectrum-analyzer/patches/0002-goden-root-visibility-wake.patch",
+          "sha256": "ee5897caf4c9c521d99559f03350e3a21768da58de558ae593f9cd169229b8cb"
+        },
+        {
+          "path": "third_party/spectrum-analyzer/patches/0003-goden-spectrum-color-curve-v2.patch",
+          "sha256": "ed4a63dfdb74c9cd824690da1d13d6ae73aa52ff2bf8837ce424bda35cd0341b"
+        },
+        {
+          "path": "third_party/spectrum-analyzer/patches/0004-goden-daw-visual-source.patch",
+          "sha256": "ae0c65db5eb48f8395cf7ecd4b93bf726ab5a4ba4ab693873e2435dacceaf601"
+        },
+        {
+          "path": "third_party/spectrum-analyzer/patches/0005-goden-display-refresh.patch",
+          "sha256": "57364dd60b23151233d29f41c0853b5628cce49b64b54fb5c4c0567180e8e6b0"
+        },
+        {
+          "path": "third_party/spectrum-analyzer/patches/0006-goden-optical-spectrum-bars.patch",
+          "sha256": "6b44140cbf39a84d2a87149367ef961ba9f47e38064d45c91064cdfd8ead750a"
+        },
+        {
+          "path": "third_party/spectrum-analyzer/patches/0007-goden-adaptive-spectrum-sampling.patch",
+          "sha256": "5a87e1cd75c3164f94d450a8716584b742fd42cc51af84658f883020eb97cab6"
+        },
+        {
+          "path": "third_party/spectrum-analyzer/patches/0008-goden-independent-note-background.patch",
+          "sha256": "d14a015b8037ecbef465461f9194c7392b63bce4958ffdacf67b2edcfabc9e6b"
+        },
+        {
+          "path": "third_party/spectrum-analyzer/patches/0009-goden-constant-physical-bar-gap.patch",
+          "sha256": "a0a1c95e8da10cae9a9b911839b3dde0bf1c57cd91d0eebc94dde84c5a071e90"
+        },
+        {
+          "path": "third_party/spectrum-analyzer/patches/0010-goden-pause-release.patch",
+          "sha256": "ea25f6e91f561f108d9f77bebafc1f44e2ae22731dc80c1f814097569743bdaa"
+        },
+        {
+          "path": "third_party/spectrum-analyzer/patches/0011-goden-stop-release.patch",
+          "sha256": "93185154845d393ca86f6363c02f18533615fa7791b20b545f0106340fbb7c9f"
+        },
+        {
+          "path": "third_party/spectrum-analyzer/patches/0012-goden-coalesced-stop-release.patch",
+          "sha256": "c58859a318b0cbde75ad8ce1cac51101757765f96e80bb44ebd2c51f57986a3f"
+        },
+        {
+          "path": "third_party/spectrum-analyzer/patches/0013-goden-release-deadline.patch",
+          "sha256": "2a6c14a89ebe98d9cac3ec35faf7eacf491cb57ccc4d2eb243185a621649efaa"
+        },
+        {
+          "path": "third_party/spectrum-analyzer/patches/0014-goden-portable-preset-path.patch",
+          "sha256": "6a36c178afe4b8e86e67631f33325e55a6d4eaf75370bcf719ac53cf28bcdada"
+        },
+        {
+          "path": "third_party/spectrum-analyzer/patches/0015-goden-artwork-reuse.patch",
+          "sha256": "97156c3154ead294e007c2aac90e66bd688b4f762c1077f631d2df2f8cd4d7a8"
+        },
+        {
+          "path": "third_party/spectrum-analyzer/patches/0016-goden-render-caches.patch",
+          "sha256": "d2d9fc9959c9f4d550406dfa0c91e3070adde662a0a73c5feaf7c4bcd9efa2fa"
+        },
+        {
+          "path": "third_party/spectrum-analyzer/patches/0017-goden-mono-spectrum.patch",
+          "sha256": "1fa735a6b02d47c0aca21671b85d8962073f2e7b988f971c7d637e0648224d9d"
+        },
+        {
+          "path": "third_party/spectrum-analyzer/patches/0018-goden-root-gate-resize-recovery.patch",
+          "sha256": "22c90e433e42e3a7d4c8ee4f8ffcbb6f444eeee91a8964e5f9cbae7497facc27"
+        }
+      ],
+      "source": "modified upstream and local headers included in corresponding archive"
+    },
+    {
+      "name": "Spectrum Columns UI SDK",
+      "version": "7.0.0",
+      "url": "https://github.com/reupen/columns_ui-sdk.git",
+      "license": "0BSD-style permissive; exact LICENCE text retained",
+      "commit": "8603030086b118bba84d56a3bb6454cc8cb511bf"
+    },
+    {
+      "name": "WTL",
+      "version": "10.0.10320",
+      "url": "https://sourceforge.net/projects/wtl/files/WTL%2010/WTL%2010.0.10320%20Release/WTL10_10320_Release.zip/download",
+      "license": "MS-PL",
+      "sha256": "13de5cd7ed41454b8f287e9bcc4525234c6ac8c85905e4d4fe1a0776709fd78f"
+    },
+    {
+      "name": "libsonare",
+      "version": "1.5.2",
+      "url": "https://github.com/libraz/libsonare.git",
+      "license": "Apache-2.0 plus NOTICE/transitive licenses",
+      "commit": "30931acd0d16e5d890b728548dd74675ec13758c",
+      "source": "vendor/libsonare",
+      "modifications": "vendor/PATCHES.md and effective vendored source",
+      "inventory": "third_party/inventories/libsonare.json",
+      "contentSha256": "e6abf71e5560ccf413a4c4bd2910c3177021eabfa9364fa00d45f08e3ba5f3d3"
+    },
+    {
+      "name": "Eigen",
+      "version": "3.4.0",
+      "url": "https://gitlab.com/libeigen/eigen.git",
+      "license": "MPL-2.0; per-file alternatives see COPYING.*",
+      "commit": "3147391d946bb4b6c68edd901f2add6ac1f31f8c",
+      "source": "vendor/eigen",
+      "inventory": "third_party/inventories/eigen.json",
+      "contentSha256": "a22beb83370afa5cad7eb35894cf7375e7ccf78aac1f4e9ddcd2a3fbdd236240"
+    },
+    {
+      "name": "Zstandard",
+      "version": "1.5.7",
+      "url": "https://github.com/facebook/zstd.git",
+      "license": "BSD-3-Clause OR GPL-2.0; BSD selected",
+      "commit": "f8745da6ff1ad1e7bab384bd1f9d742439278e99",
+      "source": "vendor/zstd",
+      "inventory": "third_party/inventories/zstandard.json",
+      "contentSha256": "65a9c01bf29f23678264d42f498379898726ed1a49dc1d0d2480f077431a32a5"
+    },
+    {
+      "name": "SQLite",
+      "version": "3.53.3",
+      "url": "https://www.sqlite.org/2026/sqlite-amalgamation-3530300.zip",
+      "license": "public domain",
+      "source": "vendor/sqlite",
+      "inventory": "third_party/inventories/sqlite.json",
+      "contentSha256": "1be54ad7f1e15a02ffcc5b6893d47b2a3417ced1004e6adff4732d4ee5e33c69"
+    },
+    {
+      "name": "nlohmann/json",
+      "version": "3.12.0",
+      "url": "https://github.com/nlohmann/json/releases/download/v3.12.0/json.hpp",
+      "license": "MIT",
+      "source": "vendor/nlohmann-json",
+      "files": [
+        {
+          "path": "vendor/nlohmann-json/LICENSE.MIT",
+          "sha256": "46a65cffd1ea955132d95a8dd921640714a8d6b537d2e4e482d31145ae95b603"
+        },
+        {
+          "path": "vendor/nlohmann-json/nlohmann/json.hpp",
+          "sha256": "aaf127c04cb31c406e5b04a63f1ae89369fccde6d8fa7cdda1ed4f32dfc5de63"
+        }
+      ],
+      "inventory": "third_party/inventories/nlohmann-json.json",
+      "contentSha256": "d2de3265cc6a8e556219946b45675e7dd53d883ec31e670762e0aa485347c111"
+    },
+    {
+      "name": "glslang",
+      "version": "15.1.0",
+      "url": "https://github.com/KhronosGroup/glslang.git",
+      "license": "BSD-3-Clause and per-file notices; build only",
+      "commit": "1062752a891c95b2bfeed9e356562d88f9df84ac"
+    },
+    {
+      "name": "SPIRV-Cross",
+      "version": "pinned commit",
+      "url": "https://github.com/KhronosGroup/SPIRV-Cross.git",
+      "license": "Apache-2.0 OR MIT; build only",
+      "commit": "ebe2aa0cd80f5eb5cd8a605da604cacf72205f3b"
+    },
+    {
+      "name": "sharp (icon authoring)",
+      "version": "0.35.5",
+      "url": "https://registry.npmjs.org/sharp/-/sharp-0.35.5.tgz",
+      "integrity": "sha512-Ywn4OnzGukp7CDMrp08RQ50YKmuwG47brZgIVPTvBaaAfQlRlygrRqSrxdCiL9M+LlzLBiJ68IR1QqvzHyjC7g==",
+      "license": "Apache-2.0; fetched libvips and platform dependencies retain their own notices",
+      "usage": "Optional design-time SVG rasterization only; no binaries bundled; npm transitive pins in tools/icon-assets/package-lock.json",
+      "files": [
+        {
+          "path": "tools/icon-assets/package-lock.json",
+          "sha256": "d66e26fa2b5695bfab3c4eda58e5462a3e875442be0d4883b72c380fc3fe0077"
+        }
+      ]
+    }
+  ],
+  "buildTools": {
+    "MSVC": "v142 14.29 + v143 14.44 for Columns UI",
+    "WindowsSDK": [
+      "10.0.19041.0",
+      "10.0.26100.0"
+    ],
+    "Python": "3.12+ including default Windows py launcher",
+    "Node": "24 LTS (relay/build tools only)",
+    "InnoSetup": "6.6+ with ArchiveExtraction=full",
+    "sevenZip": "24+",
+    "CMake": "3.27+",
+    "Ninja": "1.11+",
+    "Git": "2.40+"
+  },
+  "columnsUiVcpkg": {
+    "baseline": "927f62e4b8838bd7e441e9c45103a16ffd75007e",
+    "dependencies": {
+      "cppwinrt": "2.0.230706.1",
+      "fmt": "11.2.0",
+      "foonathan-lexy": "2025.5.0",
+      "ms-gsl": "4.2.2",
+      "range-v3": "0.12.0#4",
+      "wil": "1.0.260126.7"
+    },
+    "correspondence": "actual vcpkg source trees included in corresponding source archive; vcpkg.json and SPDX receipts identify ports"
+  }
+}

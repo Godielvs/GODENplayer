@@ -1,0 +1,74 @@
+{
+  "schema": "goden.icon-assets.v1",
+  "design": "B / Angular",
+  "source": "packaging/brand/goden.svg",
+  "sourceSha256": "e2e6abc6c91c721d892404ef4208e8f2c15cf911c942589128b50e75ca07ac55",
+  "renderer": {
+    "sharp": "0.35.5",
+    "vips": "8.18.7"
+  },
+  "layers": [
+    {
+      "size": 16,
+      "bytes": 470,
+      "sha256": "fc824348798bd2ed3b03bb59a3cb77d571f6dd55b829d5dd7dee73266a0a87f0"
+    },
+    {
+      "size": 20,
+      "bytes": 584,
+      "sha256": "ecaa52b15e716d4c1522aee560598730707bd5835b855d471e03ec763ae5ad7d"
+    },
+    {
+      "size": 24,
+      "bytes": 711,
+      "sha256": "812aecf8612c3bfdf9b2d3e08049935796944f180d3b598b92d03e4f6d338349"
+    },
+    {
+      "size": 32,
+      "bytes": 1028,
+      "sha256": "9a104e47e0e6a7ca4df297e69215252c559ac98c62ee517f588028a615aed8d5"
+    },
+    {
+      "size": 40,
+      "bytes": 1311,
+      "sha256": "be5583f1da819365eb11a093e86e988dcbad4bee2a9dc5e77bb20b7d30eb67da"
+    },
+    {
+      "size": 48,
+      "bytes": 1618,
+      "sha256": "8afd397e4373a77b4f1f61127a096f8e012dc689327dfda28e42c4dbe827ba02"
+    },
+    {
+      "size": 64,
+      "bytes": 2201,
+      "sha256": "205d9f4ad6403541dbe88d25d162ff5dea39a8c99b578a740d20b219bea4d6fb"
+    },
+    {
+      "size": 96,
+      "bytes": 3468,
+      "sha256": "d9287dd7eab6668063790664df58bee37cfc922a43d6e553c34aa137856eca4f"
+    },
+    {
+      "size": 128,
+      "bytes": 4806,
+      "sha256": "b5488be9c215c1d6731641bb4a52d89f26d68759c4800a82975c63f397be7a3c"
+    },
+    {
+      "size": 256,
+      "bytes": 9746,
+      "sha256": "b52098f389e9a1c4445e3958063e0d8c59796dcde0b8b686431c74aa1a9cd623"
+    }
+  ],
+  "outputs": [
+    {
+      "file": "goden.ico",
+      "bytes": 26109,
+      "sha256": "5660b1b8e695d535662b8a883191d37193856d834a1998a05e79b0de5bca1134"
+    },
+    {
+      "file": "goden-presence-1024.png",
+      "bytes": 82844,
+      "sha256": "fd75e89e8b7fbbf3f53f5de0fd8de4f8e55b66d78f36917c7a0bf40c961a0cd4"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "url": "https://github.com/reupen/columns_ui.git",
+  "version": "3.6.0",
+  "commit": "9cb461bdf130baa3f07aeea9ddef081de3f8ac7f",
+  "patches": [
+    "0001-goden-pmv2-window-context.patch"
+  ],
+  "upstreamToolset": "v145",
+  "localQualificationToolset": "v143",
+  "windowsSdk": "10.0.26100.0",
+  "workers": 1
+}

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <GodenA4Dir>$(ProjectDir)a4\</GodenA4Dir>
+    <GodenA4Gen>$(IntDir)a4-shaders\</GodenA4Gen>
+    <GodenA4Fxc>$(WindowsSdkDir)bin\$(WindowsTargetPlatformVersion)\x64\fxc.exe</GodenA4Fxc>
+    <GodenA4SdkInclude>$(WindowsSdkDir)Include\$(WindowsTargetPlatformVersion)\um</GodenA4SdkInclude>
+    <GodenA4Stamp>$(GodenA4Gen)inputs.stamp</GodenA4Stamp>
+  </PropertyGroup>
+  <ItemDefinitionGroup><ClCompile>
+    <AdditionalIncludeDirectories>$(GodenA4Gen);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+  </ClCompile></ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="$(GodenA4Dir)a4_effect.cpp" />
+    <ClCompile Include="$(GodenA4Dir)a4_pipeline.cpp" />
+    <ClCompile Include="$(GodenA4Dir)a4_material_cache.cpp" />
+    <ClCompile Include="$(GodenA4Dir)a4_preferences.cpp" />
+    <ClCompile Include="$(GodenA4Dir)a4_track_extras.cpp" />
+    <ClCompile Include="$(GodenA4Dir)a4_trace.cpp" />
+    <ClInclude Include="$(GodenA4Dir)*.h" />
+    <None Include="$(GodenA4Dir)*.hlsl;$(GodenA4Dir)*.hlsli" />
+    <GodenA4Shader Include="field"><Pass>0</Pass><Variable>g_a4Field</Variable></GodenA4Shader>
+    <GodenA4Shader Include="glass"><Pass>1</Pass><Variable>g_a4Glass</Variable></GodenA4Shader>
+    <GodenA4Shader Include="cover"><Pass>2</Pass><Variable>g_a4Cover</Variable></GodenA4Shader>
+    <GodenA4Shader Include="film"><Pass>3</Pass><Variable>g_a4Film</Variable></GodenA4Shader>
+    <GodenA4Shader Include="encode"><Pass>4</Pass><Variable>g_a4Encode</Variable></GodenA4Shader>
+  </ItemGroup>
+  <Target Name="GodenA4ShaderStamp" BeforeTargets="GodenA4CompileShaders">
+    <MakeDir Directories="$(GodenA4Gen)" />
+    <WriteLinesToFile File="$(GodenA4Stamp)" Lines="$(GodenA4Fxc);ps_4_0;main;/O3 /Ges /D D2D_FULL_SHADER /D D2D_ENTRY=main;5 passes;R11-v2"
+      Overwrite="true" WriteOnlyWhenDifferent="true" />
+  </Target>
+  <Target Name="GodenA4CompileShaders" BeforeTargets="ClCompile" DependsOnTargets="GodenA4ShaderStamp"
+    Inputs="$(GodenA4Dir)a4_effects.hlsl;$(GodenA4Dir)a4_common.hlsli;$(GodenA4Dir)c11_alloy_v2.hlsli;$(GodenA4Dir)clovis_material.hlsli;$(GodenA4Dir)clovis_optics.hlsli;$(GodenA4Fxc);$(GodenA4Stamp)"
+    Outputs="@(GodenA4Shader->'$(GodenA4Gen)a4_%(Identity)_ps.h')">
+    <Error Condition="!Exists('$(GodenA4Fxc)')" Text="FXC not found: $(GodenA4Fxc). Use the existing Windows SDK toolchain; do not ship stale generated shaders." />
+    <Exec Command="&quot;$(GodenA4Fxc)&quot; /nologo /O3 /Ges /T ps_4_0 /E main /D D2D_FULL_SHADER /D D2D_ENTRY=main /D A4_PASS=%(GodenA4Shader.Pass) /I &quot;$(GodenA4SdkInclude)&quot; /Fh &quot;$(GodenA4Gen)a4_%(GodenA4Shader.Identity)_ps.h&quot; /Vn %(GodenA4Shader.Variable) &quot;$(GodenA4Dir)a4_effects.hlsl&quot;" />
+  </Target>
+</Project>

@@ -1,0 +1,53 @@
+{
+  "schema": "nekorox.profile-policy.v1",
+  "canonicalImport": {
+    "files": [
+      "config.fb2k-dsp",
+      "metadb.sqlite",
+      "minibar.db",
+      "theme.fth"
+    ],
+    "directories": [
+      "library-v2.0",
+      "playlists-v2.0",
+      "yttm"
+    ]
+  },
+  "preserveProductDirectories": [
+    "nekorox"
+  ],
+  "allowedUserComponents": [
+    "foo_nekorox",
+    "foo_openlyrics",
+    "foo_playcount",
+    "foo_ui_columns",
+    "foo_vis_spectrum_analyzer",
+    "foo_wave_minibar_mod"
+  ],
+  "retiredProfileDirectories": [
+    "checkpoints",
+    "custom",
+    "foo_discord_rich",
+    "foo_uie_webview",
+    "foo_webview2",
+    "foo_youtube",
+    "milkdrop2"
+  ],
+  "retiredProfileFiles": [
+    "legacy-folder-import-summary.csv",
+    "legacy-import-summary.csv",
+    "library-error-log.txt"
+  ],
+  "retiredConfigurationFiles": [
+    "foo_discord_rich.dll.cfg",
+    "foo_jscript_panel3.dll.cfg",
+    "foo_uie_albumlist.dll.cfg",
+    "foo_youtube.dll.cfg"
+  ],
+  "yttmAllowedChildren": [
+    "art_img",
+    "biography",
+    "rev_img",
+    "review"
+  ]
+}

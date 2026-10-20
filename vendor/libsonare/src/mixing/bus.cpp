@@ -1,0 +1,181 @@
+#include "mixing/bus.h"
+
+#include <algorithm>
+#include <utility>
+
+#include "mixing/tail_utils.h"
+#include "rt/scoped_no_denormals.h"
+#include "util/exception.h"
+
+namespace sonare::mixing {
+
+BusProcessor::BusProcessor(BusRole role, int max_inputs) : role_(role), max_inputs_(max_inputs) {
+  // Pre-reserve so add_insert (control thread) never reallocates inserts_ /
+  // insert_sidechains_ while process() (audio thread) iterates them; a
+  // reallocation would invalidate the in-flight pointers/iterators (C++ UB).
+  inserts_.reserve(kMaxInserts);
+  insert_spo_.reserve(kMaxInserts);
+  insert_sidechains_.reserve(kMaxInserts);
+}
+
+void BusProcessor::prepare(double sample_rate, int max_block_size) {
+  sample_rate_ = sample_rate > 0.0 ? sample_rate : 48000.0;
+  max_block_size_ = max_block_size;
+  for (auto& insert : inserts_) {
+    insert->prepare(sample_rate_, max_block_size_);
+  }
+  meter_.prepare(sample_rate_, max_block_size_);
+}
+
+void BusProcessor::process(float* const* channels, int num_channels, int num_samples) {
+  // IIR-based inserts (EQ, compressor, limiter) can accumulate denormals during
+  // silence, which causes 10-100x CPU spikes on x86 without DAZ/FTZ. Mirror the
+  // mastering processors and voice changer guard at the process-block boundary.
+  rt::ScopedNoDenormals no_denormals;
+  // Single-segment chain: no first-insert offset, no sidechain shift. The bus
+  // forwards the full sidechain width (up to kMaxSidechainChannels).
+  std::array<const float*, kMaxSidechainChannels> shifted{};
+  run_insert_chain(inserts_, insert_spo_, insert_sidechains_, channels, num_channels, num_samples,
+                   /*first_insert_index=*/0, /*sidechain_offset=*/0, shifted.data(),
+                   kMaxSidechainChannels);
+  meter_.process(channels, num_channels, num_samples);
+}
+
+void BusProcessor::reset() {
+  for (auto& insert : inserts_) {
+    insert->reset();
+  }
+  meter_.reset();
+}
+
+int BusProcessor::latency_samples() const noexcept { return latency_samples_q8() >> 8; }
+
+int BusProcessor::latency_samples_q8() const noexcept {
+  int total = 0;
+  for (const auto& insert : inserts_) {
+    total += insert->latency_samples_q8();
+  }
+  return total;
+}
+
+int BusProcessor::tail_samples() const noexcept { return processor_chain_tail_samples(inserts_); }
+
+void BusProcessor::sum_inputs(const std::vector<float* const*>& inputs, float* const* output,
+                              int num_channels, int num_samples) const {
+  if (output == nullptr || num_channels <= 0 || num_samples <= 0) {
+    return;
+  }
+
+  for (int ch = 0; ch < num_channels; ++ch) {
+    if (output[ch] != nullptr) {
+      std::fill(output[ch], output[ch] + num_samples, 0.0f);
+    }
+  }
+
+  const int limit = max_inputs_ > 0 ? std::min(static_cast<int>(inputs.size()), max_inputs_)
+                                    : static_cast<int>(inputs.size());
+  for (int input_index = 0; input_index < limit; ++input_index) {
+    float* const* input = inputs[static_cast<size_t>(input_index)];
+    if (input == nullptr) {
+      continue;
+    }
+    for (int ch = 0; ch < num_channels; ++ch) {
+      if (input[ch] == nullptr || output[ch] == nullptr) {
+        continue;
+      }
+      for (int i = 0; i < num_samples; ++i) {
+        output[ch][i] += input[ch][i];
+      }
+    }
+  }
+}
+
+void BusProcessor::add_insert(std::unique_ptr<rt::ProcessorBase> processor, bool stereo_pair_only) {
+  if (!processor) {
+    throw SonareException(ErrorCode::InvalidParameter, "insert processor must not be null");
+  }
+  if (inserts_.size() >= kMaxInserts) {
+    throw SonareException(ErrorCode::InvalidState, "BusProcessor insert cap exceeded");
+  }
+  if (max_block_size_ > 0) {
+    processor->prepare(sample_rate_, max_block_size_);
+  }
+  inserts_.push_back(std::move(processor));
+  insert_spo_.push_back(stereo_pair_only ? 1 : 0);
+  insert_sidechains_.resize(inserts_.size());
+}
+
+bool BusProcessor::apply_insert_parameter(unsigned int insert_index, unsigned int param_id,
+                                          float value) noexcept {
+  const size_t index = insert_index;
+  if (index >= inserts_.size()) {
+    return false;
+  }
+  rt::ProcessorBase* insert = inserts_[index].get();
+  if (insert == nullptr || !insert->parameter_is_realtime_safe(param_id)) {
+    return false;
+  }
+  return insert->set_parameter(param_id, value);
+}
+
+bool BusProcessor::set_insert_bypassed(unsigned int insert_index, bool bypassed,
+                                       bool reset_on_bypass) noexcept {
+  const size_t index = insert_index;
+  if (index >= inserts_.size()) {
+    return false;
+  }
+  rt::ProcessorBase* insert = inserts_[index].get();
+  return insert != nullptr && insert->set_bypassed(bypassed, reset_on_bypass);
+}
+
+int BusProcessor::insert_parameter_id_for_key(unsigned int insert_index,
+                                              const std::string& key) const noexcept {
+  const size_t index = insert_index;
+  if (index >= inserts_.size()) {
+    return -1;
+  }
+  const rt::ProcessorBase* insert = inserts_[index].get();
+  if (insert == nullptr) {
+    return -1;
+  }
+  for (const auto& desc : insert->parameter_descriptors()) {
+    if (desc.key == key) {
+      return static_cast<int>(desc.id);
+    }
+  }
+  return -1;
+}
+
+void BusProcessor::set_insert_sidechain(unsigned int insert_index, const float* const* channels,
+                                        int num_channels, int num_samples) {
+  const size_t index = insert_index;
+  // insert_sidechains_ is sized by add_insert (control thread). Never resize
+  // here: process() reads it on the audio thread, so a resize could grow or
+  // reallocate the vector under the reader. Out-of-range keys are no-ops,
+  // matching ChannelStrip::set_insert_sidechain().
+  if (index >= insert_sidechains_.size()) {
+    return;
+  }
+  if (channels == nullptr || num_channels <= 0 || num_samples <= 0) {
+    insert_sidechains_[index] = {{}, 0, 0, true};
+    return;
+  }
+  const int n = std::min(num_channels, kMaxSidechainChannels);
+  InsertSidechain entry;
+  entry.channels = {};
+  for (int ch = 0; ch < n; ++ch) {
+    entry.channels[static_cast<size_t>(ch)] = channels[ch];
+  }
+  entry.num_channels = n;
+  entry.num_samples = num_samples;
+  entry.managed = true;
+  insert_sidechains_[index] = entry;
+}
+
+void BusProcessor::clear_insert_sidechains() noexcept {
+  for (auto& sidechain : insert_sidechains_) {
+    sidechain = {};
+  }
+}
+
+}  // namespace sonare::mixing

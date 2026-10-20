@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="GODENplayer Angular icon">
+<title>GODENplayer — B / Angular</title>
+<desc>Approved hand-authored vector geometry, selected from the October 2026 studies. See docs/ICON-PROVENANCE.md for its visual reference and rights limitations.</desc>
+<defs><linearGradient id="edge" x1="0" y1="28" x2="0" y2="230" gradientUnits="userSpaceOnUse"><stop stop-color="#d775a3"/><stop offset="0.5" stop-color="#9dabb7"/><stop offset="1" stop-color="#45c6c0"/></linearGradient></defs>
+<path d="M51 111 C54 94 69 63 87 34 Q90 29 94 34 L116 65 L140 65 L162 34 Q166 29 169 34 C186 63 201 94 205 111 C212 143 200 164 183 183 L134 225 Q128 230 122 225 L73 183 C56 164 44 143 51 111 Z" fill="#fff" stroke="url(#edge)" stroke-width="6.5" stroke-linejoin="round"/>
+<path id="eye" d="M70 106 Q70 102 75 104 L108 129 Q112 132 114 137 L118 149 Q119 155 113 154 C95 150 76 134 71 116 Z" fill="#050608"/>
+<use href="#eye" transform="translate(256 0) scale(-1 1)"/>
+<path d="M112 184 L128 172 L144 184" fill="none" stroke="#050608" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,694 @@
+diff --git a/Visuals/Spectrum/Spectrum.h b/Visuals/Spectrum/Spectrum.h
+--- a/Visuals/Spectrum/Spectrum.h
++++ b/Visuals/Spectrum/Spectrum.h
+@@ -20,6 +20,8 @@
+ #include "YAxis.h"
+ #include "NekoDoubleExposure.h"
+ #include "NekoThemeProvider.h"
++#include "NekoRenderSampling.h"
++#include "NekoBarBatch.h"
+ 
+ #include "Chrono.h"
+ 
+@@ -47,6 +49,7 @@
+     void Move(const D2D1_RECT_F & rect) noexcept override final;
+     void Render(ID2D1DeviceContext * deviceContext) noexcept override final;
+     void Reset() noexcept override final;
++    void Release() noexcept override final { DeleteDeviceSpecificResources(); }
+ 
+ private:
+     HRESULT CreateDeviceSpecificResources(ID2D1DeviceContext * deviceContext) noexcept;
+@@ -58,8 +61,8 @@
+ 
+     void RenderBars(ID2D1DeviceContext * deviceContext) noexcept;
+     void UpdateNekoRenderBands(size_t renderBandCount) noexcept;
+-    void RenderBar(ID2D1DeviceContext * deviceContext, D2D1_RECT_F & rect, style_t * areaStyle, style_t * topStyle, double value, double opacity, double frequency) noexcept;
+-    void RenderBarTop(ID2D1DeviceContext * deviceContext, D2D1_RECT_F & rect, style_t * topStyle, double value, double opacity, double frequency) noexcept;
++    void RenderBar(ID2D1DeviceContext * deviceContext, D2D1_RECT_F & rect, style_t * areaStyle, style_t * topStyle, double value, double opacity, double correctionDb) noexcept;
++    void RenderBarTop(ID2D1DeviceContext * deviceContext, D2D1_RECT_F & rect, style_t * topStyle, double value, double opacity, double correctionDb) noexcept;
+     void RenderNekoTemporalLayers(ID2D1DeviceContext * deviceContext, FLOAT bandPitch, FLOAT horizontalOffset, FLOAT pixelScale, LONG bodyGapPixels) noexcept;
+     void UpdateNekoTemporalLayers() noexcept;
+ 
+@@ -104,6 +107,7 @@
+         double Lo = 0.;
+         double Center = 0.;
+         double Shadow = 0.;
++        double CorrectionDb = 0.;
+     };
+ 
+     const FLOAT PaddingX = 0.f;
+@@ -122,6 +126,8 @@
+     int64_t _LastNekoTemporalTick = 0;
+     neko_double_exposure_t _NekoDoubleExposure;
+     std::vector<neko_render_band_t> _NekoRenderBands;
++    neko_render_sampling_t _NekoRenderSampling;
++    mutable neko_bar_batch_t _NekoBarBatch;
+     service_ptr_t<nekorox::interop::ThemeProviderV1> _NekoThemeProvider;
+     nekorox::interop::SharedThemeSnapshotV2 _NekoTheme;
+ 
+diff --git a/Visuals/Spectrum/Spectrum.cpp b/Visuals/Spectrum/Spectrum.cpp
+--- a/Visuals/Spectrum/Spectrum.cpp
++++ b/Visuals/Spectrum/Spectrum.cpp
+@@ -239,6 +239,8 @@
+ 
+     deviceContext->SetAntialiasMode( D2D1_ANTIALIAS_MODE_ALIASED); // Required by FillOpacityMask() and results in crispier graphics.
+ 
++    _NekoBarBatch.begin(deviceContext, !_State->_LEDMode);
++
+     // The signal may merge or interpolate bars, but the musical-key backdrop
+     // must never inherit that presentation density. Draw it from the original
+     // 120-note lattice and coalesce equal neighbouring keys into one region.
+@@ -304,13 +306,14 @@
+         if (!GreaterThanNyquist || !_State->_SuppressMirrorImage)
+         {
+             if (fb.Value > 0.)
+-                RenderBar(deviceContext, Rect, _BarAreaStyle, _BarTopStyle, fb.Value, fb.Opacity, fb.Center);
++                RenderBar(deviceContext, Rect, _BarAreaStyle, _BarTopStyle, fb.Value, fb.Opacity, fb.CorrectionDb);
+ 
+             if ((_State->_PeakMode != PeakMode::None) && (fb.MaxValue > 0.))
+-                RenderBarTop(deviceContext, Rect, _BarPeakTopStyle, fb.MaxValue, fb.Opacity, fb.Center);
+-        }
+-
+-    }
++                RenderBarTop(deviceContext, Rect, _BarPeakTopStyle, fb.MaxValue, fb.Opacity, fb.CorrectionDb);
++        }
++
++    }
++    _NekoBarBatch.end();
+ }
+ 
+ /// <summary>
+@@ -324,6 +327,10 @@
+     const auto & shadow = _NekoDoubleExposure.Shadow();
+     const size_t sourceCount = source.size();
+ 
++    _NekoRenderSampling.update(source, renderBandCount,
++        [](double frequency) noexcept {
++            return nekorox_visual::PerceptualCorrectionDb(frequency);
++        });
+     _NekoRenderBands.resize(renderBandCount);
+     const bool hasShadow = shadow.size() == sourceCount;
+ 
+@@ -332,14 +339,14 @@
+         for (size_t targetIndex = 0; targetIndex < renderBandCount;
+             ++targetIndex)
+         {
+-            const size_t first = targetIndex * sourceCount / renderBandCount;
+-            const size_t last = std::max(first + 1,
+-                (targetIndex + 1) * sourceCount / renderBandCount);
++            const auto & mapping = _NekoRenderSampling[targetIndex];
++            const size_t first = mapping.first;
++            const size_t last = mapping.last;
+             auto & target = _NekoRenderBands[targetIndex];
+             target = {};
+-            target.Lo = source[first].Lo;
+-            target.Center = std::sqrt(
+-                source[first].Center * source[last - 1].Center);
++            target.Lo = mapping.lo;
++            target.Center = mapping.center;
++            target.CorrectionDb = mapping.correctionDb;
+             for (size_t sourceIndex = first; sourceIndex < last;
+                 ++sourceIndex)
+             {
+@@ -357,23 +364,19 @@
+ 
+     for (size_t targetIndex = 0; targetIndex < renderBandCount; ++targetIndex)
+     {
+-        const double position = renderBandCount == 1 || sourceCount == 1
+-            ? 0.
+-            : (double) targetIndex * (double) (sourceCount - 1) /
+-                (double) (renderBandCount - 1);
+-        const size_t lower = (size_t) std::floor(position);
+-        const size_t upper = std::min(lower + 1, sourceCount - 1);
+-        const double fraction = position - (double) lower;
++        const auto & mapping = _NekoRenderSampling[targetIndex];
++        const size_t lower = mapping.first;
++        const size_t upper = mapping.last - 1;
++        const double fraction = mapping.fraction;
+         const auto & a = source[lower];
+         const auto & b = source[upper];
+         auto & target = _NekoRenderBands[targetIndex];
+         target.Value = std::lerp(a.Value, b.Value, fraction);
+         target.MaxValue = std::lerp(a.MaxValue, b.MaxValue, fraction);
+         target.Opacity = std::lerp(a.Opacity, b.Opacity, fraction);
+-        target.Lo = std::exp(std::lerp(
+-            std::log(a.Lo), std::log(b.Lo), fraction));
+-        target.Center = std::exp(std::lerp(
+-            std::log(a.Center), std::log(b.Center), fraction));
++        target.Lo = mapping.lo;
++        target.Center = mapping.center;
++        target.CorrectionDb = mapping.correctionDb;
+         target.Shadow = hasShadow
+             ? std::lerp(shadow[lower], shadow[upper], fraction)
+             : 0.;
+@@ -443,7 +446,8 @@
+                 std::clamp((FLOAT) (fb.Shadow * _ClientSize.height), 0.f, _ClientSize.height)
+             };
+ 
+-            deviceContext->FillRectangle(rect, _NekoShadowBrush);
++            if (!_NekoBarBatch.add(rect, _NekoShadowBrush))
++                deviceContext->FillRectangle(rect, _NekoShadowBrush);
+         }
+     }
+ }
+@@ -451,7 +455,7 @@
+ /// <summary>
+ /// Renders a single bar.
+ /// </summary>
+-void spectrum_t::RenderBar(ID2D1DeviceContext * deviceContext, D2D1_RECT_F & rect, style_t * areaStyle, style_t * topStyle, double value, double opacity, double frequency) noexcept
++void spectrum_t::RenderBar(ID2D1DeviceContext * deviceContext, D2D1_RECT_F & rect, style_t * areaStyle, style_t * topStyle, double value, double opacity, double correctionDb) noexcept
+ {
+     rect.top    = 0.f;
+     rect.bottom = _ClientSize.height * (FLOAT) value;
+@@ -461,20 +465,20 @@
+     {
+         if (areaStyle->IsAmplitudeBased())
+             nekorox_visual::SetSolidBrushColor(
+-                areaStyle->_Brush,
+-                nekorox_visual::SpectrumColorV2(_NekoTheme, value, frequency,
++                areaStyle,
++                nekorox_visual::SpectrumColorWithCorrectionV2(_NekoTheme, value, correctionDb,
+                     _Settings->_AmplitudeLo, _Settings->_AmplitudeHi));
+ 
+         RenderBarPart(deviceContext, rect, areaStyle);
+     }
+ 
+-    RenderBarTop(deviceContext, rect, topStyle, value, opacity, frequency);
++    RenderBarTop(deviceContext, rect, topStyle, value, opacity, correctionDb);
+ }
+ 
+ /// <summary>
+ /// Renders only the marker at the top of a bar.
+ /// </summary>
+-void spectrum_t::RenderBarTop(ID2D1DeviceContext * deviceContext, D2D1_RECT_F & rect, style_t * topStyle, double value, double opacity, double frequency) noexcept
++void spectrum_t::RenderBarTop(ID2D1DeviceContext * deviceContext, D2D1_RECT_F & rect, style_t * topStyle, double value, double opacity, double correctionDb) noexcept
+ {
+     // Draw the bar top.
+     if (topStyle->IsEnabled())
+@@ -484,8 +488,8 @@
+         // the held peak never inherits the live bar's current color.
+         if ((_BarAreaStyle != nullptr) && _BarAreaStyle->IsAmplitudeBased())
+             nekorox_visual::SetSolidBrushColor(
+-                topStyle->_Brush,
+-                nekorox_visual::SpectrumColorV2(_NekoTheme, value, frequency,
++                topStyle,
++                nekorox_visual::SpectrumColorWithCorrectionV2(_NekoTheme, value, correctionDb,
+                     _Settings->_AmplitudeLo, _Settings->_AmplitudeHi));
+ 
+         rect.bottom = _ClientSize.height * (FLOAT) value;
+@@ -512,6 +516,11 @@
+ /// </summary>
+ void spectrum_t::RenderBarPart(ID2D1DeviceContext * deviceContext, D2D1_RECT_F & rect, const style_t * style) const noexcept
+ {
++    if (!_State->_LEDMode && _NekoBarBatch.add(rect, style->_SolidBrush))
++        return;
++    // A gradient or opacity mask must keep its original position in the
++    // compositing order, even between runs of batched solid rectangles.
++    _NekoBarBatch.flush();
+     if (_State->_LEDMode)
+     {
+         if (_State->_LEDIntegralSize)
+@@ -962,6 +971,7 @@
+ /// </summary>
+ void spectrum_t::DeleteDeviceSpecificResources() noexcept
+ {
++    _NekoBarBatch.reset();
+     _YAxis.DeleteDeviceSpecificResources();
+     _XAxis.DeleteDeviceSpecificResources();
+ 
+@@ -1348,3 +1358,4 @@
+ 
+     return hr;
+ }
++
+diff --git a/Visuals/Spectrum/NekoVisualPalette.h b/Visuals/Spectrum/NekoVisualPalette.h
+--- a/Visuals/Spectrum/NekoVisualPalette.h
++++ b/Visuals/Spectrum/NekoVisualPalette.h
+@@ -180,16 +180,16 @@
+         return Curve.Evaluate(frequency);
+     }
+ 
+-    inline D2D1_COLOR_F SpectrumColorV2(
++    inline D2D1_COLOR_F SpectrumColorWithCorrectionV2(
+         const nekorox::interop::SharedThemeSnapshotV2 & theme,
+         double normalizedValue,
+-        double frequency,
++        double correctionDb,
+         double minimumDb,
+         double maximumDb) noexcept
+     {
+         const double rawDb = minimumDb +
+             std::clamp(normalizedValue, 0., 1.) * (maximumDb - minimumDb);
+-        const double correctedDb = rawDb + PerceptualCorrectionDb(frequency);
++        const double correctedDb = rawDb + correctionDb;
+         const D2D1_COLOR_F accent = Color(theme.accent);
+         const FLOAT neutralAmount = SmoothStep((FLOAT) ((rawDb + 80.) / 30.));
+         const D2D1_COLOR_F neutral = Mix(
+@@ -216,6 +216,21 @@
+             highlightAmount);
+     }
+ 
++    inline D2D1_COLOR_F SpectrumColorV2(
++        const nekorox::interop::SharedThemeSnapshotV2 & theme,
++        double normalizedValue, double frequency,
++        double minimumDb, double maximumDb) noexcept
++    {
++        return SpectrumColorWithCorrectionV2(theme, normalizedValue,
++            PerceptualCorrectionDb(frequency), minimumDb, maximumDb);
++    }
++
++    inline void SetSolidBrushColor(style_t * style, const D2D1_COLOR_F & color) noexcept
++    {
++        if (style != nullptr && style->_SolidBrush)
++            style->_SolidBrush->SetColor(color);
++    }
++
+     inline void SetSolidBrushColor(ID2D1Brush * brush, const D2D1_COLOR_F & color) noexcept
+     {
+         if (brush == nullptr)
+@@ -235,7 +250,7 @@
+         if ((style == nullptr) || !style->IsAmplitudeBased())
+             return;
+ 
+-        SetSolidBrushColor(style->_Brush, AmplitudeColor(theme, value));
++        SetSolidBrushColor(style, AmplitudeColor(theme, value));
+     }
+ 
+     inline D2D1_COLOR_F ArtworkShadowColor(
+@@ -265,24 +280,25 @@
+     inline void ApplyNeutralAxisColors(style_t * lineStyle, style_t * textStyle) noexcept
+     {
+         if (lineStyle != nullptr)
+-            SetSolidBrushColor(lineStyle->_Brush, D2D1::ColorF(0x20282A, 0.42f));
++            SetSolidBrushColor(lineStyle, D2D1::ColorF(0x20282A, 0.42f));
+ 
+         if (textStyle != nullptr)
+-            SetSolidBrushColor(textStyle->_Brush, D2D1::ColorF(0x536669, 0.78f));
++            SetSolidBrushColor(textStyle, D2D1::ColorF(0x536669, 0.78f));
+     }
+ 
+     inline void ApplyNeutralGraphBackground(style_t * backgroundStyle) noexcept
+     {
+         if (backgroundStyle != nullptr)
+-            SetSolidBrushColor(backgroundStyle->_Brush, D2D1::ColorF(0x080909));
++            SetSolidBrushColor(backgroundStyle, D2D1::ColorF(0x080909));
+     }
+ 
+     inline void ApplyNeutralBarBackgroundColors(style_t * darkStyle, style_t * lightStyle) noexcept
+     {
+         if (darkStyle != nullptr)
+-            SetSolidBrushColor(darkStyle->_Brush, D2D1::ColorF(0x0A0C0D));
++            SetSolidBrushColor(darkStyle, D2D1::ColorF(0x0A0C0D));
+ 
+         if (lightStyle != nullptr)
+-            SetSolidBrushColor(lightStyle->_Brush, D2D1::ColorF(0x0D1112));
++            SetSolidBrushColor(lightStyle, D2D1::ColorF(0x0D1112));
+     }
+ }
++
+diff --git a/Visuals/Spectrum/XAxis.h b/Visuals/Spectrum/XAxis.h
+--- a/Visuals/Spectrum/XAxis.h
++++ b/Visuals/Spectrum/XAxis.h
+@@ -66,9 +66,12 @@
+ 
+         D2D1_RECT_F RectT;
+         D2D1_RECT_F RectB;
++        CComPtr<IDWriteTextLayout> TextT;
++        CComPtr<IDWriteTextLayout> TextB;
+     };
+ 
+     std::vector<label_t> _Labels;
++    CComPtr<IDWriteTextFormat> _LayoutFormat;
+ 
+     style_t * _LineStyle;
+     style_t * _TextStyle;
+diff --git a/Visuals/Spectrum/XAxis.cpp b/Visuals/Spectrum/XAxis.cpp
+--- a/Visuals/Spectrum/XAxis.cpp
++++ b/Visuals/Spectrum/XAxis.cpp
+@@ -7,6 +7,7 @@
+ #include "StyleManager.h"
+ #include "DirectWrite.h"
+ #include "NekoVisualPalette.h"
++#include "NekoAxisText.h"
+ 
+ #include "Support.h"
+ 
+@@ -22,6 +23,8 @@
+     _Analysis = analysis;
+ 
+     _Labels.clear();
++    _IsResized = true;
++    _LayoutFormat.Release();
+ 
+     const frequency_bands_t & fb = _Analysis->_FrequencyBands;
+ 
+@@ -259,6 +262,16 @@
+         }
+     }
+ 
++    for (auto & label : _Labels) {
++        label.TextT.Release();
++        label.TextB.Release();
++        if (!label.IsHidden) {
++            NekoBuildAxisText(_DirectWrite.Factory, _TextStyle->_TextFormat,
++                label.Text, label.RectT, label.TextT);
++            NekoBuildAxisText(_DirectWrite.Factory, _TextStyle->_TextFormat,
++                label.Text, label.RectB, label.TextB);
++        }
++    }
+     _IsResized = false;
+ }
+ 
+@@ -292,10 +305,12 @@
+             _TextStyle->_Brush->SetOpacity(Iter.IsDimmed && (_Settings->_XAxisMode == XAxisMode::Notes) ? Opacity * .5f : Opacity);
+ 
+             if (_Settings->_XAxisTop)
+-                deviceContext->DrawText(Iter.Text.c_str(), (UINT) Iter.Text.size(), _TextStyle->_TextFormat, Iter.RectT, _TextStyle->_Brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
++                NekoDrawAxisText(deviceContext, Iter.TextT, _TextStyle->_TextFormat,
++                    Iter.Text, Iter.RectT, _TextStyle->_Brush);
+ 
+             if (_Settings->_XAxisBottom)
+-                deviceContext->DrawText(Iter.Text.c_str(), (UINT) Iter.Text.size(), _TextStyle->_TextFormat, Iter.RectB, _TextStyle->_Brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
++                NekoDrawAxisText(deviceContext, Iter.TextB, _TextStyle->_TextFormat,
++                    Iter.Text, Iter.RectB, _TextStyle->_Brush);
+         }
+     }
+ 
+@@ -315,8 +330,14 @@
+     if (SUCCEEDED(hr))
+         hr = _State->_StyleManager.GetInitializedStyle(VisualElement::XAxisText, deviceContext, _Size, L"999.9k", 1.f, &_TextStyle);
+ 
+-    if (SUCCEEDED(hr))
++    if (SUCCEEDED(hr)) {
++        _TextStyle->SetHorizontalAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
++        if (_LayoutFormat != _TextStyle->_TextFormat) {
++            _LayoutFormat = _TextStyle->_TextFormat;
++            _IsResized = true;
++        }
+         Resize();
++    }
+ 
+     return hr;
+ }
+diff --git a/Visuals/Spectrum/YAxis.h b/Visuals/Spectrum/YAxis.h
+--- a/Visuals/Spectrum/YAxis.h
++++ b/Visuals/Spectrum/YAxis.h
+@@ -63,9 +63,12 @@
+ 
+         D2D1_RECT_F RectL;
+         D2D1_RECT_F RectR;
++        CComPtr<IDWriteTextLayout> TextL;
++        CComPtr<IDWriteTextLayout> TextR;
+     };
+ 
+     std::vector<label_t> _Labels;
++    CComPtr<IDWriteTextFormat> _LayoutFormat;
+ 
+     style_t * _LineStyle;
+     style_t * _TextStyle;
+diff --git a/Visuals/Spectrum/YAxis.cpp b/Visuals/Spectrum/YAxis.cpp
+--- a/Visuals/Spectrum/YAxis.cpp
++++ b/Visuals/Spectrum/YAxis.cpp
+@@ -7,6 +7,7 @@
+ #include "StyleManager.h"
+ #include "DirectWrite.h"
+ #include "NekoVisualPalette.h"
++#include "NekoAxisText.h"
+ 
+ #pragma hdrstop
+ 
+@@ -22,6 +23,8 @@
+     _FlipVertically = settings->_FlipVertically;
+ 
+     _Labels.clear();
++    _IsResized = true;
++    _LayoutFormat.Release();
+ 
+     if (_Settings->_YAxisMode == YAxisMode::None)
+         return;
+@@ -94,6 +97,16 @@
+             OldRect = Iter.RectL;
+     }
+ 
++    for (auto & label : _Labels) {
++        label.TextL.Release();
++        label.TextR.Release();
++        if (!label.IsHidden) {
++            NekoBuildAxisText(_DirectWrite.Factory, _TextStyle->_TextFormat,
++                label.Text, label.RectL, label.TextL);
++            NekoBuildAxisText(_DirectWrite.Factory, _TextStyle->_TextFormat,
++                label.Text, label.RectR, label.TextR);
++        }
++    }
+     _IsResized = false;
+ }
+ 
+@@ -123,10 +136,12 @@
+         if (!Iter.IsHidden && _TextStyle->IsEnabled() && (_Settings->_YAxisMode != YAxisMode::None))
+         {
+             if (_Settings->_YAxisLeft)
+-                deviceContext->DrawText(Iter.Text.c_str(), (UINT) Iter.Text.size(), _TextStyle->_TextFormat, Iter.RectL, _TextStyle->_Brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
++                NekoDrawAxisText(deviceContext, Iter.TextL, _TextStyle->_TextFormat,
++                    Iter.Text, Iter.RectL, _TextStyle->_Brush);
+ 
+             if (_Settings->_YAxisRight)
+-                deviceContext->DrawText(Iter.Text.c_str(), (UINT) Iter.Text.size(), _TextStyle->_TextFormat, Iter.RectR, _TextStyle->_Brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
++                NekoDrawAxisText(deviceContext, Iter.TextR, _TextStyle->_TextFormat,
++                    Iter.Text, Iter.RectR, _TextStyle->_Brush);
+         }
+     }
+ }
+@@ -144,8 +159,14 @@
+     if (SUCCEEDED(hr))
+         hr = _State->_StyleManager.GetInitializedStyle(VisualElement::YAxisText, deviceContext, _Size, L"+999", 1.f, &_TextStyle);
+ 
+-    if (SUCCEEDED(hr))
++    if (SUCCEEDED(hr)) {
++        _TextStyle->SetHorizontalAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
++        if (_LayoutFormat != _TextStyle->_TextFormat) {
++            _LayoutFormat = _TextStyle->_TextFormat;
++            _IsResized = true;
++        }
+         Resize();
++    }
+ 
+     return hr;
+ }
+diff --git a/Visuals/Style.h b/Visuals/Style.h
+--- a/Visuals/Style.h
++++ b/Visuals/Style.h
+@@ -116,6 +116,7 @@
+ 
+     // DirectX resources
+     CComPtr<ID2D1Brush> _Brush;
++    CComPtr<ID2D1SolidColorBrush> _SolidBrush;
+     CComPtr<IDWriteTextFormat> _TextFormat;
+ 
+     FLOAT _Width;
+diff --git a/Visuals/Style.cpp b/Visuals/Style.cpp
+--- a/Visuals/Style.cpp
++++ b/Visuals/Style.cpp
+@@ -172,8 +172,11 @@
+             hr = _Direct2D.CreateGradientBrush(deviceContext, _CurrentGradientStops, size, Has(style_t::Features::HorizontalGradient), (ID2D1LinearGradientBrush **) &_Brush);
+     }
+ 
+-    if (_Brush)
++    _SolidBrush.Release();
++    if (_Brush) {
++        _Brush->QueryInterface(IID_PPV_ARGS(&_SolidBrush));
+         _Brush->SetOpacity(_Opacity);
++    }
+ 
+     if (Has(style_t::Features::SupportsFont) && (_TextFormat == nullptr) && !_FontName.empty())
+     {
+@@ -210,8 +213,11 @@
+             hr = _Direct2D.CreateRadialGradientBrush(deviceContext, _CurrentGradientStops, center, offset, rx, ry, rOffset, (ID2D1RadialGradientBrush **) &_Brush);
+     }
+ 
+-    if (_Brush)
++    _SolidBrush.Release();
++    if (_Brush) {
++        _Brush->QueryInterface(IID_PPV_ARGS(&_SolidBrush));
+         _Brush->SetOpacity(_Opacity);
++    }
+ 
+     return hr;
+ }
+@@ -222,6 +228,7 @@
+ void style_t::DeleteDeviceSpecificResources() noexcept
+ {
+     _TextFormat.Release();
++    _SolidBrush.Release();
+     _Brush.Release();
+ }
+ 
+@@ -233,20 +240,13 @@
+     if (_AmplitudeMap.empty())
+         return E_FAIL;
+ 
+-    ID2D1SolidColorBrush * ColorBrush = nullptr;
+-
+-    HRESULT hr = _Brush->QueryInterface(IID_PPV_ARGS(&ColorBrush));
+-
+-    if (!SUCCEEDED(hr))
+-        return hr;
++    if (!_SolidBrush)
++        return E_NOINTERFACE;
+ 
+     const size_t Index = msc::Map(value, 0., 1., (size_t) 0, _AmplitudeMap.size() - 1);
+ 
+-    ColorBrush->SetColor(_AmplitudeMap[Index]);
+-
+-    ColorBrush->Release();
+-
+-    return hr;
++    _SolidBrush->SetColor(_AmplitudeMap[Index]);
++    return S_OK;
+ }
+ 
+ /// <summary>
+diff --git a/Analyzers/FFT.h b/Analyzers/FFT.h
+--- a/Analyzers/FFT.h
++++ b/Analyzers/FFT.h
+@@ -43,7 +43,12 @@
+     bool Transform(const std::vector<std::complex<double>> & timeData, std::vector<complex<double>> & freqData) noexcept
+     {
+         freqData = timeData;
++        return TransformInPlace(freqData);
++    }
+ 
++    // Reuse the already-windowed buffer; no sample or coefficient changes.
++    bool TransformInPlace(std::vector<std::complex<double>>& freqData) noexcept
++    {
+         try
+         {
+             Fft::transform(freqData, _Exp, false);
+diff --git a/Analyzers/FFTAnalyzer.h b/Analyzers/FFTAnalyzer.h
+--- a/Analyzers/FFTAnalyzer.h
++++ b/Analyzers/FFTAnalyzer.h
+@@ -94,7 +94,6 @@
+     std::vector<audio_sample> _InputRing;
+     size_t _Next;   // Index of the next input sample
+ 
+-    std::vector<std::complex<double>> _TimeData;
+     std::vector<std::complex<double>> _FreqData;
+     std::vector<double> _WindowFactors;
+     double _WindowNorm = 1.;
+diff --git a/Analyzers/FFTAnalyzer.cpp b/Analyzers/FFTAnalyzer.cpp
+--- a/Analyzers/FFTAnalyzer.cpp
++++ b/Analyzers/FFTAnalyzer.cpp
+@@ -39,7 +39,6 @@
+     _InputRing.resize(_FFTSize, 0.);
+     _Next = 0;
+ 
+-    _TimeData.resize(_FFTSize);
+     _FreqData.resize(_FFTSize);
+     _WindowFactors.resize(_FFTSize);
+     _WindowNorm = 0.;
+@@ -108,7 +107,7 @@
+     {
+         p[_Next] = AverageSamples(&samples[i], selectedChannels);
+ 
+-        _Next = (_Next + 1) % _InputRing.size();
++        if (++_Next == _InputRing.size()) _Next = 0;
+     }
+ }
+ 
+@@ -126,13 +125,13 @@
+ 
+         const audio_sample * const p = _InputRing.data();
+ 
+-        for (auto & Iter : _TimeData)
++        for (auto & Iter : _FreqData)
+         {
+             const double WindowFactor = _WindowFactors[j];
+ 
+             Iter = std::complex<double>(p[i] * WindowFactor, 0.);
+ 
+-            i = (i + 1) % _InputRing.size();
++            if (++i == _InputRing.size()) i = 0;
+ 
+             j++;
+         }
+@@ -142,12 +141,12 @@
+     {
+         const double Factor = (double) _FFTSize / _WindowNorm; // * M_SQRT2;
+ 
+-        for (auto & sample : _TimeData)
++        for (auto & sample : _FreqData)
+             sample *= Factor;
+     }
+ 
+     // Transform the data from the Time domain to the Frequency domain.
+-    _FFT.Transform(_TimeData, _FreqData);
++    _FFT.TransformInPlace(_FreqData);
+ 
+     // Normalize the Frequency domain data.
+     {
+diff --git a/Visuals/FrameCounter.h b/Visuals/FrameCounter.h
+--- a/Visuals/FrameCounter.h
++++ b/Visuals/FrameCounter.h
+@@ -42,6 +42,7 @@
+     void Resize(FLOAT clientWidth, FLOAT clientHeight) noexcept;
+ 
+     void NewFrame() noexcept;
++    float FrameRateForQa() const noexcept { return GetFPS(); }
+     HRESULT Render(ID2D1DeviceContext * deviceContext) noexcept;
+ 
+     HRESULT CreateDeviceIndependentResources() noexcept;
+diff --git a/UIElement.h b/UIElement.h
+--- a/UIElement.h
++++ b/UIElement.h
+@@ -77,6 +77,8 @@
+     LRESULT OnDPIChanged(UINT dpiX, UINT dpiY, PRECT newRect);
+     LRESULT OnWindowPositionChanged(UINT uMsg, WPARAM wParam, LPARAM lParam);
+     static UINT RootPresentationVisibilityMessage() noexcept;
++    static UINT SpectrumRenderQaMessage() noexcept;
++    LRESULT OnSpectrumRenderQa(UINT uMsg, WPARAM wParam, LPARAM lParam);
+     LRESULT OnRootPresentationVisibility(UINT uMsg, WPARAM wParam, LPARAM lParam);
+     static UINT DisplayEnvironmentChangedMessage() noexcept;
+     LRESULT OnDisplayEnvironmentChanged(UINT uMsg, WPARAM wParam, LPARAM lParam);
+@@ -151,6 +153,7 @@
+         MSG_WM_MOUSEMOVE(OnMouseMove)   // Required for CToolTip
+         MSG_WM_MOUSELEAVE(OnMouseLeave) // Required for tracking tooltip
+ 
++        MESSAGE_HANDLER_EX(SpectrumRenderQaMessage(), OnSpectrumRenderQa)
+         MESSAGE_HANDLER_EX(UM_CONFIGURATION_CHANGED, OnConfigurationChanged)
+     END_MSG_MAP()
+ 
+diff --git a/UIElement.cpp b/UIElement.cpp
+--- a/UIElement.cpp
++++ b/UIElement.cpp
+@@ -874,3 +874,32 @@
+         case ArtworkType::Artist: return album_art_ids::artist;
+     }
+ }
++
++// Opt-in native QA. No counters, clocks or extra work on production frames.
++UINT uielement_t::SpectrumRenderQaMessage() noexcept
++{
++    static const UINT message = ::RegisterWindowMessageW(L"Goden.SpectrumRenderQa.V1");
++    return message;
++}
++
++LRESULT uielement_t::OnSpectrumRenderQa(UINT, WPARAM field, LPARAM)
++{
++    WCHAR enabled[4] = {};
++    if (::GetEnvironmentVariableW(L"NEKOROX_QA_HOOKS", enabled, 4) != 1 ||
++            enabled[0] != L'1') return E_ACCESSDENIED;
++    if (!_CriticalSection.TryEnter()) return E_PENDING;
++    LRESULT result = E_INVALIDARG;
++    if (field == 0) {
++        const auto fps = _FrameCounter.FrameRateForQa();
++        result = std::isfinite(fps) && fps > 0.f
++            ? static_cast<LRESULT>(fps * 1000.f) : 0;
++    } else if (field == 1) {
++        // Exercise the ordinary resource teardown/recreation path under its
++        // existing render lock, including while paused or hidden.
++        DeleteDeviceSpecificResources();
++        if (_hRenderWake) ::SetEvent(_hRenderWake);
++        result = 1;
++    }
++    _CriticalSection.Leave();
++    return result;
++}

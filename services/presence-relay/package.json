@@ -1,0 +1,20 @@
+{
+  "name": "goden-presence-relay",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit && node --experimental-strip-types --test test/*.test.ts",
+    "check:live": "node --experimental-strip-types test/live-integration.mjs",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260816.1",
+    "@types/node": "^24.3.0",
+    "@types/ws": "^8.18.1",
+    "typescript": "^5.9.3",
+    "wrangler": "4.151.1",
+    "ws": "^8.21.3"
+  }
+}

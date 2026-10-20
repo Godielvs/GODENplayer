@@ -1,0 +1,207 @@
+diff --git a/Visuals/Spectrum/Spectrum.h b/Visuals/Spectrum/Spectrum.h
+index d0376d4..e184f2f 100644
+--- a/Visuals/Spectrum/Spectrum.h
++++ b/Visuals/Spectrum/Spectrum.h
+@@ -60,7 +60,7 @@ private:
+     void UpdateNekoRenderBands(size_t renderBandCount) noexcept;
+     void RenderBar(ID2D1DeviceContext * deviceContext, D2D1_RECT_F & rect, style_t * areaStyle, style_t * topStyle, double value, double opacity, double frequency) noexcept;
+     void RenderBarTop(ID2D1DeviceContext * deviceContext, D2D1_RECT_F & rect, style_t * topStyle, double value, double opacity, double frequency) noexcept;
+-    void RenderNekoTemporalLayers(ID2D1DeviceContext * deviceContext, FLOAT bandPitch, FLOAT bodyWidth, FLOAT horizontalOffset) noexcept;
++    void RenderNekoTemporalLayers(ID2D1DeviceContext * deviceContext, FLOAT bandPitch, FLOAT horizontalOffset, FLOAT pixelScale, LONG bodyGapPixels) noexcept;
+     void UpdateNekoTemporalLayers() noexcept;
+ 
+     void RenderBarPart(ID2D1DeviceContext * deviceContext, D2D1_RECT_F & rect, const style_t * style) const noexcept;
+diff --git a/Visuals/Spectrum/Spectrum.cpp b/Visuals/Spectrum/Spectrum.cpp
+index f85cc96..d09cceb 100644
+--- a/Visuals/Spectrum/Spectrum.cpp
++++ b/Visuals/Spectrum/Spectrum.cpp
+@@ -194,41 +194,49 @@ void spectrum_t::RenderBars(ID2D1DeviceContext * deviceContext) noexcept
+     // comically thin or thick at the extremes.
+     const FLOAT BandPitch = std::max(t, 2.f); // In DIP
+     const FLOAT SpectrumWidth = BandPitch * (FLOAT) renderBandCount;
++    const FLOAT HOffset = GetHOffset(
++        _Settings->_HorizontalAlignment,
++        _ClientSize.width - SpectrumWidth);
+ 
+     FLOAT dpiX = 96.f;
+     FLOAT dpiY = 96.f;
+     deviceContext->GetDpi(&dpiX, &dpiY);
+     const FLOAT pixelScale = std::max(dpiX / 96.f, 0.25f);
+     const FLOAT physicalPixel = 1.f / pixelScale;
+-    const FLOAT preferredBody = std::max(
+-        physicalPixel, BandPitch - 1.f);
+-    const FLOAT BodyWidth = std::min(
+-        std::max(physicalPixel,
+-            std::round(preferredBody * pixelScale) / pixelScale),
+-        BandPitch);
+-    const FLOAT BodyInset = (BandPitch - BodyWidth) / 2.f;
+-
+-    const auto GetBodyRect = [this, BandPitch, BodyWidth, BodyInset,
+-        pixelScale](FLOAT cellLeft) noexcept
++    const LONG bodyGapPixels = std::max<LONG>(
++        1, (LONG) std::lround(pixelScale));
++    const LONG clientRightPixels = (LONG) std::lround(
++        _ClientSize.width * pixelScale);
++
++    // Quantize shared cell boundaries, not each bar origin independently.
++    // The body consumes the cell minus a fixed physical gap; fractional pitch
++    // error is therefore absorbed by an occasional one-pixel width change and
++    // can never create a double gap.
++    const auto GetBodyRect = [this, BandPitch, HOffset, pixelScale,
++        bodyGapPixels, clientRightPixels](size_t index) noexcept
+     {
+-        const FLOAT cellRight = cellLeft + BandPitch;
+-        const FLOAT left = std::round((cellLeft + BodyInset) * pixelScale) /
+-            pixelScale;
++        const LONG leftPixels = std::clamp<LONG>(
++            (LONG) std::llround(
++                (HOffset + BandPitch * (FLOAT) index) * pixelScale),
++            0,
++            clientRightPixels);
++        const LONG nextPixels = std::clamp<LONG>(
++            (LONG) std::llround(
++                (HOffset + BandPitch * (FLOAT) (index + 1)) * pixelScale),
++            leftPixels,
++            clientRightPixels);
++        const LONG rightPixels = std::max(
++            leftPixels,
++            nextPixels - bodyGapPixels);
+         return D2D1_RECT_F
+         {
+-            std::clamp(left, 0.f, _ClientSize.width),
++            (FLOAT) leftPixels / pixelScale,
+             0.f,
+-            std::clamp(std::min(left + BodyWidth, cellRight),
+-                0.f, _ClientSize.width),
++            (FLOAT) rightPixels / pixelScale,
+             _ClientSize.height
+         };
+     };
+ 
+-    const FLOAT HOffset = GetHOffset(_Settings->_HorizontalAlignment, _ClientSize.width - SpectrumWidth);
+-
+-    FLOAT x1 = HOffset;
+-    FLOAT x2 = x1 + BandPitch;
+-
+     deviceContext->SetAntialiasMode( D2D1_ANTIALIAS_MODE_ALIASED); // Required by FillOpacityMask() and results in crispier graphics.
+ 
+     // The signal may merge or interpolate bars, but the musical-key backdrop
+@@ -282,20 +290,18 @@ void spectrum_t::RenderBars(ID2D1DeviceContext * deviceContext) noexcept
+     if (!renderSignal)
+         return;
+ 
+-    RenderNekoTemporalLayers(deviceContext, BandPitch, BodyWidth, HOffset);
+-
+-    x1 = HOffset;
+-    x2 = x1 + BandPitch;
++    RenderNekoTemporalLayers(
++        deviceContext, BandPitch, HOffset, pixelScale, bodyGapPixels);
+ 
+     // The current artwork-derived body and peak marks are deliberately last.
+     // The slower secondary exposure remains visible only where the signal has
+     // just moved away.
+-    for (const auto & fb : _NekoRenderBands)
++    for (size_t renderIndex = 0;
++        renderIndex < _NekoRenderBands.size();
++        ++renderIndex)
+     {
+-        x1 = std::clamp(x1, 0.f, _ClientSize.width);
+-        x2 = std::clamp(x2, 0.f, _ClientSize.width);
+-
+-        D2D1_RECT_F Rect = GetBodyRect(x1);
++        const auto & fb = _NekoRenderBands[renderIndex];
++        D2D1_RECT_F Rect = GetBodyRect(renderIndex);
+         const bool GreaterThanNyquist = fb.Lo >= _Analysis->_NyquistFrequency;
+ 
+         if (!GreaterThanNyquist || !_State->_SuppressMirrorImage)
+@@ -307,8 +313,6 @@ void spectrum_t::RenderBars(ID2D1DeviceContext * deviceContext) noexcept
+                 RenderBarTop(deviceContext, Rect, _BarPeakTopStyle, fb.MaxValue, fb.Opacity, fb.Center);
+         }
+ 
+-        x1 = x2;
+-        x2 = x1 + BandPitch;
+     }
+ }
+ 
+@@ -398,35 +402,20 @@ void spectrum_t::UpdateNekoTemporalLayers() noexcept
+ /// Draws the slow artwork-derived shadow. It reuses the analyzer bins and
+ /// allocates only when the band count changes.
+ /// </summary>
+-void spectrum_t::RenderNekoTemporalLayers(ID2D1DeviceContext * deviceContext, FLOAT bandPitch, FLOAT bodyWidth, FLOAT horizontalOffset) noexcept
++void spectrum_t::RenderNekoTemporalLayers(ID2D1DeviceContext * deviceContext, FLOAT bandPitch, FLOAT horizontalOffset, FLOAT pixelScale, LONG bodyGapPixels) noexcept
+ {
+     if (_NekoRenderBands.empty())
+         return;
+ 
+     deviceContext->SetAntialiasMode(D2D1_ANTIALIAS_MODE_ALIASED);
+ 
+-    FLOAT dpiX = 96.f;
+-    FLOAT dpiY = 96.f;
+-    deviceContext->GetDpi(&dpiX, &dpiY);
+-    const FLOAT pixelScale = std::max(dpiX / 96.f, 0.25f);
+-    const FLOAT physicalPixel = 1.f / pixelScale;
+-    const FLOAT minimumGap = std::min(0.75f, bandPitch * 0.18f);
+-    const FLOAT maximumShoulder = std::max(
+-        physicalPixel, bandPitch - minimumGap);
+-    const FLOAT preferredShoulder = bodyWidth + std::min(
+-        2.f, std::max(0.f, bandPitch - bodyWidth) * 0.35f);
+-    const FLOAT shoulderWidth = std::min(
+-        std::max(physicalPixel,
+-            std::round(std::min(preferredShoulder, maximumShoulder) *
+-                pixelScale) / pixelScale),
+-        bandPitch);
+-    const FLOAT shoulderInset = (bandPitch - shoulderWidth) / 2.f;
+-
+-    FLOAT x1 = horizontalOffset;
+-
+-    for (const auto & fb : _NekoRenderBands)
++    const LONG clientRightPixels = (LONG) std::lround(
++        _ClientSize.width * pixelScale);
++    const LONG shadowGapPixels = std::max<LONG>(0, bodyGapPixels - 1);
++
++    for (size_t index = 0; index < _NekoRenderBands.size(); ++index)
+     {
+-        const FLOAT x2 = x1 + bandPitch;
++        const auto & fb = _NekoRenderBands[index];
+         const bool GreaterThanNyquist = fb.Lo >= _Analysis->_NyquistFrequency;
+ 
+         if ((!GreaterThanNyquist || !_State->_SuppressMirrorImage) &&
+@@ -434,21 +423,31 @@ void spectrum_t::RenderNekoTemporalLayers(ID2D1DeviceContext * deviceContext, FL
+         {
+             _NekoShadowBrush->SetColor(nekorox_visual::ArtworkShadowColor(
+                 _NekoTheme, fb.Shadow));
+-            const FLOAT left = std::round((x1 + shoulderInset) * pixelScale) /
+-                pixelScale;
++            const LONG leftPixels = std::clamp<LONG>(
++                (LONG) std::llround(
++                    (horizontalOffset + bandPitch * (FLOAT) index) *
++                        pixelScale),
++                0,
++                clientRightPixels);
++            const LONG nextPixels = std::clamp<LONG>(
++                (LONG) std::llround(
++                    (horizontalOffset + bandPitch * (FLOAT) (index + 1)) *
++                        pixelScale),
++                leftPixels,
++                clientRightPixels);
++            const LONG rightPixels = std::max(
++                leftPixels,
++                nextPixels - shadowGapPixels);
+             const D2D1_RECT_F rect =
+             {
+-                std::clamp(left, 0.f, _ClientSize.width),
++                (FLOAT) leftPixels / pixelScale,
+                 0.f,
+-                std::clamp(std::min(left + shoulderWidth, x2),
+-                    0.f, _ClientSize.width),
++                (FLOAT) rightPixels / pixelScale,
+                 std::clamp((FLOAT) (fb.Shadow * _ClientSize.height), 0.f, _ClientSize.height)
+             };
+ 
+             deviceContext->FillRectangle(rect, _NekoShadowBrush);
+         }
+-
+-        x1 = x2;
+     }
+ }
+ 

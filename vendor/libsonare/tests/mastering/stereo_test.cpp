@@ -1,0 +1,521 @@
+#include "metering/stereo.h"
+
+#include <algorithm>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_floating_point.hpp>
+#include <cmath>
+#include <limits>
+#include <vector>
+
+#include "mastering/stereo/auto_pan.h"
+#include "mastering/stereo/haas_enhancer.h"
+#include "mastering/stereo/imager.h"
+#include "mastering/stereo/mid_side.h"
+#include "mastering/stereo/mono_compat_check.h"
+#include "mastering/stereo/mono_maker.h"
+#include "mastering/stereo/phase_align.h"
+#include "mastering/stereo/stereo_balance.h"
+#include "support/audio_fixtures.h"
+#include "util/constants.h"
+
+using Catch::Matchers::WithinAbs;
+using namespace sonare::mastering::stereo;
+using sonare::constants::kPi;
+
+namespace {
+using sonare::test::generate_sine_samples;
+using sonare::test::process_stereo;
+using sonare::test::rms_tail;
+
+std::vector<float> side_signal(const std::vector<float>& left, const std::vector<float>& right) {
+  std::vector<float> side(left.size());
+  for (size_t i = 0; i < left.size(); ++i) {
+    side[i] = 0.5f * (left[i] - right[i]);
+  }
+  return side;
+}
+
+float stereo_rms_tail(const std::vector<float>& left, const std::vector<float>& right,
+                      size_t skip) {
+  double sum = 0.0;
+  size_t count = 0;
+  for (size_t i = std::min(skip, left.size()); i < left.size() && i < right.size(); ++i) {
+    sum +=
+        0.5 * (static_cast<double>(left[i]) * left[i] + static_cast<double>(right[i]) * right[i]);
+    ++count;
+  }
+  return count == 0 ? 0.0f : static_cast<float>(std::sqrt(sum / static_cast<double>(count)));
+}
+
+}  // namespace
+
+TEST_CASE("MidSide encode and decode round-trips stereo buffers", "[mastering][stereo]") {
+  std::vector<float> left = {1.0f, 0.25f, -0.5f, 0.0f};
+  std::vector<float> right = {0.25f, -0.75f, -0.5f, 1.0f};
+  std::vector<float> mid(left.size());
+  std::vector<float> side(left.size());
+  std::vector<float> decoded_left(left.size());
+  std::vector<float> decoded_right(left.size());
+
+  encode_buffer(left.data(), right.data(), mid.data(), side.data(), left.size());
+  decode_buffer(mid.data(), side.data(), decoded_left.data(), decoded_right.data(), left.size());
+
+  for (size_t i = 0; i < left.size(); ++i) {
+    REQUIRE_THAT(decoded_left[i], WithinAbs(left[i], 0.000001f));
+    REQUIRE_THAT(decoded_right[i], WithinAbs(right[i], 0.000001f));
+  }
+}
+
+TEST_CASE("MidSide encode preserves total energy (AES convention)", "[mastering][stereo]") {
+  // A pair of decorrelated sines (different frequency + amplitude per channel)
+  // exercises both the sum (mid) and difference (side) paths.
+  constexpr int kSampleRate = 48000;
+  constexpr int kSamples = 4096;
+  auto left = generate_sine_samples(440.0f, kSampleRate, kSamples, 0.42f);
+  auto right = generate_sine_samples(660.0f, kSampleRate, kSamples, 0.17f);
+  // Inject a phase offset on right to create non-trivial side content.
+  for (int i = 0; i < kSamples; ++i) {
+    right[static_cast<size_t>(i)] +=
+        0.11f * static_cast<float>(std::cos(2.0 * kPi * 880.0 * i / kSampleRate));
+  }
+
+  std::vector<float> mid(left.size());
+  std::vector<float> side(left.size());
+  encode_buffer(left.data(), right.data(), mid.data(), side.data(), left.size());
+
+  double lr_energy = 0.0;
+  double ms_energy = 0.0;
+  for (size_t i = 0; i < left.size(); ++i) {
+    lr_energy += static_cast<double>(left[i]) * left[i] + static_cast<double>(right[i]) * right[i];
+    ms_energy += static_cast<double>(mid[i]) * mid[i] + static_cast<double>(side[i]) * side[i];
+  }
+
+  // Energy preservation: M^2 + S^2 == L^2 + R^2 within float round-off.
+  REQUIRE(lr_energy > 0.0);
+  const double ratio_db = 10.0 * std::log10(ms_energy / lr_energy);
+  REQUIRE(std::abs(ratio_db) < 0.05);  // tighter than 0.1 dB target
+}
+
+TEST_CASE("MidSide buffer roundtrip is bit-near-exact", "[mastering][stereo]") {
+  // Stress the round-trip with a longer, mixed signal.
+  constexpr int kSampleRate = 48000;
+  constexpr int kSamples = 2048;
+  auto left = generate_sine_samples(523.25f, kSampleRate, kSamples, 0.31f);
+  auto right = generate_sine_samples(783.99f, kSampleRate, kSamples, 0.27f);
+  const auto original_left = left;
+  const auto original_right = right;
+
+  std::vector<float> mid(left.size());
+  std::vector<float> side(left.size());
+  encode_buffer(left.data(), right.data(), mid.data(), side.data(), left.size());
+  decode_buffer(mid.data(), side.data(), left.data(), right.data(), left.size());
+
+  for (size_t i = 0; i < left.size(); ++i) {
+    REQUIRE_THAT(left[i], WithinAbs(original_left[i], 1.0e-6f));
+    REQUIRE_THAT(right[i], WithinAbs(original_right[i], 1.0e-6f));
+  }
+}
+
+TEST_CASE("MidSide preserves loudness when side gain is applied", "[mastering][stereo]") {
+  // Real-world scenario: encode -> apply +6 dB to side -> decode. With the
+  // energy-preserving convention the predicted L/R energy after a +g_side dB
+  // boost equals 0.5 * (1 + g_side^2) * (L^2 + R^2) for an uncorrelated pair,
+  // and matches the analytic expression exactly for a mid+side decomposition.
+  constexpr int kSampleRate = 48000;
+  constexpr int kSamples = 4096;
+  auto left = generate_sine_samples(330.0f, kSampleRate, kSamples, 0.22f);
+  auto right = generate_sine_samples(495.0f, kSampleRate, kSamples, 0.14f);
+
+  std::vector<float> mid(left.size());
+  std::vector<float> side(left.size());
+  encode_buffer(left.data(), right.data(), mid.data(), side.data(), left.size());
+
+  // Energy in M and S separately before gain.
+  double pre_mid = 0.0;
+  double pre_side = 0.0;
+  for (size_t i = 0; i < mid.size(); ++i) {
+    pre_mid += static_cast<double>(mid[i]) * mid[i];
+    pre_side += static_cast<double>(side[i]) * side[i];
+  }
+
+  // Apply +6 dB to side only (linear gain 2.0).
+  constexpr float kSideGain = 2.0f;
+  for (size_t i = 0; i < side.size(); ++i) {
+    side[i] *= kSideGain;
+  }
+
+  std::vector<float> out_left(left.size());
+  std::vector<float> out_right(left.size());
+  decode_buffer(mid.data(), side.data(), out_left.data(), out_right.data(), left.size());
+
+  double post_energy = 0.0;
+  for (size_t i = 0; i < out_left.size(); ++i) {
+    post_energy += static_cast<double>(out_left[i]) * out_left[i] +
+                   static_cast<double>(out_right[i]) * out_right[i];
+  }
+  // Predicted energy: pre_mid + kSideGain^2 * pre_side (since decode is
+  // unitary up to round-off and total energy equals M^2 + S^2).
+  const double predicted =
+      pre_mid + static_cast<double>(kSideGain) * static_cast<double>(kSideGain) * pre_side;
+  REQUIRE(predicted > 0.0);
+  const double err_db = 10.0 * std::log10(post_energy / predicted);
+  REQUIRE(std::abs(err_db) < 0.05);  // within 0.05 dB
+}
+
+TEST_CASE("Imager increases and collapses stereo width", "[mastering][stereo]") {
+  auto mid = generate_sine_samples(1000.0f, 48000, 48000, 0.25f);
+  auto side = generate_sine_samples(1500.0f, 48000, 48000, 0.05f);
+  auto left = mid;
+  auto right = mid;
+  for (size_t i = 0; i < left.size(); ++i) {
+    left[i] += side[i];
+    right[i] -= side[i];
+  }
+  const float side_before = rms_tail(side_signal(left, right), 4096);
+  const float energy_before = stereo_rms_tail(left, right, 4096);
+
+  Imager wide({2.0f, 0.0f});
+  wide.prepare(48000.0, 1024);
+  process_stereo(wide, left, right);
+  REQUIRE(rms_tail(side_signal(left, right), 4096) > side_before * 1.7f);
+  REQUIRE(stereo_rms_tail(left, right, 4096) > energy_before * 0.98f);
+  REQUIRE(stereo_rms_tail(left, right, 4096) < energy_before * 1.02f);
+
+  Imager mono({0.0f, 0.0f});
+  mono.prepare(48000.0, 1024);
+  process_stereo(mono, left, right);
+  REQUIRE(rms_tail(side_signal(left, right), 4096) < 0.000001f);
+}
+
+TEST_CASE("Imager preserves energy when narrowing", "[mastering][stereo]") {
+  // preserve_energy used to gate on width > 1 only, so narrowing (width < 1)
+  // shrank the side and dropped total energy uncompensated. It must now hold
+  // total energy roughly constant for any width != 1.
+  auto mid = generate_sine_samples(1000.0f, 48000, 48000, 0.25f);
+  auto side = generate_sine_samples(1500.0f, 48000, 48000, 0.15f);
+  auto left = mid;
+  auto right = mid;
+  for (size_t i = 0; i < left.size(); ++i) {
+    left[i] += side[i];
+    right[i] -= side[i];
+  }
+  const float side_before = rms_tail(side_signal(left, right), 4096);
+  const float energy_before = stereo_rms_tail(left, right, 4096);
+
+  Imager narrow({0.5f, 0.0f, 0.0f, true});  // width < 1, preserve_energy = true
+  narrow.prepare(48000.0, 1024);
+  process_stereo(narrow, left, right);
+
+  // The side genuinely narrowed, yet total energy is preserved.
+  REQUIRE(rms_tail(side_signal(left, right), 4096) < side_before);
+  REQUIRE(stereo_rms_tail(left, right, 4096) > energy_before * 0.97f);
+  REQUIRE(stereo_rms_tail(left, right, 4096) < energy_before * 1.03f);
+}
+
+TEST_CASE("Imager decorrelates widened side signal", "[mastering][stereo]") {
+  auto left = generate_sine_samples(1000.0f, 48000, 48000, 0.25f);
+  auto right = generate_sine_samples(1000.0f, 48000, 48000, -0.25f);
+
+  Imager dry({1.5f, 0.0f, 0.0f, false});
+  Imager decorated({1.5f, 0.0f, 1.0f, false});
+  dry.prepare(48000.0, 1024);
+  decorated.prepare(48000.0, 1024);
+
+  auto dry_left = left;
+  auto dry_right = right;
+  process_stereo(dry, dry_left, dry_right);
+  process_stereo(decorated, left, right);
+
+  REQUIRE(rms_tail(side_signal(left, right), 4096) >
+          rms_tail(side_signal(dry_left, dry_right), 4096) * 0.85f);
+  REQUIRE(std::abs(left[4096] - dry_left[4096]) > 0.001f);
+}
+
+TEST_CASE("Imager decorrelator stays stable across sample rates", "[mastering][stereo]") {
+  // The allpass break frequencies are anchored at the historical 48 kHz tuning
+  // and re-derived per rate (clamped below Nyquist), so the decorrelation path
+  // must stay finite and energy-sane even at extreme sample rates where the
+  // upper anchors exceed Nyquist.
+  for (double sr : {8000.0, 44100.0, 96000.0, 192000.0}) {
+    const int n = static_cast<int>(sr);
+    auto left = generate_sine_samples(440.0f, static_cast<int>(sr), n, 0.25f);
+    auto right = generate_sine_samples(440.0f, static_cast<int>(sr), n, -0.25f);
+
+    Imager imager({1.5f, 0.0f, 1.0f, false});
+    imager.prepare(sr, 1024);
+    process_stereo(imager, left, right);
+
+    bool all_finite = true;
+    for (int i = 0; i < n; ++i) {
+      all_finite = all_finite && std::isfinite(left[static_cast<size_t>(i)]) &&
+                   std::isfinite(right[static_cast<size_t>(i)]);
+    }
+    REQUIRE(all_finite);
+    REQUIRE(stereo_rms_tail(left, right, 4096) > 0.0f);
+  }
+}
+
+TEST_CASE("Imager validates width", "[mastering][stereo]") {
+  REQUIRE_THROWS(Imager({-1.0f, 0.0f}));
+  REQUIRE_THROWS(Imager({1.0f, 0.0f, 1.1f}));
+}
+
+TEST_CASE("MonoMaker collapses stereo to identical channels", "[mastering][stereo]") {
+  auto left = generate_sine_samples(100.0f, 48000, 48000, 0.3f);
+  auto right = generate_sine_samples(100.0f, 48000, 48000, 0.1f);
+
+  MonoMaker mono_maker({1.0f});
+  mono_maker.prepare(48000.0, 1024);
+  process_stereo(mono_maker, left, right);
+
+  REQUIRE(rms_tail(side_signal(left, right), 4096) < 0.000001f);
+}
+
+TEST_CASE("MonoMaker validates amount", "[mastering][stereo]") {
+  REQUIRE_THROWS(MonoMaker({-0.1f}));
+  REQUIRE_THROWS(MonoMaker({1.1f}));
+}
+
+TEST_CASE("StereoBalance attenuates the opposite side", "[mastering][stereo]") {
+  std::vector<float> left(48000, 0.5f);
+  std::vector<float> right(48000, 0.5f);
+  const float left_before = rms_tail(left, 0);
+  const float right_before = rms_tail(right, 0);
+
+  StereoBalance balance({0.5f, false});
+  balance.prepare(48000.0, 1024);
+  process_stereo(balance, left, right);
+
+  REQUIRE(rms_tail(left, 0) < left_before * 0.55f);
+  REQUIRE(rms_tail(right, 0) == right_before);
+}
+
+TEST_CASE("StereoBalance validates balance", "[mastering][stereo]") {
+  REQUIRE_THROWS(StereoBalance({-1.1f, true}));
+  REQUIRE_THROWS(StereoBalance({1.1f, true}));
+}
+
+TEST_CASE("AutoPan modulates stereo gains over time", "[mastering][stereo]") {
+  std::vector<float> left(1000, 1.0f);
+  std::vector<float> right(1000, 1.0f);
+
+  AutoPan pan({1.0f, 1.0f, 0.0f});
+  pan.prepare(1000.0, 1000);
+  process_stereo(pan, left, right);
+
+  REQUIRE_THAT(left[0], WithinAbs(0.70710678f, 0.0001f));
+  REQUIRE_THAT(right[0], WithinAbs(0.70710678f, 0.0001f));
+  REQUIRE(left[250] < 0.01f);
+  REQUIRE(right[250] > 0.99f);
+}
+
+TEST_CASE("AutoPan validates configuration", "[mastering][stereo]") {
+  REQUIRE_THROWS(AutoPan({-1.0f, 1.0f, 0.0f}));
+  REQUIRE_THROWS(AutoPan({1.0f, 1.1f, 0.0f}));
+}
+
+TEST_CASE("HaasEnhancer delays one side from the opposite channel", "[mastering][stereo]") {
+  std::vector<float> left = {1.0f, 0.0f, 0.0f, 0.0f};
+  std::vector<float> right(4, 0.0f);
+
+  HaasEnhancer haas({0.125f, 1.0f, true});
+  haas.prepare(8000.0, 4);
+  process_stereo(haas, left, right);
+
+  REQUIRE(haas.delay_samples() == 1);
+  REQUIRE(haas.tail_samples() == 1);
+  REQUIRE_THAT(right[0], WithinAbs(0.0f, 0.000001f));
+  REQUIRE_THAT(right[1], WithinAbs(1.0f, 0.000001f));
+}
+
+TEST_CASE("HaasEnhancer tail follows wet prepared delay and reprepare",
+          "[mastering][stereo][tail]") {
+  HaasEnhancer haas({1000.0f, 0.0f, true});
+  REQUIRE(haas.tail_samples() == 0);
+
+  haas.prepare(8000.0, 64);
+  REQUIRE(haas.delay_samples() == 8000);
+  REQUIRE(haas.tail_samples() == 0);
+
+  haas.set_config({1000.0f, 1.0f, true});
+  REQUIRE(haas.tail_samples() == 8000);
+  std::vector<float> left(static_cast<size_t>(haas.tail_samples() + 2), 0.0f);
+  std::vector<float> right(left.size(), 0.0f);
+  left[0] = 1.0f;
+  process_stereo(haas, left, right);
+  REQUIRE_THAT(right[8000], WithinAbs(1.0f, 0.000001f));
+  REQUIRE_THAT(right[8001], WithinAbs(0.0f, 0.000001f));
+
+  haas.prepare(16000.0, 64);
+  REQUIRE(haas.delay_samples() == 16000);
+  REQUIRE(haas.tail_samples() == 16000);
+}
+
+TEST_CASE("HaasEnhancer validates configuration", "[mastering][stereo]") {
+  REQUIRE_THROWS(HaasEnhancer({-1.0f, 1.0f, true}));
+  REQUIRE_THROWS(HaasEnhancer({1.0f, 1.5f, true}));
+  REQUIRE_THROWS(HaasEnhancer({std::numeric_limits<float>::quiet_NaN(), 1.0f, true}));
+  REQUIRE_THROWS(HaasEnhancer({1.0f, std::numeric_limits<float>::infinity(), true}));
+
+  HaasEnhancer haas;
+  REQUIRE_FALSE(haas.set_parameter(0, std::numeric_limits<float>::quiet_NaN()));
+  REQUIRE_FALSE(haas.set_parameter(1, std::numeric_limits<float>::infinity()));
+  REQUIRE_FALSE(haas.set_parameter(0, 1001.0f));
+  REQUIRE_THROWS(haas.prepare(std::numeric_limits<double>::infinity(), 64));
+  REQUIRE_THROWS(haas.prepare(1.0e300, 64));
+}
+
+TEST_CASE("PhaseAlign delays the selected channel by integer samples", "[mastering][stereo]") {
+  std::vector<float> left(5, 0.0f);
+  std::vector<float> right = {1.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+
+  PhaseAlign align({2, true});
+  align.prepare(48000.0, 5);
+  process_stereo(align, left, right);
+
+  REQUIRE(align.tail_samples() == 2);
+  REQUIRE_THAT(right[0], WithinAbs(0.0f, 0.000001f));
+  REQUIRE_THAT(right[1], WithinAbs(0.0f, 0.000001f));
+  REQUIRE_THAT(right[2], WithinAbs(1.0f, 0.000001f));
+}
+
+TEST_CASE("PhaseAlign supports fractional sample delay", "[mastering][stereo]") {
+  std::vector<float> left(8, 0.0f);
+  std::vector<float> right = {1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+
+  PhaseAlign align({2, true, 0.5f});
+  align.prepare(48000.0, 8);
+  process_stereo(align, left, right);
+
+  REQUIRE(align.tail_samples() == 6);
+  REQUIRE(std::abs(right[2]) > 0.1f);
+  REQUIRE(std::abs(right[3]) > std::abs(right[2]));
+  REQUIRE(std::abs(right[6]) > 0.0001f);
+  REQUIRE_THAT(right[7], WithinAbs(0.0f, 0.000001f));
+}
+
+TEST_CASE("PhaseAlign tail follows fractional stencil and reconfiguration",
+          "[mastering][stereo][tail]") {
+  PhaseAlign align;
+  REQUIRE(align.tail_samples() == 0);
+  align.prepare(48000.0, 64);
+  REQUIRE(align.tail_samples() == 0);
+
+  align.set_config({64, false, 0.25f});
+  REQUIRE(align.tail_samples() == 68);
+  align.prepare(96000.0, 128);
+  REQUIRE(align.tail_samples() == 68);
+
+  REQUIRE(align.set_parameter(0, 0.0f));
+  REQUIRE(align.tail_samples() == 64);
+  REQUIRE_FALSE(align.set_parameter(0, std::numeric_limits<float>::quiet_NaN()));
+  REQUIRE(align.tail_samples() == 64);
+}
+
+TEST_CASE("PhaseAlign estimates relative delay by cross-correlation", "[mastering][stereo]") {
+  std::vector<float> reference(256, 0.0f);
+  std::vector<float> delayed(256, 0.0f);
+  for (size_t i = 0; i < reference.size(); ++i) {
+    reference[i] = static_cast<float>(std::sin(0.17 * static_cast<double>(i)) +
+                                      0.3 * std::sin(0.031 * static_cast<double>(i * i)));
+  }
+  for (size_t i = 0; i + 3 < delayed.size(); ++i) {
+    delayed[i + 3] = reference[i];
+  }
+
+  const float estimate = PhaseAlign::estimate_delay_samples(reference.data(), delayed.data(),
+                                                            static_cast<int>(reference.size()), 12);
+
+  REQUIRE_THAT(estimate, WithinAbs(3.0f, 0.1f));
+}
+
+TEST_CASE("PhaseAlign validates configuration", "[mastering][stereo]") {
+  REQUIRE_THROWS(PhaseAlign({-1, true}));
+  REQUIRE_THROWS(PhaseAlign({0, true, -0.1f}));
+  REQUIRE_THROWS(PhaseAlign({0, true, 1.0f}));
+  REQUIRE_THROWS(PhaseAlign({0, true, std::numeric_limits<float>::quiet_NaN()}));
+}
+
+TEST_CASE("MonoCompatCheck detects anti-phase stereo risk", "[mastering][stereo]") {
+  auto left = generate_sine_samples(1000.0f, 48000, 48000, 0.5f);
+  auto right = left;
+  for (auto& sample : right) {
+    sample = -sample;
+  }
+
+  const auto result = mono_compat_check(left.data(), right.data(), left.size(), 0.0f);
+
+  REQUIRE(result.correlation < -0.99f);
+  REQUIRE(result.width > 100.0f);
+  REQUIRE(result.mono_peak < 0.000001f);
+  REQUIRE(!result.likely_mono_compatible);
+}
+
+TEST_CASE("MonoCompatCheck reports log-band phase correlation", "[mastering][stereo]") {
+  // The band-projected analysis picks up energy at the band's own log-center
+  // frequency (sqrt(low_hz * high_hz)), not just anywhere inside [low_hz,
+  // high_hz), so the probe tone is placed exactly there for a strong readout.
+  constexpr float kLowHz = 700.0f;
+  constexpr float kHighHz = 1400.0f;
+  const float band_center_hz = std::sqrt(kLowHz * kHighHz);
+  auto left = generate_sine_samples(band_center_hz, 48000, 48000, 0.5f);
+  auto right = left;
+  for (auto& sample : right) {
+    sample = -sample;
+  }
+
+  const auto bands = mono_compat_check_log_bands(left.data(), right.data(), left.size(), 48000.0, 1,
+                                                 kLowHz, kHighHz);
+
+  REQUIRE(bands.size() == 1);
+  REQUIRE(bands[0].correlation < -0.99f);
+  REQUIRE(bands[0].side_rms > 0.3f);
+}
+
+TEST_CASE("MonoCompatCheck log bands have frequency-dependent side energy", "[mastering][stereo]") {
+  // A side component confined to a single low band must not smear into a flat,
+  // broadband side_rms profile across every band (M-3 regression guard).
+  constexpr int kSampleRate = 48000;
+  constexpr int kSamples = 12000;  // 0.25 s
+  constexpr float kSideFreqHz = 350.0f;
+  auto side = generate_sine_samples(kSideFreqHz, kSampleRate, kSamples, 0.5f);
+  std::vector<float> left(side.size());
+  std::vector<float> right(side.size());
+  for (size_t i = 0; i < side.size(); ++i) {
+    left[i] = side[i];
+    right[i] = -side[i];
+  }
+
+  const auto bands = mono_compat_check_log_bands(
+      left.data(), right.data(), left.size(), static_cast<double>(kSampleRate), 1, 250.0f, 8000.0f);
+  REQUIRE(bands.size() > 1);
+
+  const auto low_band =
+      std::find_if(bands.begin(), bands.end(), [](const MonoCompatBandResult& band) {
+        return kSideFreqHz >= band.low_hz && kSideFreqHz < band.high_hz;
+      });
+  REQUIRE(low_band != bands.end());
+  const auto& high_band = bands.back();
+
+  // The band containing the side tone must report far more side energy than
+  // the highest band, which contains none of it.
+  REQUIRE(low_band->side_rms > high_band.side_rms * 3.0f);
+
+  // A flat per-band profile (every side_rms equal to the broadband value) is
+  // exactly the bug this test guards against.
+  bool all_equal = true;
+  for (const auto& band : bands) {
+    if (std::abs(band.side_rms - bands.front().side_rms) > 1.0e-6f) {
+      all_equal = false;
+      break;
+    }
+  }
+  REQUIRE(!all_equal);
+}
+
+TEST_CASE("MonoCompatCheck validates buffers", "[mastering][stereo]") {
+  REQUIRE_THROWS(mono_compat_check(nullptr, nullptr, 0));
+  std::vector<float> left(4, 0.0f);
+  std::vector<float> right(4, 0.0f);
+  REQUIRE_THROWS(mono_compat_check_log_bands(left.data(), right.data(), left.size(), 48000.0, 0));
+}

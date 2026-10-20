@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" shape-rendering="crispEdges" role="img" aria-labelledby="title">
+  <title id="title">Expand / focus</title>
+  <path fill="currentColor" data-role="primary" d="M3 3h4v1h-4z M9 3h4v1h-4z M3 4h1v3h-1z M12 4h1v3h-1z M3 9h1v3h-1z M12 9h1v3h-1z M3 12h4v1h-4z M9 12h4v1h-4z"/>
+</svg>

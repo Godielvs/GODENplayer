@@ -1,0 +1,60 @@
+diff --git a/Component.cpp b/Component.cpp
+--- a/Component.cpp
++++ b/Component.cpp
+@@ -27,7 +27,7 @@ namespace
+             STR_COMPONENT_COMMENT "\n"
+             "\n"
+             "Built with foobar2000 SDK " TOSTRING(FOOBAR2000_SDK_VERSION) "\n"
+-            "Goden scheduler, legacy ballistics, Double Exposure renderer and bounded transport-release patch 9; upstream 3bbc2206591b48ea0bb2c3578bb0db34a37d84d8."
++            "Goden scheduler, Double Exposure renderer, bounded transport release and portable preset path patch 10; upstream 3bbc2206591b48ea0bb2c3578bb0db34a37d84d8."
+     )
+     VALIDATE_COMPONENT_FILENAME(STR_COMPONENT_FILENAME)
+ }
+diff --git a/Resources.h b/Resources.h
+--- a/Resources.h
++++ b/Resources.h
+@@ -16,5 +16,5 @@
+ #define NUM_PRODUCT_PATCH       0
+ #define NUM_PRODUCT_PRERELEASE  0
+ 
+-#define STR_RELEASE_TAG         "-goden5"
++#define STR_RELEASE_TAG         "-goden6"
+ 
+ /** Component specific **/
+diff --git a/State.cpp b/State.cpp
+--- a/State.cpp
++++ b/State.cpp
+@@ -884,8 +884,19 @@ void state_t::Read(stream_reader * reader, size_t size, abort_callback & abortHa
+ 
+             reader->read_string(Path, abortHandler); 
+ 
+-            if (!isPreset)
+-                _PresetsDirectoryPath = pfc::wideFromUTF8(Path);
++            if (!isPreset)
++            {
++                // Layouts are portable between foobar2000 profiles. Older
++                // layouts can still contain an absolute path, while new
++                // layouts encode an empty value and resolve it here.
++                if (Path.is_empty())
++                {
++                    Path = core_api::get_profile_path();
++                    Path = foobar2000_io::filesystem::g_get_native_path(Path);
++                }
++
++                _PresetsDirectoryPath = pfc::wideFromUTF8(Path);
++            }
+         }
+ 
+         if (Version >= 21)
+@@ -1254,9 +1265,8 @@ void state_t::Write(stream_writer * writer, abort_callback & abortHandler, bool 
+         {
+             pfc::string Path;
+ 
+-            if (!isPreset)
+-                Path = pfc::utf8FromWide(_PresetsDirectoryPath.c_str());
+-
++            // Resolve from the active profile on read; never persist a
++            // developer or previous user's absolute profile path.
+             writer->write_string(Path, abortHandler);
+         }
+ 

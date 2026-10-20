@@ -1,0 +1,1420 @@
+diff --git a/3rdParty/libmsc/libmsc.vcxproj b/3rdParty/libmsc/libmsc.vcxproj
+index 291011b4f13395a47f20c8f78404631bb93d1637..70c21b8f534e295a641536279b6a4133bb48f9ec 100644
+--- a/3rdParty/libmsc/libmsc.vcxproj
++++ b/3rdParty/libmsc/libmsc.vcxproj
+@@ -162,7 +162,7 @@
+       <ConformanceMode>true</ConformanceMode>
+       <PrecompiledHeader>Use</PrecompiledHeader>
+       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+-      <LanguageStandard>stdcpp23</LanguageStandard>
++      <LanguageStandard>stdcpp20</LanguageStandard>
+       <TreatAngleIncludeAsExternal>true</TreatAngleIncludeAsExternal>
+       <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
+       <DisableAnalyzeExternal>true</DisableAnalyzeExternal>
+@@ -186,7 +186,7 @@
+       <ConformanceMode>true</ConformanceMode>
+       <PrecompiledHeader>Use</PrecompiledHeader>
+       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+-      <LanguageStandard>stdcpp23</LanguageStandard>
++      <LanguageStandard>stdcpp20</LanguageStandard>
+       <TreatAngleIncludeAsExternal>true</TreatAngleIncludeAsExternal>
+       <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
+       <DisableAnalyzeExternal>true</DisableAnalyzeExternal>
+@@ -207,7 +207,7 @@
+       <ConformanceMode>true</ConformanceMode>
+       <PrecompiledHeader>Use</PrecompiledHeader>
+       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+-      <LanguageStandard>stdcpp23</LanguageStandard>
++      <LanguageStandard>stdcpp20</LanguageStandard>
+       <TreatAngleIncludeAsExternal>true</TreatAngleIncludeAsExternal>
+       <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
+       <DisableAnalyzeExternal>true</DisableAnalyzeExternal>
+@@ -229,7 +229,7 @@
+       <ConformanceMode>true</ConformanceMode>
+       <PrecompiledHeader>Use</PrecompiledHeader>
+       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+-      <LanguageStandard>stdcpp23</LanguageStandard>
++      <LanguageStandard>stdcpp20</LanguageStandard>
+       <TreatAngleIncludeAsExternal>true</TreatAngleIncludeAsExternal>
+       <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
+       <DisableAnalyzeExternal>true</DisableAnalyzeExternal>
+@@ -253,7 +253,7 @@
+       <ConformanceMode>true</ConformanceMode>
+       <PrecompiledHeader>Use</PrecompiledHeader>
+       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+-      <LanguageStandard>stdcpp23</LanguageStandard>
++      <LanguageStandard>stdcpp20</LanguageStandard>
+       <TreatAngleIncludeAsExternal>true</TreatAngleIncludeAsExternal>
+       <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
+       <DisableAnalyzeExternal>true</DisableAnalyzeExternal>
+@@ -276,7 +276,7 @@
+       <ConformanceMode>true</ConformanceMode>
+       <PrecompiledHeader>Use</PrecompiledHeader>
+       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+-      <LanguageStandard>stdcpp23</LanguageStandard>
++      <LanguageStandard>stdcpp20</LanguageStandard>
+       <TreatAngleIncludeAsExternal>true</TreatAngleIncludeAsExternal>
+       <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
+       <DisableAnalyzeExternal>true</DisableAnalyzeExternal>
+@@ -292,4 +292,4 @@
+   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+   <ImportGroup Label="ExtensionTargets">
+   </ImportGroup>
+-</Project>
+\ No newline at end of file
++</Project>
+diff --git a/Analyzers/Analysis.cpp b/Analyzers/Analysis.cpp
+index 3c54559cfc045b6214b6bd76b07e3a411edcd471..d1a21bd39d5a63d26c7b7db727d588d128461d87 100644
+--- a/Analyzers/Analysis.cpp
++++ b/Analyzers/Analysis.cpp
+@@ -203,6 +203,13 @@ void analysis_t::ResetRMSDependentValues() noexcept
+ void analysis_t::UpdatePeakValues(bool isStopped) noexcept
+ {
+     const double Acceleration = _State->_Acceleration / 256.;
++    const double FrameSeconds = 1. / (double) (std::max)(_State->_RefreshRateLimit, (int64_t) 1);
++    const double AmplitudeRange = (std::max)(
++        1., std::abs(_GraphDescription->_AmplitudeHi - _GraphDescription->_AmplitudeLo));
++    // In the Neko preset 0.5 represents the old component's 500 dB/s^2.
++    // Keeping gravity in physical time makes the marker independent of the
++    // selected render refresh rate.
++    const double Gravity = _State->_Acceleration * 1000. / AmplitudeRange;
+ 
+     switch (_State->_VisualizationType)
+     {
+@@ -256,8 +263,8 @@ void analysis_t::UpdatePeakValues(bool isStopped) noexcept
+                                 break;
+ 
+                             case PeakMode::Gravity:
+-                                fb.DecaySpeed += Acceleration;
+-                                fb.MaxValue   -= fb.DecaySpeed;
++                                fb.DecaySpeed += Gravity * FrameSeconds;
++                                fb.MaxValue   -= fb.DecaySpeed * FrameSeconds;
+                                 break;
+ 
+                             case PeakMode::AIMP:
+@@ -338,9 +345,9 @@ void analysis_t::UpdatePeakValues(bool isStopped) noexcept
+                                 break;
+ 
+                             case PeakMode::Gravity:
+-                                m.DecaySpeed += Acceleration;
++                                m.DecaySpeed += Gravity * FrameSeconds;
+ 
+-                                m.MaxPeakNormalized -= m.DecaySpeed;
++                                m.MaxPeakNormalized -= m.DecaySpeed * FrameSeconds;
+                                 break;
+ 
+                             case PeakMode::AIMP:
+diff --git a/Analyzers/FFTAnalyzer.cpp b/Analyzers/FFTAnalyzer.cpp
+index 0b028bf..f5d15b8 100644
+--- a/Analyzers/FFTAnalyzer.cpp
++++ b/Analyzers/FFTAnalyzer.cpp
+@@ -10,6 +10,15 @@
+ 
+ #pragma hdrstop
+ 
++namespace
++{
++    // foo_musical_spectrum used a reference that left roughly 10 dB of
++    // headroom below full scale. Preserve that calibration so a 0 dBFS tone,
++    // rather than ordinary mastered programme material, reaches the -10 dB
++    // top line of the frozen NekoRoX graph.
++    constexpr double NekoLegacyMagnitudeScale = 0.31622776601683794; // -10 dB
++}
++
+ /// <summary>
+ /// Destroys this instance.
+ /// </summary>
+@@ -32,6 +41,14 @@ fft_analyzer_t::fft_analyzer_t(const state_t * state, uint32_t sampleRate, uint3
+ 
+     _TimeData.resize(_FFTSize);
+     _FreqData.resize(_FFTSize);
++    _WindowFactors.resize(_FFTSize);
++    _WindowNorm = 0.;
++    for (size_t i = 0; i < _FFTSize; ++i)
++    {
++        _WindowFactors[i] = _WindowFunction(
++            msc::Map(i, (size_t) 0, _FFTSize - 1, -1., 1.));
++        _WindowNorm += _WindowFactors[i];
++    }
+ }
+ 
+ /// <summary>
+@@ -62,6 +79,9 @@ bool fft_analyzer_t::AnalyzeSamples(const audio_sample * frameData, size_t frame
+             break;
+     }
+ 
++    for (frequency_band_t & band : frequencyBands)
++        band.RawValue *= NekoLegacyMagnitudeScale;
++
+ //  const auto Finish = std::chrono::steady_clock::now();
+ 
+ //  Log.AtInfo().Write("%6d ms", std::chrono::duration_cast<std::chrono::milliseconds>(Finish - Start));
+@@ -97,9 +117,9 @@ void fft_analyzer_t::Add(const audio_sample * samples, size_t frameCount, uint32
+ /// </summary>
+ void fft_analyzer_t::Transform() noexcept
+ {
+-    double Norm = 0.;
+-
+-    // Fill the FFT buffer from the sample ring buffer with Time domain data, apply the windowing function and determine the norm.
++    // Fill the FFT buffer from the sample ring buffer with Time domain data.
++    // Window coefficients and their norm are immutable for this analyzer and
++    // were precomputed by the constructor.
+     {
+         size_t i = (_Next - _FFTSize) % _InputRing.size();
+         size_t j = 0;
+@@ -108,25 +128,22 @@ void fft_analyzer_t::Transform() noexcept
+ 
+         for (auto & Iter : _TimeData)
+         {
+-            const double WindowFactor = _WindowFunction(msc::Map(j, (size_t) 0, _FFTSize - 1, -1., 1.));
++            const double WindowFactor = _WindowFactors[j];
+ 
+             Iter = std::complex<double>(p[i] * WindowFactor, 0.);
+ 
+             i = (i + 1) % _InputRing.size();
+ 
+-            Norm += WindowFactor;
+             j++;
+         }
+     }
+ 
+     // Normalize the Time domain data.
+     {
+-        const double Factor = (double) _FFTSize / Norm; // * M_SQRT2;
++        const double Factor = (double) _FFTSize / _WindowNorm; // * M_SQRT2;
+ 
+-        std::transform(std::execution::par_unseq, _TimeData.begin(), _TimeData.end(), _TimeData.begin(), [Factor](std::complex<double> x)
+-        {
+-            return x * Factor;
+-        });
++        for (auto & sample : _TimeData)
++            sample *= Factor;
+     }
+ 
+     // Transform the data from the Time domain to the Frequency domain.
+@@ -136,10 +153,8 @@ void fft_analyzer_t::Transform() noexcept
+     {
+         const double Factor = 2. / (double) _FFTSize;
+ 
+-        std::transform(std::execution::par_unseq, _FreqData.begin(), _FreqData.end(), _FreqData.begin(), [Factor](std::complex<double> x)
+-        {
+-            return x * Factor;
+-        });
++        for (auto & coefficient : _FreqData)
++            coefficient *= Factor;
+     }
+ }
+ 
+diff --git a/Analyzers/FFTAnalyzer.h b/Analyzers/FFTAnalyzer.h
+index 3ee7a27..d3a33bc 100644
+--- a/Analyzers/FFTAnalyzer.h
++++ b/Analyzers/FFTAnalyzer.h
+@@ -96,6 +96,8 @@ private:
+ 
+     std::vector<std::complex<double>> _TimeData;
+     std::vector<std::complex<double>> _FreqData;
++    std::vector<double> _WindowFactors;
++    double _WindowNorm = 1.;
+ 
+     const window_function_t & _BrownPucketteKernel;
+ };
+diff --git a/Component.cpp b/Component.cpp
+index 3dbde4f53c42a8f07560ce156f1ad19ca586088b..a14210069c6296ad7dc36d2c1a8def95bfc0ddf0 100644
+--- a/Component.cpp
++++ b/Component.cpp
+@@ -27,7 +27,7 @@ namespace
+             STR_COMPONENT_COMMENT "\n"
+             "\n"
+             "Built with foobar2000 SDK " TOSTRING(FOOBAR2000_SDK_VERSION) "\n"
+-            "on " __DATE__ " " __TIME__ "."
++            "Goden scheduler, legacy ballistics and Double Exposure renderer patch 5; upstream 3bbc2206591b48ea0bb2c3578bb0db34a37d84d8."
+     )
+     VALIDATE_COMPONENT_FILENAME(STR_COMPONENT_FILENAME)
+ }
+diff --git a/DUIElement.cpp b/DUIElement.cpp
+index 69a82096a889d755f63810c0374501e068e5b97d..d2500271b504e6db52eec1c1f55eb551729e916e 100644
+--- a/DUIElement.cpp
++++ b/DUIElement.cpp
+@@ -121,7 +121,9 @@ void DUIElement::notify(const GUID & what, t_size param1, const void * param2, t
+     else
+     if (what == ui_element_notify_visibility_changed)
+     {
+-        _IsVisible = (bool) param1;
++        _IsVisible.store((bool) param1, std::memory_order_release);
++
++        WakeRenderer();
+     }
+ }
+ 
+diff --git a/Resources.h b/Resources.h
+index 309169cdbc7a842262b3e8cb6c4c4b583b8b10b9..2c48219dc2cf86106fefabc6acbe3a39a3058ff8 100644
+--- a/Resources.h
++++ b/Resources.h
+@@ -16,11 +16,11 @@
+ #define NUM_PRODUCT_PATCH       0
+ #define NUM_PRODUCT_PRERELEASE  0
+ 
+-#define STR_RELEASE_TAG         ""
++#define STR_RELEASE_TAG         "-goden1"
+ 
+ /** Component specific **/
+ 
+-#define STR_COMPONENT_NAME          "Spectrum Analyzer"
++#define STR_COMPONENT_NAME          "GODENplayer Spectrum"
+ #define STR_COMPONENT_VERSION       TOSTRING(NUM_FILE_MAJOR) "." TOSTRING(NUM_FILE_MINOR) "." TOSTRING(NUM_FILE_PATCH) "." TOSTRING(NUM_FILE_PRERELEASE) STR_RELEASE_TAG
+ #define STR_COMPONENT_BASENAME      "foo_vis_spectrum_analyzer"
+ #define STR_COMPONENT_FILENAME      STR_COMPONENT_BASENAME ".dll"
+diff --git a/State.cpp b/State.cpp
+index 53d6fb5d42b7af9f23b3beaf60e34fb786eab8e7..af9312b2dca53e4be0b8bb5e00667b71df7f2f4b 100644
+--- a/State.cpp
++++ b/State.cpp
+@@ -272,6 +272,10 @@ void state_t::Reset() noexcept
+     /** Not serialized **/
+ 
+     _SampleRate = 0;
++    _PlaybackTime = 0.;
++    _TrackTime = 0.;
++    _IsPaused = false;
++    _IsStopped = true;
+ 
+     _ActivePresetName.clear();
+ }
+diff --git a/State.h b/State.h
+index ad0d96a9209ca24ec3f016a4e95eb16040fa620f..6cf2c71965951ad875138017971e390b6314c0e4 100644
+--- a/State.h
++++ b/State.h
+@@ -315,6 +315,7 @@ public:
+     double _TrackTime;                                                  // Spectrogram
+ 
+     bool _IsPaused;                                                     // Playback has been paused.
++    bool _IsStopped;                                                    // Playback is stopped; used by the adaptive renderer.
+ 
+     #pragma endregion
+ 
+diff --git a/UIElement.cpp b/UIElement.cpp
+index cbd85497ce675a4c2b7ac7f1858cb92123be4295..0e3892cebd3528af31f399cba990e7cf9c299b10 100644
+--- a/UIElement.cpp
++++ b/UIElement.cpp
+@@ -19,7 +19,7 @@
+ /// <summary>
+ /// Initializes a new instance.
+ /// </summary>
+-uielement_t::uielement_t(): _IsFullScreen(false), _IsVisible(true), _IsInitializing(true), _DPI(), _DisplayRefreshRate(), _hStopRendering(), _hThread(), _TrackingGraph(), _TrackingToolInfo(), _LastMousePos(), _LastBandIndex(~0U)
++uielement_t::uielement_t(): _IsFullScreen(false), _IsVisible(true), _IsInitializing(true), _DPI(), _DisplayRefreshRate(), _hStopRendering(), _hRenderWake(), _hThread(), _TrackingGraph(), _TrackingToolInfo(), _LastMousePos(), _LastBandIndex(~0U)
+ {
+ }
+ 
+@@ -105,7 +105,28 @@ LRESULT uielement_t::OnCreate(LPCREATESTRUCT cs)
+     // Apply the initial configuration.
+     UpdateState(ConfigurationChanges::All);
+ 
++    {
++        const auto PlaybackControl = playback_control::get();
++
++        _RenderState._IsStopped = !PlaybackControl->is_playing();
++        _RenderState._IsPaused = PlaybackControl->is_paused();
++        _PlaybackStopped.store(_RenderState._IsStopped, std::memory_order_release);
++        _PlaybackPaused.store(_RenderState._IsPaused, std::memory_order_release);
++    }
++
+     _hStopRendering = ::CreateEventW(nullptr, TRUE, FALSE, nullptr);
++    _hRenderWake = ::CreateEventW(nullptr, FALSE, FALSE, nullptr);
++
++    if (_hStopRendering == nullptr || _hRenderWake == nullptr)
++    {
++        if (_hRenderWake != nullptr)
++            ::CloseHandle(_hRenderWake), _hRenderWake = nullptr;
++
++        if (_hStopRendering != nullptr)
++            ::CloseHandle(_hStopRendering), _hStopRendering = nullptr;
++
++        return -1;
++    }
+ 
+     StartRenderer();
+ 
+@@ -119,7 +140,11 @@ void uielement_t::OnDestroy()
+ {
+     StopRenderer();
+ 
+-    ::CloseHandle(_hStopRendering);
++    if (_hRenderWake != nullptr)
++        ::CloseHandle(_hRenderWake), _hRenderWake = nullptr;
++
++    if (_hStopRendering != nullptr)
++        ::CloseHandle(_hStopRendering), _hStopRendering = nullptr;
+ 
+     _CriticalSection.Enter();
+ 
+@@ -197,6 +222,9 @@ void uielement_t::OnSize(UINT type, CSize size)
+ 
+     _CriticalSection.Leave();
+ 
++    if (_hRenderWake != nullptr)
++        ::SetEvent(_hRenderWake);
++
+ //  ::InvalidateRect(m_hWnd, nullptr, FALSE); // Force a repaint.
+ }
+ 
+@@ -303,7 +331,7 @@ void uielement_t::OnContextMenu(CWindow wnd, CPoint position)
+             break;
+ 
+         case IDM_FREEZE:
+-            _IsFrozen = !_IsFrozen;
++            _IsFrozen.store(!_IsFrozen.load(std::memory_order_acquire), std::memory_order_release);
+             break;
+ 
+         default:
+@@ -341,6 +369,9 @@ void uielement_t::OnContextMenu(CWindow wnd, CPoint position)
+         }
+     }
+ 
++    if (_hRenderWake != nullptr)
++        ::SetEvent(_hRenderWake);
++
+     Invalidate();
+ }
+ 
+@@ -611,6 +642,19 @@ void uielement_t::UpdateState(ConfigurationChanges settings) noexcept
+ 
+         Resize();
+     }
++
++    if (_hRenderWake != nullptr)
++        ::SetEvent(_hRenderWake);
++}
++
++/// <summary>
++/// Wakes an event-idle renderer when its host window is restored or rearranged.
++/// </summary>
++LRESULT uielement_t::OnWindowPositionChanged(UINT uMsg, WPARAM wParam, LPARAM lParam)
++{
++    WakeRenderer();
++    SetMsgHandled(FALSE);
++    return 0;
+ }
+ 
+ /// <summary>
+@@ -636,6 +680,9 @@ graph_t * uielement_t::GetGraph(const CPoint & pt) noexcept
+ /// </summary>
+ void uielement_t::on_playback_new_track(metadb_handle_ptr track)
+ {
++    _PlaybackStopped.store(false, std::memory_order_release);
++    _PlaybackPaused.store(false, std::memory_order_release);
++
+     UpdateState(ConfigurationChanges::All);
+ 
+     // Always get the album art in case the user enables the _ShowArtworkOnBackground setting while playing a track.
+@@ -644,6 +691,8 @@ void uielement_t::on_playback_new_track(metadb_handle_ptr track)
+ 
+     // Notify the render thread.
+     _Event.Raise(event_t::PlaybackStartedNewTrack);
++    if (_hRenderWake != nullptr)
++        ::SetEvent(_hRenderWake);
+ }
+ 
+ /// <summary>
+@@ -651,12 +700,17 @@ void uielement_t::on_playback_new_track(metadb_handle_ptr track)
+ /// </summary>
+ void uielement_t::on_playback_stop(play_control::t_stop_reason reason)
+ {
++    _PlaybackStopped.store(true, std::memory_order_release);
++    _PlaybackPaused.store(false, std::memory_order_release);
++
+     _Artwork.DeleteWICResources();
+ 
+     _UIState._SampleRate = 0;
+ 
+     // Notify the render thread.
+     _Event.Raise(event_t::PlaybackStopped);
++    if (_hRenderWake != nullptr)
++        ::SetEvent(_hRenderWake);
+ }
+ 
+ /// <summary>
+@@ -664,8 +718,12 @@ void uielement_t::on_playback_stop(play_control::t_stop_reason reason)
+ /// </summary>
+ void uielement_t::on_playback_pause(bool state)
+ {
++    _PlaybackPaused.store(state, std::memory_order_release);
++
+     // Notify the render thread.
+     _Event.Raise(state ? event_t::PlaybackPaused : event_t::PlaybackResumed);
++    if (_hRenderWake != nullptr)
++        ::SetEvent(_hRenderWake);
+ }
+ 
+ /// <summary>
+diff --git a/UIElement.h b/UIElement.h
+index 16faea362da773b6e18f87494f59e1f1378624a3..4e9b74b0e47f7c9feb05f4512734272cd9413228 100644
+--- a/UIElement.h
++++ b/UIElement.h
+@@ -14,6 +14,7 @@
+ #include "Artwork.h"
+ #include "FrameCounter.h"
+ 
++#include <atomic>
+ #include <vector>
+ 
+ /// <summary>
+@@ -52,6 +53,11 @@ protected:
+     virtual void GetColors() noexcept = 0;
+ 
+     void UpdateState(ConfigurationChanges settings) noexcept;
++    void WakeRenderer() noexcept
++    {
++        if (_hRenderWake != nullptr)
++            ::SetEvent(_hRenderWake);
++    }
+ 
+ private:
+     // These methods (must) run on the main foobar2000 UI thread.
+@@ -68,6 +74,7 @@ private:
+     void OnLButtonUp(UINT nFlags, CPoint point);
+     void OnLButtonDblClk(UINT nFlags, CPoint point);
+     LRESULT OnDPIChanged(UINT dpiX, UINT dpiY, PRECT newRect);
++    LRESULT OnWindowPositionChanged(UINT uMsg, WPARAM wParam, LPARAM lParam);
+ 
+     void OnMouseMove(UINT, CPoint);
+     void OnMouseLeave();
+@@ -130,6 +137,7 @@ private:
+         MSG_WM_LBUTTONUP(OnLButtonUp)
+         MSG_WM_LBUTTONDBLCLK(OnLButtonDblClk)
+         MSG_WM_DPICHANGED(OnDPIChanged)
++        MESSAGE_HANDLER_EX(WM_WINDOWPOSCHANGED, OnWindowPositionChanged)
+ 
+         MSG_WM_MOUSEMOVE(OnMouseMove)   // Required for CToolTip
+         MSG_WM_MOUSELEAVE(OnMouseLeave) // Required for tracking tooltip
+@@ -175,7 +183,7 @@ protected:
+ 
+     RECT _OldRect;
+     bool _IsFullScreen;
+-    bool _IsVisible;                // True if the component is visible.
++    std::atomic_bool _IsVisible;    // True if the component is visible.
+     bool _IsInitializing;
+ 
+     event_t _Event;
+@@ -183,6 +191,8 @@ protected:
+ private:
+     #pragma region Shared
+ 
++    std::atomic_bool _PlaybackStopped { true };
++    std::atomic_bool _PlaybackPaused { false };
+     artwork_t _Artwork;
+ 
+     #pragma endregion
+@@ -215,7 +225,7 @@ private:
+ #endif
+ 
+     visualisation_stream_v2::ptr _VisualisationStream;
+-    bool _IsFrozen;                 // True if the component should stop rendering the spectrum.
++    std::atomic_bool _IsFrozen { false }; // True if the component should stop rendering the spectrum.
+ 
+     frame_counter_t _FrameCounter;
+     grid_t _Grid;
+@@ -243,6 +253,7 @@ private:
+     };
+ 
+     HANDLE _hStopRendering;
++    HANDLE _hRenderWake;
+     DWORD _ThreadId;
+     HANDLE _hThread;
+ 
+diff --git a/UIElementRendering.cpp b/UIElementRendering.cpp
+index 182192b..508a83f 100644
+--- a/UIElementRendering.cpp
++++ b/UIElementRendering.cpp
+@@ -34,44 +34,118 @@ void uielement_t::RenderThreadProc() noexcept
+ {
+     chrono_t Chrono;
+ 
+-    const int64_t SleepTime = Chrono.MicrosecondsToTicks(_RenderState._SleepTime);
++    HANDLE FrameTimer = ::CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_MODIFY_STATE | SYNCHRONIZE);
++
++    if (FrameTimer == nullptr)
++        FrameTimer = ::CreateWaitableTimerW(nullptr, FALSE, nullptr);
++
++    const auto IsRenderable = [&]() noexcept
++    {
++        return !_IsFrozen.load(std::memory_order_acquire)
++            && _IsVisible.load(std::memory_order_acquire)
++            && !::IsIconic(::GetAncestor(m_hWnd, GA_ROOT));
++    };
++
++    const auto IsActive = [&]() noexcept
++    {
++        return IsRenderable()
++            && !_PlaybackStopped.load(std::memory_order_acquire)
++            && !_PlaybackPaused.load(std::memory_order_acquire);
++    };
++
++    const auto GetAnalysisFrameTime = [&]() noexcept
++    {
++        const int64_t ConfiguredRefreshRate = (std::max)(_RenderState._RefreshRateLimit, (int64_t) 1);
++
++        return Chrono.SecondsToTicks(1.0 / (double) ConfiguredRefreshRate);
++    };
++
++    const auto GetPresentationFrameTime = [&]() noexcept
++    {
++        const double ConfiguredRefreshRate = (double) (std::max)(_RenderState._RefreshRateLimit, (int64_t) 1);
++        const double RefreshRate = (std::isfinite(_DisplayRefreshRate) && (_DisplayRefreshRate >= 30.))
++            ? (std::min)(ConfiguredRefreshRate, _DisplayRefreshRate)
++            : ConfiguredRefreshRate;
++
++        return Chrono.SecondsToTicks(1.0 / RefreshRate);
++    };
+ 
+     int64_t Now = Chrono.Now();
+ 
+-    int64_t MaxFrameTime = Chrono.SecondsToTicks(1.0 / (double) _RenderState._RefreshRateLimit);
+-    int64_t NextFrameTime = Now + MaxFrameTime;
++    int64_t AnalysisFrameTime = GetAnalysisFrameTime();
++    int64_t PresentationFrameTime = GetPresentationFrameTime();
++    int64_t NextAnalysisTime = Now + AnalysisFrameTime;
++    int64_t NextPresentationTime = Now + PresentationFrameTime;
+ 
+-    Log.AtDebug().Write("Render thread started: Target %d fps / Max. frame time %d ticks",  _RenderState._RefreshRateLimit, MaxFrameTime);
++    Log.AtDebug().Write("Render thread started: Target %d fps / event-driven idle scheduler", _RenderState._RefreshRateLimit);
+ 
+     for (;;)
+     {
+-        Now = Chrono.Now();
++        bool WasWoken = false;
+ 
+-        const int64_t Elapsed = NextFrameTime - Now;
++        if (!IsActive())
++        {
++            const HANDLE Handles[] = { _hStopRendering, _hRenderWake };
++            const DWORD WaitResult = ::WaitForMultipleObjects((DWORD) _countof(Handles), Handles, FALSE, INFINITE);
++
++            if (WaitResult == WAIT_OBJECT_0 || WaitResult == WAIT_FAILED)
++                break;
+ 
+-        // Coarse delay
+-        if (Elapsed > SleepTime)
++            WasWoken = true;
++            Now = Chrono.Now();
++            NextAnalysisTime = Now;
++            NextPresentationTime = Now;
++        }
++        else
+         {
+-            const int64_t Milliseconds = Chrono.TicksToMilliseconds(Elapsed);
++            Now = Chrono.Now();
+ 
+-            const DWORD TimeOut = (Milliseconds > 1) ? (DWORD) (Milliseconds - 1) : 0;
++            const int64_t Elapsed = (std::min)(NextAnalysisTime, NextPresentationTime) - Now;
+ 
+-            if (::WaitForSingleObject(_hStopRendering, TimeOut) == WAIT_OBJECT_0)
+-                return;
++            if (Elapsed > 0)
++            {
++                const HANDLE WakeHandles[] = { _hStopRendering, _hRenderWake };
++                DWORD WaitResult = WAIT_FAILED;
+ 
+-            continue;
+-        }
++                if (FrameTimer != nullptr)
++                {
++                    LARGE_INTEGER DueTime = { };
++                    DueTime.QuadPart = -(std::max)(1LL, (LONGLONG) ::ceil(Chrono.TicksToSeconds(Elapsed) * 10'000'000.));
++
++                    if (::SetWaitableTimer(FrameTimer, &DueTime, 0, nullptr, nullptr, FALSE))
++                    {
++                        const HANDLE Handles[] = { _hStopRendering, _hRenderWake, FrameTimer };
++                        WaitResult = ::WaitForMultipleObjects((DWORD) _countof(Handles), Handles, FALSE, INFINITE);
++                    }
++                }
+ 
+-        // Fine delay (Ugly busy wait)
+-        while (Chrono.Now() < NextFrameTime)
+-        {
+-            if (::WaitForSingleObject(_hStopRendering, 0) == WAIT_OBJECT_0)
+-                return;
++                if (WaitResult == WAIT_FAILED)
++                {
++                    const DWORD TimeOut = (DWORD) (std::max)(1LL, Chrono.TicksToMilliseconds(Elapsed));
++                    WaitResult = ::WaitForMultipleObjects((DWORD) _countof(WakeHandles), WakeHandles, FALSE, TimeOut);
++                }
++
++                if (WaitResult == WAIT_OBJECT_0 || WaitResult == WAIT_FAILED)
++                    break;
++
++                if (WaitResult == WAIT_OBJECT_0 + 1)
++                {
++                    if (FrameTimer != nullptr)
++                        ::CancelWaitableTimer(FrameTimer);
++
++                    WasWoken = true;
++                    NextAnalysisTime = Chrono.Now();
++                    NextPresentationTime = NextAnalysisTime;
++                }
++            }
+         }
+ 
+-        if (!(_IsFrozen || !_IsVisible || ::IsIconic(::GetParent(m_hWnd))))
++        if (IsRenderable())
+         {
+             bool HaveColorsChanged = false;
++            Now = Chrono.Now();
++            const bool AnalyzeNow = WasWoken || (IsActive() && (Now >= NextAnalysisTime));
++            const bool PresentNow = WasWoken || (IsActive() && (Now >= NextPresentationTime));
+ 
+             if (_CriticalSection.TryEnter())
+             {
+@@ -79,13 +153,19 @@ void uielement_t::RenderThreadProc() noexcept
+ 
+                 if (IsWindowVisible())
+                 {
+-                    _FrameCounter.NewFrame();
+-
+-                    ProcessAudio();
+-
+-                    Render();
+-
+-                    Animate();
++                    if (AnalyzeNow)
++                        ProcessAudio();
++
++                    if (PresentNow)
++                    {
++                        _FrameCounter.NewFrame();
++                        Render();
++                    }
++
++                    // Analysis and peak ballistics stay at the configured
++                    // cadence even when presentation follows the display.
++                    if (AnalyzeNow)
++                        Animate();
+                 }
+ 
+                 if (_IsConfigurationChanged)
+@@ -112,14 +192,36 @@ void uielement_t::RenderThreadProc() noexcept
+         }
+ 
+         // Determine the presentation time of the next frame.
+-        MaxFrameTime = Chrono.SecondsToTicks(1.0 / (double) _RenderState._RefreshRateLimit);
+-        NextFrameTime += MaxFrameTime;
++        if (IsActive())
++        {
++            Now = Chrono.Now();
++            AnalysisFrameTime = GetAnalysisFrameTime();
++            PresentationFrameTime = GetPresentationFrameTime();
+ 
+-        const int64_t Latency = Chrono.Now() - NextFrameTime;
++            if (Now >= NextAnalysisTime)
++            {
++                NextAnalysisTime += AnalysisFrameTime;
++                if ((Now - NextAnalysisTime) > AnalysisFrameTime * 3)
++                    NextAnalysisTime = Now + AnalysisFrameTime;
++            }
+ 
+-        if (Latency > MaxFrameTime * 3)
+-            NextFrameTime = Chrono.Now() + MaxFrameTime;
++            if (Now >= NextPresentationTime)
++            {
++                NextPresentationTime += PresentationFrameTime;
++                if ((Now - NextPresentationTime) > PresentationFrameTime * 3)
++                    NextPresentationTime = Now + PresentationFrameTime;
++            }
++        }
++        else if (WasWoken)
++        {
++            Now = Chrono.Now();
++            NextAnalysisTime = Now + GetAnalysisFrameTime();
++            NextPresentationTime = Now + GetPresentationFrameTime();
++        }
+     }
++
++    if (FrameTimer != nullptr)
++        ::CloseHandle(FrameTimer);
+ }
+ 
+ /// <summary>
+@@ -141,6 +243,7 @@ void uielement_t::ProcessEvents() noexcept
+             Iter._Graph->Reset();
+ 
+         _RenderState._IsPaused = false;
++        _RenderState._IsStopped = _PlaybackStopped.load(std::memory_order_acquire);
+     }
+ 
+     if (event_t::IsRaised(Flags, event_t::PlaybackPaused))
+@@ -148,12 +251,12 @@ void uielement_t::ProcessEvents() noexcept
+         for (auto & Iter : _Grid)
+             Iter._Graph->Reset();
+ 
+-        _RenderState._IsPaused = true;
++        _RenderState._IsPaused = _PlaybackPaused.load(std::memory_order_acquire);
+     }
+     else
+     if (event_t::IsRaised(Flags, event_t::PlaybackResumed))
+     {
+-        _RenderState._IsPaused = false;
++        _RenderState._IsPaused = _PlaybackPaused.load(std::memory_order_acquire);
+     }
+ 
+     if (event_t::IsRaised(Flags, event_t::PlaybackStartedNewTrack))
+@@ -402,7 +505,7 @@ HRESULT uielement_t::CreateDeviceSpecificResources() noexcept
+             }
+ 
+             if (SUCCEEDED(hr))
+-                _Direct2D.GetRefreshRate(DXGIDevice, _DisplayRefreshRate); // Currently not used yet.
++                _Direct2D.GetRefreshRate(DXGIDevice, _DisplayRefreshRate);
+         }
+ 
+         if (SUCCEEDED(hr))
+diff --git a/Visuals/Graph.cpp b/Visuals/Graph.cpp
+index 339307c1b9335a1a21de6ab4f33bf41c09599655..d82689094cd083749ce5a780f1a19794e33876dd 100644
+--- a/Visuals/Graph.cpp
++++ b/Visuals/Graph.cpp
+@@ -5,6 +5,7 @@
+ #include "Graph.h"
+ 
+ #include "StyleManager.h"
++#include "NekoVisualPalette.h"
+ 
+ #include "DirectWrite.h"
+ 
+@@ -213,9 +214,15 @@ bool graph_t::GetToolTipText(FLOAT x, FLOAT y, std::wstring & toolTip, size_t &
+ /// </summary>
+ void graph_t::RenderBackground(ID2D1DeviceContext * deviceContext, artwork_t & artwork) noexcept
+ {
++    if (_State->_VisualizationType == VisualizationType::Bars)
++        nekorox_visual::ApplyNeutralGraphBackground(_BackgroundStyle);
++
+     if (_BackgroundStyle->IsEnabled())
+         deviceContext->FillRectangle(_Rect, _BackgroundStyle->_Brush);
+ 
++    if (_State->_VisualizationType == VisualizationType::Bars)
++        return;
++
+     if (!_State->_ShowArtworkOnBackground)
+         return;
+ 
+diff --git a/Visuals/Spectrum/NekoDoubleExposure.h b/Visuals/Spectrum/NekoDoubleExposure.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..3ee6f4eaf88ebd99b317a00a8050614049d50e29
+--- /dev/null
++++ b/Visuals/Spectrum/NekoDoubleExposure.h
+@@ -0,0 +1,78 @@
++/** $VER: NekoDoubleExposure.h (2026.07.28) NekoRoX - Frame-rate independent artwork shadow for the bar spectrum. **/
++
++#pragma once
++
++#include "FrequencyBand.h"
++
++#include <algorithm>
++#include <cmath>
++#include <cstddef>
++#include <vector>
++
++class neko_double_exposure_t final
++{
++public:
++    static constexpr double ShadowAttackSeconds = 0.028;
++    static constexpr double ShadowReleaseSeconds = 0.460;
++    static constexpr double MaximumFrameSeconds = 0.050;
++
++    void Reset() noexcept
++    {
++        _Shadow.clear();
++        _IsInitialized = false;
++    }
++
++    void Update(const frequency_bands_t & bands, double frameSeconds) noexcept
++    {
++        if (bands.empty())
++        {
++            Reset();
++            return;
++        }
++
++        const size_t count = bands.size();
++
++        if (_Shadow.size() != count)
++        {
++            _Shadow.resize(count);
++            _IsInitialized = false;
++        }
++
++        if (!_IsInitialized)
++        {
++            for (size_t i = 0; i < count; ++i)
++                _Shadow[i] = std::clamp(bands[i].Value, 0., 1.);
++
++            _IsInitialized = true;
++            return;
++        }
++
++        const double dt = std::clamp(frameSeconds, 0., MaximumFrameSeconds);
++
++        for (size_t i = 0; i < count; ++i)
++        {
++            const double value = std::clamp(bands[i].Value, 0., 1.);
++            const double shadowTau = (value >= _Shadow[i])
++                ? ShadowAttackSeconds : ShadowReleaseSeconds;
++
++            _Shadow[i] = Approach(_Shadow[i], value, dt, shadowTau);
++        }
++    }
++
++    const std::vector<double> & Shadow() const noexcept { return _Shadow; }
++
++private:
++    static double Approach(double current, double target, double dt, double timeConstant) noexcept
++    {
++        if (dt <= 0.)
++            return current;
++
++        const double blend = 1. - std::exp(-dt / timeConstant);
++
++        return std::clamp(current + ((target - current) * blend), 0., 1.);
++    }
++
++private:
++    std::vector<double> _Shadow;
++    bool _IsInitialized = false;
++};
+diff --git a/Visuals/Spectrum/NekoVisualPalette.h b/Visuals/Spectrum/NekoVisualPalette.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..ba357413bf058e8e79c18810af2d64b64a886f7e
+--- /dev/null
++++ b/Visuals/Spectrum/NekoVisualPalette.h
+@@ -0,0 +1,175 @@
++/** $VER: NekoVisualPalette.h (2026.07.28) NekoRoX - Shared artwork palette and spectrum surface constraints. **/
++
++#pragma once
++
++#include "NekoThemeProvider.h"
++#include "Style.h"
++
++#include <algorithm>
++#include <cmath>
++
++namespace nekorox_visual
++{
++    inline constexpr double LegacyDarkMid = 0.25;
++    inline constexpr double LegacyDarkHigh = 0.50;
++    inline constexpr double HighlightStart = 0.75;
++    inline constexpr double HighlightFull = 1.00;
++
++    inline D2D1_COLOR_F Mix(const D2D1_COLOR_F & from, const D2D1_COLOR_F & to, FLOAT progress) noexcept
++    {
++        progress = std::clamp(progress, 0.f, 1.f);
++
++        return
++        {
++            from.r + ((to.r - from.r) * progress),
++            from.g + ((to.g - from.g) * progress),
++            from.b + ((to.b - from.b) * progress),
++            from.a + ((to.a - from.a) * progress)
++        };
++    }
++
++    inline FLOAT SmoothStep(FLOAT value) noexcept
++    {
++        value = std::clamp(value, 0.f, 1.f);
++        return value * value * (3.f - (2.f * value));
++    }
++
++    inline FLOAT Luminance(const D2D1_COLOR_F & color) noexcept
++    {
++        return (0.2126f * color.r) + (0.7152f * color.g) + (0.0722f * color.b);
++    }
++
++    inline D2D1_COLOR_F Color(const nekorox::interop::SharedRgbaColorV1 & value) noexcept
++    {
++        return D2D1::ColorF(value.red, value.green, value.blue, value.alpha);
++    }
++
++    inline bool RefreshSharedTheme(
++        service_ptr_t<nekorox::interop::ThemeProviderV1> & provider,
++        nekorox::interop::SharedThemeSnapshotV2 & snapshot) noexcept
++    {
++        try
++        {
++            if (!provider.is_valid())
++            {
++                service_enum_t<nekorox::interop::ThemeProviderV1> providers;
++                if (!providers.first(provider))
++                    return false;
++            }
++
++            nekorox::interop::SharedThemeSnapshotV2 candidate;
++            if (!provider->getSnapshot(candidate) ||
++                !nekorox::interop::validSharedThemeSnapshot(candidate))
++                return false;
++
++            snapshot = candidate;
++            return true;
++        }
++        catch (...)
++        {
++            return false;
++        }
++    }
++
++    inline D2D1_COLOR_F AmplitudeColor(
++        const nekorox::interop::SharedThemeSnapshotV2 & theme,
++        double value) noexcept
++    {
++        const FLOAT amplitude = std::clamp((FLOAT) value, 0.f, 1.f);
++        const D2D1_COLOR_F accent = Color(theme.accent);
++        const D2D1_COLOR_F darkLow = D2D1::ColorF(0x151515, accent.a);
++        const D2D1_COLOR_F darkMid = D2D1::ColorF(0x1F1F1F, accent.a);
++        const D2D1_COLOR_F darkHigh = D2D1::ColorF(0x2A2A2A, accent.a);
++
++        // The x86 Musical Spectrum palette was, high to low: white, teal,
++        // #2A2A2A, #1F1F1F, #151515. Preserve that transfer topology while
++        // substituting the artwork accent for its single chromatic teal stop.
++        if (amplitude < (FLOAT) LegacyDarkMid)
++            return Mix(darkLow, darkMid, SmoothStep(
++                amplitude / (FLOAT) LegacyDarkMid));
++
++        if (amplitude < (FLOAT) LegacyDarkHigh)
++            return Mix(darkMid, darkHigh, SmoothStep(
++                (amplitude - (FLOAT) LegacyDarkMid) /
++                ((FLOAT) LegacyDarkHigh - (FLOAT) LegacyDarkMid)));
++
++        if (amplitude < (FLOAT) HighlightStart)
++            return Mix(darkHigh, accent, SmoothStep(
++                (amplitude - (FLOAT) LegacyDarkHigh) /
++                ((FLOAT) HighlightStart - (FLOAT) LegacyDarkHigh)));
++
++        const FLOAT highlight = SmoothStep((amplitude - (FLOAT) HighlightStart) /
++            ((FLOAT) HighlightFull - (FLOAT) HighlightStart));
++        return Mix(accent, D2D1::ColorF(D2D1::ColorF::White, accent.a), highlight);
++    }
++
++    inline void SetSolidBrushColor(ID2D1Brush * brush, const D2D1_COLOR_F & color) noexcept
++    {
++        if (brush == nullptr)
++            return;
++
++        CComPtr<ID2D1SolidColorBrush> solidBrush;
++
++        if (SUCCEEDED(brush->QueryInterface(IID_PPV_ARGS(&solidBrush))))
++            solidBrush->SetColor(color);
++    }
++
++    inline void ApplyAmplitudeColor(
++        style_t * style,
++        const nekorox::interop::SharedThemeSnapshotV2 & theme,
++        double value) noexcept
++    {
++        if ((style == nullptr) || !style->IsAmplitudeBased())
++            return;
++
++        SetSolidBrushColor(style->_Brush, AmplitudeColor(theme, value));
++    }
++
++    inline D2D1_COLOR_F ArtworkShadowColor(
++        const nekorox::interop::SharedThemeSnapshotV2 & theme,
++        double amplitude) noexcept
++    {
++        const FLOAT level = std::clamp((FLOAT) amplitude, 0.f, 1.f);
++        const D2D1_COLOR_F base = D2D1::ColorF(0x080909);
++        const D2D1_COLOR_F accent = Color(theme.accent);
++        const D2D1_COLOR_F secondary = Color(theme.secondary);
++        const D2D1_COLOR_F shadowHue = Mix(secondary, accent, 0.28f + 0.22f * level);
++        D2D1_COLOR_F result = Mix(base, shadowHue, 0.12f + (0.30f * level));
++
++        const FLOAT luminance = Luminance(result);
++        if (luminance > 0.17f)
++        {
++            const FLOAT scale = 0.17f / luminance;
++            result.r *= scale;
++            result.g *= scale;
++            result.b *= scale;
++        }
++        result.a = 0.72f;
++
++        return result;
++    }
++
++    inline void ApplyNeutralAxisColors(style_t * lineStyle, style_t * textStyle) noexcept
++    {
++        if (lineStyle != nullptr)
++            SetSolidBrushColor(lineStyle->_Brush, D2D1::ColorF(0x20282A, 0.42f));
++
++        if (textStyle != nullptr)
++            SetSolidBrushColor(textStyle->_Brush, D2D1::ColorF(0x536669, 0.78f));
++    }
++
++    inline void ApplyNeutralGraphBackground(style_t * backgroundStyle) noexcept
++    {
++        if (backgroundStyle != nullptr)
++            SetSolidBrushColor(backgroundStyle->_Brush, D2D1::ColorF(0x080909));
++    }
++
++    inline void ApplyNeutralBarBackgroundColors(style_t * darkStyle, style_t * lightStyle) noexcept
++    {
++        if (darkStyle != nullptr)
++            SetSolidBrushColor(darkStyle->_Brush, D2D1::ColorF(0x0A0C0D));
++
++        if (lightStyle != nullptr)
++            SetSolidBrushColor(lightStyle->_Brush, D2D1::ColorF(0x0D1112));
++    }
++}
+diff --git a/Visuals/Spectrum/Spectrum.cpp b/Visuals/Spectrum/Spectrum.cpp
+index dbebaced2e80335be8b9a5fab08a783024acbdb9..83ba38e15af65e453718c5e0eeb723bb741db81b 100644
+--- a/Visuals/Spectrum/Spectrum.cpp
++++ b/Visuals/Spectrum/Spectrum.cpp
+@@ -3,6 +3,7 @@
+ 
+ #include "pch.h"
+ #include "Spectrum.h"
++#include "NekoVisualPalette.h"
+ 
+ #include "Direct2D.h"
+ #include "DirectWrite.h"
+@@ -38,6 +39,18 @@ void spectrum_t::Initialize(state_t * state, const graph_description_t * setting
+     _YAxis.Initialize(state, settings, analysis);
+ 
+     _Chrono.Reset();
++    _NekoTemporalChrono.Reset();
++    _LastNekoTemporalTick = 0;
++    _NekoDoubleExposure.Reset();
++}
++
++/// <summary>
++/// Resets the NekoRoX temporal renderer without changing the analyzer state.
++/// </summary>
++void spectrum_t::Reset() noexcept
++{
++    _LastNekoTemporalTick = 0;
++    _NekoDoubleExposure.Reset();
+ }
+ 
+ /// <summary>
+@@ -63,11 +76,12 @@ void spectrum_t::Resize() noexcept
+ 
+     const FLOAT yl = ((_Settings->_YAxisMode != YAxisMode::None) && _Settings->_YAxisLeft)   ? _YAxis.GetTextWidth()  : 0.f;
+     const FLOAT yr = ((_Settings->_YAxisMode != YAxisMode::None) && _Settings->_YAxisRight)  ? _YAxis.GetTextWidth()  : 0.f;
++    const FLOAT yAxisReserve = (std::max)(yl, yr);
+ 
+-    _XAxis.Move({ _Rect.left + yl, _Rect.top,      _Rect.right - yr, _Rect.bottom });
+-    _YAxis.Move({ _Rect.left,      _Rect.top + xt, _Rect.right,      _Rect.bottom - xb });
++    _XAxis.Move({ _Rect.left + yAxisReserve, _Rect.top, _Rect.right - yAxisReserve, _Rect.bottom });
++    _YAxis.Move({ _Rect.left + yAxisReserve - yl, _Rect.top + xt, _Rect.right - yAxisReserve + yr, _Rect.bottom - xb });
+ 
+-    _ClientRect = { _Rect.left + yl + PaddingX, _Rect.top + xt + PaddingY, _Rect.right - yr - PaddingX, _Rect.bottom - xb - PaddingY };
++    _ClientRect = { _Rect.left + yAxisReserve + PaddingX, _Rect.top + xt + PaddingY, _Rect.right - yAxisReserve - PaddingX, _Rect.bottom - xb - PaddingY };
+     _ClientSize = { _ClientRect.right - _ClientRect.left, _ClientRect.bottom - _ClientRect.top };
+ 
+     _IsResized = false;
+@@ -149,6 +163,7 @@ void spectrum_t::Render(ID2D1DeviceContext * deviceContext) noexcept
+ /// </summary>
+ void spectrum_t::RenderBars(ID2D1DeviceContext * deviceContext) noexcept
+ {
++    nekorox_visual::RefreshSharedTheme(_NekoThemeProvider, _NekoTheme);
+     _LEDSize = _State->_LEDLight + _State->_LEDGap;
+ 
+     FLOAT t = _ClientSize.width / (FLOAT) _Analysis->_FrequencyBands.size();
+@@ -167,6 +181,8 @@ void spectrum_t::RenderBars(ID2D1DeviceContext * deviceContext) noexcept
+ 
+     deviceContext->SetAntialiasMode( D2D1_ANTIALIAS_MODE_ALIASED); // Required by FillOpacityMask() and results in crispier graphics.
+ 
++    // Paint the frequency-key backgrounds first so the temporal layers remain
++    // one continuous composition instead of being clipped per band.
+     for (const auto & fb : _Analysis->_FrequencyBands)
+     {
+         x1 = std::clamp(x1, 0.f, _ClientSize.width);
+@@ -186,29 +202,103 @@ void spectrum_t::RenderBars(ID2D1DeviceContext * deviceContext) noexcept
+                 RenderBarPart(deviceContext, Rect, _LightBackgroundStyle);
+         }
+ 
+-        if (!_State->_IsPaused || (_State->_IsPaused && _State->_VisualizeDuringPause))
++        x1 = x2;
++        x2 = x1 + BarWidth;
++    }
++
++    if (_State->_IsPaused && !_State->_VisualizeDuringPause)
++        return;
++
++    UpdateNekoTemporalLayers();
++    RenderNekoTemporalLayers(deviceContext, BarWidth, HOffset);
++
++    x1 = HOffset;
++    x2 = x1 + BarWidth;
++
++    // The current artwork-derived body and peak marks are deliberately last.
++    // The slower secondary exposure remains visible only where the signal has
++    // just moved away.
++    for (const auto & fb : _Analysis->_FrequencyBands)
++    {
++        x1 = std::clamp(x1, 0.f, _ClientSize.width);
++        x2 = std::clamp(x2, 0.f, _ClientSize.width);
++
++        D2D1_RECT_F Rect = { x1, 0.f, x2 - 1.f, _ClientSize.height };
++        const bool GreaterThanNyquist = fb.Lo >= _Analysis->_NyquistFrequency;
++
++        if (!GreaterThanNyquist || !_State->_SuppressMirrorImage)
+         {
+-            const bool GreaterThanNyquist = fb.Lo >= _Analysis->_NyquistFrequency; // 24/09/25: Use the lower frequency of a band instead of the center frequency.
++            if (fb.Value > 0.)
++                RenderBar(deviceContext, Rect, _BarAreaStyle, _BarTopStyle, fb.Value, fb.Opacity);
++
++            if ((_State->_PeakMode != PeakMode::None) && (fb.MaxValue > 0.))
++                RenderBarTop(deviceContext, Rect, _BarPeakTopStyle, fb.MaxValue, fb.Opacity);
++        }
+ 
+-            if (!GreaterThanNyquist || (GreaterThanNyquist && !_State->_SuppressMirrorImage))
++        x1 = x2;
++        x2 = x1 + BarWidth;
++    }
++}
++
++/// <summary>
++/// Advances the two temporal layers using QPC time, independent of refresh rate.
++/// </summary>
++void spectrum_t::UpdateNekoTemporalLayers() noexcept
++{
++    const int64_t now = _NekoTemporalChrono.Now();
++    const double fallback = 1. / (double) (std::max)(_State->_RefreshRateLimit, (int64_t) 1);
++    const double frameSeconds = (_LastNekoTemporalTick == 0)
++        ? fallback
++        : _NekoTemporalChrono.TicksToSeconds(now - _LastNekoTemporalTick);
++
++    _LastNekoTemporalTick = now;
++    _NekoDoubleExposure.Update(_Analysis->_FrequencyBands, frameSeconds);
++}
++
++/// <summary>
++/// Draws the slow artwork-derived shadow. It reuses the analyzer bins and
++/// allocates only when the band count changes.
++/// </summary>
++void spectrum_t::RenderNekoTemporalLayers(ID2D1DeviceContext * deviceContext, FLOAT barWidth, FLOAT horizontalOffset) noexcept
++{
++    const auto & shadow = _NekoDoubleExposure.Shadow();
++
++    if (shadow.size() != _Analysis->_FrequencyBands.size())
++        return;
++
++    deviceContext->SetAntialiasMode(D2D1_ANTIALIAS_MODE_ALIASED);
++
++    FLOAT x1 = horizontalOffset;
++
++    for (size_t i = 0; i < shadow.size(); ++i)
++    {
++        const auto & fb = _Analysis->_FrequencyBands[i];
++        const FLOAT x2 = x1 + barWidth;
++        const bool GreaterThanNyquist = fb.Lo >= _Analysis->_NyquistFrequency;
++
++        if ((!GreaterThanNyquist || !_State->_SuppressMirrorImage) && (shadow[i] > 0.))
++        {
++            _NekoShadowBrush->SetColor(nekorox_visual::ArtworkShadowColor(
++                _NekoTheme, shadow[i]));
++            const D2D1_RECT_F rect =
+             {
+-                if ((_State->_PeakMode != PeakMode::None) && (fb.MaxValue > 0.))
+-                    RenderBar(deviceContext, Rect, _BarPeakAreaStyle, _BarPeakTopStyle, fb.MaxValue, fb.Opacity);
++                std::clamp(x1, 0.f, _ClientSize.width),
++                0.f,
++                std::clamp(x2 - 1.f, 0.f, _ClientSize.width),
++                std::clamp((FLOAT) (shadow[i] * _ClientSize.height), 0.f, _ClientSize.height)
++            };
+ 
+-                if (fb.Value > 0.)
+-                    RenderBar(deviceContext, Rect, _BarAreaStyle, _BarTopStyle, fb.Value, fb.Opacity);
+-            }
++            deviceContext->FillRectangle(rect, _NekoShadowBrush);
+         }
+ 
+         x1 = x2;
+-        x2 = x1 + BarWidth;
+     }
+ }
+ 
+ /// <summary>
+ /// Renders a single bar.
+ /// </summary>
+-void spectrum_t::RenderBar(ID2D1DeviceContext * deviceContext, D2D1_RECT_F & rect, const style_t * areaStyle, const style_t * topStyle, double value, double opacity) noexcept
++void spectrum_t::RenderBar(ID2D1DeviceContext * deviceContext, D2D1_RECT_F & rect, style_t * areaStyle, style_t * topStyle, double value, double opacity) noexcept
+ {
+     rect.top    = 0.f;
+     rect.bottom = _ClientSize.height * (FLOAT) value;
+@@ -216,18 +306,34 @@ void spectrum_t::RenderBar(ID2D1DeviceContext * deviceContext, D2D1_RECT_F & rec
+     // Draw the bar area.
+     if (areaStyle->IsEnabled())
+     {
+-        if (_BarAreaStyle->IsAmplitudeBased())
+-            _BarAreaStyle->SetBrushColor(value);
++        nekorox_visual::ApplyAmplitudeColor(areaStyle, _NekoTheme, value);
+ 
+         RenderBarPart(deviceContext, rect, areaStyle);
+     }
+ 
++    RenderBarTop(deviceContext, rect, topStyle, value, opacity);
++}
++
++/// <summary>
++/// Renders only the marker at the top of a bar.
++/// </summary>
++void spectrum_t::RenderBarTop(ID2D1DeviceContext * deviceContext, D2D1_RECT_F & rect, style_t * topStyle, double value, double opacity) noexcept
++{
+     // Draw the bar top.
+     if (topStyle->IsEnabled())
+     {
++        // The caller supplies its own height: fb.Value for the live bar top,
++        // fb.MaxValue for the held peak. Both sample the same impact curve;
++        // the held peak never inherits the live bar's current color.
++        if ((_BarAreaStyle != nullptr) && _BarAreaStyle->IsAmplitudeBased())
++            nekorox_visual::SetSolidBrushColor(
++                topStyle->_Brush,
++                nekorox_visual::AmplitudeColor(_NekoTheme, value));
++
++        rect.bottom = _ClientSize.height * (FLOAT) value;
++
+         if (_State->_LEDMode)
+         {
+-            rect.bottom = _ClientSize.height * (FLOAT) value;
+             rect.top    = rect.bottom - _LEDSize;
+         }
+         else
+@@ -623,8 +729,17 @@ HRESULT spectrum_t::CreateDeviceSpecificResources(ID2D1DeviceContext * deviceCon
+                 if (SUCCEEDED(hr))
+                     hr = _State->_StyleManager.GetInitializedStyle(VisualElement::BarLightBackground, deviceContext, _ClientSize, L"", 1.f, &_LightBackgroundStyle);
+ 
++                if (SUCCEEDED(hr))
++                    nekorox_visual::ApplyNeutralBarBackgroundColors(
++                        _DarkBackgroundStyle, _LightBackgroundStyle);
++
+                 if (SUCCEEDED(hr) && (_OpacityMask == nullptr))
+                     hr = CreateOpacityMask(deviceContext);
++
++                if (SUCCEEDED(hr) && (_NekoShadowBrush == nullptr))
++                    hr = deviceContext->CreateSolidColorBrush(
++                        D2D1::ColorF(0x18383B, 0.72f), &_NekoShadowBrush);
++
+                 break;
+             }
+ 
+@@ -707,6 +822,7 @@ void spectrum_t::DeleteDeviceSpecificResources() noexcept
+     SafeRelease(&_NyquistMarkerStyle);
+ 
+     _OpacityMask.Release();
++    _NekoShadowBrush.Release();
+ }
+ 
+ /// <summary>
+diff --git a/Visuals/Spectrum/Spectrum.h b/Visuals/Spectrum/Spectrum.h
+index 39d3871ea7ad531a03cef9df1dda643ae871b850..b966da9b84811a05132d04aa2f878ed8c8a703bc 100644
+--- a/Visuals/Spectrum/Spectrum.h
++++ b/Visuals/Spectrum/Spectrum.h
+@@ -18,6 +18,8 @@
+ 
+ #include "XAxis.h"
+ #include "YAxis.h"
++#include "NekoDoubleExposure.h"
++#include "NekoThemeProvider.h"
+ 
+ #include "Chrono.h"
+ 
+@@ -44,7 +46,7 @@ public:
+     void Initialize(state_t * state, const graph_description_t * settings, const analysis_t * analysis) noexcept override final;
+     void Move(const D2D1_RECT_F & rect) noexcept override final;
+     void Render(ID2D1DeviceContext * deviceContext) noexcept override final;
+-    void Reset() noexcept override final { }
++    void Reset() noexcept override final;
+ 
+ private:
+     HRESULT CreateDeviceSpecificResources(ID2D1DeviceContext * deviceContext) noexcept;
+@@ -55,7 +57,10 @@ private:
+     void Resize() noexcept;
+ 
+     void RenderBars(ID2D1DeviceContext * deviceContext) noexcept;
+-    void RenderBar(ID2D1DeviceContext * deviceContext, D2D1_RECT_F & rect, const style_t * areaStyle, const style_t * topStyle, double value, double opacity) noexcept;
++    void RenderBar(ID2D1DeviceContext * deviceContext, D2D1_RECT_F & rect, style_t * areaStyle, style_t * topStyle, double value, double opacity) noexcept;
++    void RenderBarTop(ID2D1DeviceContext * deviceContext, D2D1_RECT_F & rect, style_t * topStyle, double value, double opacity) noexcept;
++    void RenderNekoTemporalLayers(ID2D1DeviceContext * deviceContext, FLOAT barWidth, FLOAT horizontalOffset) noexcept;
++    void UpdateNekoTemporalLayers() noexcept;
+ 
+     void RenderBarPart(ID2D1DeviceContext * deviceContext, D2D1_RECT_F & rect, const style_t * style) const noexcept;
+ 
+@@ -102,9 +107,15 @@ private:
+     FLOAT _LEDSize;
+ 
+     chrono_t _Chrono;
++    chrono_t _NekoTemporalChrono;
++    int64_t _LastNekoTemporalTick = 0;
++    neko_double_exposure_t _NekoDoubleExposure;
++    service_ptr_t<nekorox::interop::ThemeProviderV1> _NekoThemeProvider;
++    nekorox::interop::SharedThemeSnapshotV2 _NekoTheme;
+ 
+     // Device-dependent resources
+     CComPtr<ID2D1Bitmap> _OpacityMask;
++    CComPtr<ID2D1SolidColorBrush> _NekoShadowBrush;
+ 
+     style_t * _BarAreaStyle;
+     style_t * _BarTopStyle;
+diff --git a/Visuals/Spectrum/XAxis.cpp b/Visuals/Spectrum/XAxis.cpp
+index 11f11ee1e98e18453408ad610d008f5e2dcf2a6b..276825a9052d4b3e60244c04d866c7c6665b61ae 100644
+--- a/Visuals/Spectrum/XAxis.cpp
++++ b/Visuals/Spectrum/XAxis.cpp
+@@ -6,6 +6,7 @@
+ 
+ #include "StyleManager.h"
+ #include "DirectWrite.h"
++#include "NekoVisualPalette.h"
+ 
+ #include "Support.h"
+ 
+@@ -271,6 +272,8 @@ void x_axis_t::Render(ID2D1DeviceContext * deviceContext) noexcept
+     if (!SUCCEEDED(hr))
+         return;
+ 
++    nekorox_visual::ApplyNeutralAxisColors(_LineStyle, _TextStyle);
++
+     deviceContext->SetAntialiasMode(D2D1_ANTIALIAS_MODE_ALIASED);
+ 
+     FLOAT Opacity = _TextStyle->_Brush->GetOpacity();
+diff --git a/Visuals/Spectrum/YAxis.cpp b/Visuals/Spectrum/YAxis.cpp
+index f822cd7a09e936b9c0bddeabcc969f352a6c20a0..78a31f94e222f0ba4fd9b8e0041af9897daf1d44 100644
+--- a/Visuals/Spectrum/YAxis.cpp
++++ b/Visuals/Spectrum/YAxis.cpp
+@@ -6,6 +6,7 @@
+ 
+ #include "StyleManager.h"
+ #include "DirectWrite.h"
++#include "NekoVisualPalette.h"
+ 
+ #pragma hdrstop
+ 
+@@ -106,6 +107,8 @@ void y_axis_t::Render(ID2D1DeviceContext * deviceContext) noexcept
+     if (!SUCCEEDED(hr))
+         return;
+ 
++    nekorox_visual::ApplyNeutralAxisColors(_LineStyle, _TextStyle);
++
+     deviceContext->SetAntialiasMode(D2D1_ANTIALIAS_MODE_ALIASED);
+ 
+     _TextStyle->SetHorizontalAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING); // Right-align horizontally, also for the right axis.
+diff --git a/foo_vis_spectrum_analyzer.vcxproj b/foo_vis_spectrum_analyzer.vcxproj
+index ad6452626b474db9d85697de11515d30eeb84553..e930a1be0fbba74d35e2f6e427bcddd48b3729ba 100644
+--- a/foo_vis_spectrum_analyzer.vcxproj
++++ b/foo_vis_spectrum_analyzer.vcxproj
+@@ -246,6 +246,7 @@
+       <StringPooling>true</StringPooling>
+       <PrecompiledHeader>Use</PrecompiledHeader>
+       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
++      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+     </ClCompile>
+     <Link>
+       <SubSystem>Windows</SubSystem>
+@@ -253,6 +254,7 @@
+       <OptimizeReferences>true</OptimizeReferences>
+       <EnableUAC>false</EnableUAC>
+       <AdditionalDependencies>$(SolutionDir)sdk\foobar2000\shared\shared-$(PlatformTarget).lib;$(SolutionDir)out\$(PlatformTarget)\$(Configuration)\columns_ui_sdk.lib</AdditionalDependencies>
++      <AdditionalLibraryDirectories>$(NekoATLRoot)\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+     </Link>
+     <PostBuildEvent>
+       <Command>pwsh.exe -NoLogo -NonInteractive -NoProfile -File Build-FB2KComponent.ps1 $(TargetName) $(TargetFileName) $(Platform) $(OutputPath)</Command>
+@@ -516,4 +518,4 @@
+   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+   <ImportGroup Label="ExtensionTargets">
+   </ImportGroup>
+-</Project>
+\ No newline at end of file
++</Project>

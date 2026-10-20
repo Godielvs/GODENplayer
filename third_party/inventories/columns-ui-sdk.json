@@ -1,0 +1,265 @@
+{
+  "schema": "goden.vendored-files.v1",
+  "files": [
+    {
+      "path": "vendor/columns_ui-sdk/base.h",
+      "sha256": "f3c32e5c607945e8551ec6e0f0fd1c3d2c5a1027b88d1b7e55f40cd2ddd344b7"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/buttons.h",
+      "sha256": "183c27eeafb4107fff0544c290f3bb9e378cc0c2a81bc6045caed4a7205ffb31"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/callback.cpp",
+      "sha256": "b1b20c6a438369ef8dc662339231d462003c8060f490fd070695571a30422519"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/callback.h",
+      "sha256": "922b067665aa4ec2480dc256a2f4e4ad7325b65e4b17022a8011eed4cbd3d582"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/colours.cpp",
+      "sha256": "a9f3d52754650bdedf3bdb9267adb980093f5fb9bd26f22d4b060ab50927a43e"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/colours.h",
+      "sha256": "fa6699a1baccf5c25758bead19c7aaa7d8a61e944f764391d8664b6109094b66"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/columns_ui-sdk-public.vcxproj",
+      "sha256": "9c8986b2214e3f2aecf77edc67b4eeb479631a78483613e7ff36278976a315d6"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/columns_ui-sdk-public.vcxproj.filters",
+      "sha256": "e3374d757b099fdd58ed879781f4bcff2f66045e956828a1afe10d7cff267665"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/columns_ui-sdk.vcxproj",
+      "sha256": "204055914aa61e80be8e7f2350ee6a5605d1d2dc3a26cad01ef4aefc9083b2f9"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/columns_ui-sdk.vcxproj.filters",
+      "sha256": "e3374d757b099fdd58ed879781f4bcff2f66045e956828a1afe10d7cff267665"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/columns_ui.cpp",
+      "sha256": "3f622dce2923283d33f6bbc5b6bb5b18cdc6af6beba5a361a3a5d6c6d641e85a"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/columns_ui.h",
+      "sha256": "392699a28a9a49e917f2eed8aeef65b7457dfbdec771c401aa4a5090214a34f1"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/container_uie_window_v3.h",
+      "sha256": "dc8d25573a3c5a4f5a517f4a467cf88bf1d34f49053b08f5f6f12f6b5f3e0cc6"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/container_window_v3.cpp",
+      "sha256": "37dabde65c475c501957eb1d69f11ecc9875be691958551dc9b45e9495f03109"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/container_window_v3.h",
+      "sha256": "9c2f85b4d1341e8f50a72b67e22ee44c261840733d0b4f5667592318d98bfe69"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/docs/make.bat",
+      "sha256": "e7302d938728984369c2a45c22e67016c7472a1d46ebd4fee145261aa4bb7e9d"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/docs/Makefile",
+      "sha256": "554110c9af787d94b1985e0c6dbe3228d75cbf551765023bd91a547790d71e9e"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/docs/requirements.txt",
+      "sha256": "327c7b53d15a20405e83efcb9b61ea1037cab86045e5d91f25bcf38280185c88"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/docs/source/appearance/colours.rst",
+      "sha256": "adbbdad25d3180ba282e6b3d2d94f0f16678be98f92e8d914424c219aeac143b"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/docs/source/appearance/directwrite-utilities.rst",
+      "sha256": "370715bf0aa91d23168106ef8adc8e5e6e8db2a3b70ce168c38025555a4e0105"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/docs/source/appearance/fonts.rst",
+      "sha256": "d1dbdaa25c9de55ea7c9ad4425f3b7a1c0eadc0d795008a3bd7f35a1346b0019"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/docs/source/button/button.rst",
+      "sha256": "e6abb2c174e2da1a623f5533b34ebc344c9570beb2cdf7a2d5294a09cd8ba74b"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/docs/source/conf.py",
+      "sha256": "7936f169c753386a6c88f608850fa8b89ab647cd667e5846aff7bfef8924b5fc"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/docs/source/cui/fcl.rst",
+      "sha256": "f68f0d4b60df8f0ce1ec0d101c045578cb230e711db8a34e9acb4c7d60d94a87"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/docs/source/cui/settings.rst",
+      "sha256": "d7a2c6759a9943e6c98334c48ae89b5d4fed169f415bed2c48ce6f305f368d68"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/docs/source/cui/title-formatting.rst",
+      "sha256": "7246d2f4eb30b165c733f8bb4a172eb00f1cecf7ffe9f19c487824ee5f22e69e"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/docs/source/cui/window-identifiers.rst",
+      "sha256": "5ae1ea5851742cab95903c043e06e04462d7e01c37a9f0b9d459350df0bea4d6"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/docs/source/dark-mode.rst",
+      "sha256": "336774e1dcbec3f3c80dba08e6d88c18939d17cd7edf090b801791d6cf97b692"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/docs/source/index.rst",
+      "sha256": "3e975b3e2525db21dd26472190b8b6d2dbbbbae389d2542c957335f9c641e470"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/docs/source/panel/base-extension.rst",
+      "sha256": "34c3d23736e5324c0074feeb05698aaef674998ee5f45a3472e63606ce15fa54"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/docs/source/panel/context-menu.rst",
+      "sha256": "22e61dbf53349cde073294667ffd29676f56a14843bfd9f3325ab4e9f83319b0"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/docs/source/panel/implementation-helpers.rst",
+      "sha256": "be6925536bd743336e4b633181191bc2515051cfae2e27cbb15885ad0f370bdc"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/docs/source/panel/other-utilities.rst",
+      "sha256": "2bf08752a7578ed4eacda2ea58bf1759d14354ca56bab9ea119a990d6d69ac98"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/docs/source/panel/splitter-window.rst",
+      "sha256": "3fae2e9106f0cae3d3740440170d5390cd4081370272dfae2a5a3c1329c18d72"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/docs/source/panel/window-host.rst",
+      "sha256": "005e502563d3ca55a061801b2ddd7239f60847e591550f5fd3b48e938367a74e"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/docs/source/panel/window.rst",
+      "sha256": "ad892a470061b10d9cefefcd74f3992d6b5cbb17e2b37cdc0ade48e93f2ebd33"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/docs/source/toc.rst",
+      "sha256": "f33ed7e6b96ba08a9813137259427824ff1808cada66bfa6ff52f0bdfaeb00c6"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/docs/source/upgrading.rst",
+      "sha256": "c72486855afc5c55f950234c40375dfe729b6d609378c7c8ba18e009259731ab"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/docs/source/using-fonts.rst",
+      "sha256": "17ee2839f84a1bbd2ff0b7ef0d9ba29ba7b82fa5365311355b11ef2b09a320a5"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/Doxyfile",
+      "sha256": "3a2f5d0f88be79a23924af793a62259a94bd9426242f71c21e1b004409400e44"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/dwrite_utils.cpp",
+      "sha256": "cfc0a87a0db36d898dfcf43741f5dc14ff4067f1d3b36dad824e13244a037f1e"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/dwrite_utils.h",
+      "sha256": "5f2c63cbd4d0d0adee219c9517318d3100bd2a2ced0078c8d19c9c9654ae09f9"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/font_manager_v3.cpp",
+      "sha256": "c40466f349d830654c39ab823709ed7a2ba58a93623dc3ab06b33f21beab491c"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/font_manager_v3.h",
+      "sha256": "15bc86da7a6348cf2e84f8c68128e24794b8b9fbe037e990e9b234e91a7e5c28"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/font_utils.cpp",
+      "sha256": "38498abb8284ec11c149f762dfda30f63eab0af0fca24832924adb37f501ff66"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/font_utils.h",
+      "sha256": "6e5f08cf444076f0ab3c6dfa11786bf6e0e819c0cfa835091757275a66ed463e"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/fonts.cpp",
+      "sha256": "08289b249fdec30b1729b6cbae38a02c35934385a4f3ed74ce59222a47f1f953"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/fonts.h",
+      "sha256": "ed718ba04dfb21074627ed884a37a19c56597ef5fcd07b71dac3ce3137eb17b4"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/helpers.h",
+      "sha256": "948304d52d30d4b3cf1db7c344c8df24d9d6525b3a14eb303360a78fee7f4352"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/LICENCE",
+      "sha256": "d82c3e995bd48af26672368fa72ae397874b707abb012960eaef9987932bd6a8"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/menu.h",
+      "sha256": "15f92e64178990a3ea5612d06f36848b00f7a4a83280467ca6742cc1e093d481"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/panel_utils.cpp",
+      "sha256": "82df66a785fc2c501ff828517d119e0971fb78135f75b9739aba7a6155835ee3"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/panel_utils.h",
+      "sha256": "79ce4c29b96c60ad796733034bc894ff5904cf0f7228e7b6065ba5e28bc2a51d"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/README.md",
+      "sha256": "9454a5ab73f812b40efbd656b138c56b351fcb6c4b92ba5eea80c22d3ecf1218"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/scripts/make-sdk.cmd",
+      "sha256": "9c25b2d8bc11125c3b58bccd9c86e98956f130f59bd54d42f5a3b680e56e52d8"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/splitter.h",
+      "sha256": "fd0ed445a259e256125891e93cdf244ccc96d20275bef97d36e239e2f08f60dc"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/ui_extension.cpp",
+      "sha256": "5e290ac68a019633c52267bd586d181b077fb218d6063916cf4db8b76710c284"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/ui_extension.h",
+      "sha256": "76895d715b99700fc9c690052b9aecdc9124104925b8ba6a11a8612b51ea8f2a"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/visualisation.h",
+      "sha256": "67ddd8efb03dd2afc32cc4d3ca88aa204806cc609f1bc9d0c3ecfa5b97587cc7"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/win32_helpers.cpp",
+      "sha256": "d368862830d32768caa5d718564a02ee45b801c968754b2edd8f14973c63b459"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/win32_helpers.h",
+      "sha256": "cf9d8face7922436c04ae55fe9b8249cf35bc595cd1cca1ad831031225b1824b"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/window.h",
+      "sha256": "8614caa853526d4a5c5828a0c37b1c2052d0857d34301b0bc5dcf1e92f9767d0"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/window_helper.cpp",
+      "sha256": "8c7f6e7ec3a28cb465fd3ade2c773eab2d516ba65271dc1c0164f9e6ac27f609"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/window_helper.h",
+      "sha256": "c4381c15ddd09885fcf1c243b8dc344b6c18bed8b81ed49db5fb0d940c1569b0"
+    },
+    {
+      "path": "vendor/columns_ui-sdk/window_host.h",
+      "sha256": "ad80722d36102448215f1d1bf5104ec833572d62774d808bb7ac42f0008abbd4"
+    }
+  ]
+}

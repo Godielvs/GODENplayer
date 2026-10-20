@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{A86E17C8-B014-4FD4-AF8B-C3D5756AE69C}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>goden_crt_render</RootNamespace>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType><UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType><UseDebugLibraries>false</UseDebugLibraries><WholeProgramOptimization>true</WholeProgramOptimization>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup>
+    <OutDir>$(RepoRoot)out\$(Configuration)\</OutDir>
+    <IntDir>$(RepoRoot)out\obj\$(ProjectName)\$(Configuration)\</IntDir>
+    <TargetName>goden-crt-render</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(RepoRoot)src\core\include;$(IntDir)crt-shaders;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <WarningLevel>Level4</WarningLevel>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>Bcrypt.lib;D3d11.lib;Dxgi.lib;Shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="crt_offscreen.cpp" />
+    <ClCompile Include="main.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="crt_offscreen.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\src\component\shaders\crt_xy.hlsl" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\core\nekorox_core.vcxproj"><Project>{1A9D7960-BC9A-4FAF-847F-147B88D0F921}</Project></ProjectReference>
+  </ItemGroup>
+  <Target Name="CompileCrtShaders" BeforeTargets="ClCompile" Inputs="$(RepoRoot)src\component\shaders\crt_xy.hlsl" Outputs="$(IntDir)crt-shaders\crt_fullscreen_vs.h;$(IntDir)crt-shaders\crt_decay_ps.h;$(IntDir)crt-shaders\crt_beam_vs.h;$(IntDir)crt-shaders\crt_beam_ps.h;$(IntDir)crt-shaders\crt_composite_ps.h">
+    <MakeDir Directories="$(IntDir)crt-shaders" />
+    <Exec Command="&quot;$(WindowsSdkDir)bin\$(WindowsTargetPlatformVersion)\x64\fxc.exe&quot; /nologo /O3 /Ges /E FullscreenVS /T vs_5_0 /Fh &quot;$(IntDir)crt-shaders\crt_fullscreen_vs.h&quot; /Vn g_crtFullscreenVs &quot;$(RepoRoot)src\component\shaders\crt_xy.hlsl&quot;" />
+    <Exec Command="&quot;$(WindowsSdkDir)bin\$(WindowsTargetPlatformVersion)\x64\fxc.exe&quot; /nologo /O3 /Ges /E DecayPS /T ps_5_0 /Fh &quot;$(IntDir)crt-shaders\crt_decay_ps.h&quot; /Vn g_crtDecayPs &quot;$(RepoRoot)src\component\shaders\crt_xy.hlsl&quot;" />
+    <Exec Command="&quot;$(WindowsSdkDir)bin\$(WindowsTargetPlatformVersion)\x64\fxc.exe&quot; /nologo /O3 /Ges /E BeamVS /T vs_5_0 /Fh &quot;$(IntDir)crt-shaders\crt_beam_vs.h&quot; /Vn g_crtBeamVs &quot;$(RepoRoot)src\component\shaders\crt_xy.hlsl&quot;" />
+    <Exec Command="&quot;$(WindowsSdkDir)bin\$(WindowsTargetPlatformVersion)\x64\fxc.exe&quot; /nologo /O3 /Ges /E BeamPS /T ps_5_0 /Fh &quot;$(IntDir)crt-shaders\crt_beam_ps.h&quot; /Vn g_crtBeamPs &quot;$(RepoRoot)src\component\shaders\crt_xy.hlsl&quot;" />
+    <Exec Command="&quot;$(WindowsSdkDir)bin\$(WindowsTargetPlatformVersion)\x64\fxc.exe&quot; /nologo /O3 /Ges /E CompositePS /T ps_5_0 /Fh &quot;$(IntDir)crt-shaders\crt_composite_ps.h&quot; /Vn g_crtCompositePs &quot;$(RepoRoot)src\component\shaders\crt_xy.hlsl&quot;" />
+  </Target>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

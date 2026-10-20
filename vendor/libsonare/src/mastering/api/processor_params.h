@@ -1,0 +1,935 @@
+#pragma once
+
+/// @file processor_params.h
+/// @brief Internal helpers shared by named_processor.cpp and insert_factory.cpp
+///        for turning a flat list of (key, value) params into processor configs.
+///
+/// This header is INTERNAL to the mastering API; it is not part of the public
+/// surface. It centralizes the param-name -> config-field mapping so the
+/// offline (named_processor) and streaming (insert_factory) paths stay in sync.
+
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <string>
+#include <type_traits>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
+
+#include "mastering/api/named_processor.h"
+#include "mastering/api/param_field_tables.h"
+#include "mastering/dynamics/brickwall_limiter.h"
+#include "mastering/dynamics/compressor.h"
+#include "mastering/dynamics/deesser.h"
+#include "mastering/dynamics/ducking_processor.h"
+#include "mastering/dynamics/expander.h"
+#include "mastering/dynamics/gate.h"
+#include "mastering/dynamics/limiter.h"
+#include "mastering/dynamics/parallel_comp.h"
+#include "mastering/dynamics/sidechain_router.h"
+#include "mastering/dynamics/transient_shaper.h"
+#include "mastering/dynamics/upward_compressor.h"
+#include "mastering/dynamics/upward_expander.h"
+#include "mastering/dynamics/vocal_rider.h"
+#include "mastering/eq/api_style.h"
+#include "mastering/eq/band_pass.h"
+#include "mastering/eq/cut_filter.h"
+#include "mastering/eq/dynamic_eq.h"
+#include "mastering/eq/equalizer.h"
+#include "mastering/eq/graphic_eq.h"
+#include "mastering/eq/linear_phase.h"
+#include "mastering/eq/mid_side_eq.h"
+#include "mastering/eq/minimum_phase.h"
+#include "mastering/eq/parametric.h"
+#include "mastering/eq/pultec.h"
+#include "mastering/eq/shelving.h"
+#include "mastering/eq/tilt.h"
+#include "mastering/final/dither.h"
+#include "mastering/maximizer/adaptive_release.h"
+#include "mastering/maximizer/maximizer.h"
+#include "mastering/maximizer/soft_knee_max.h"
+#include "mastering/maximizer/true_peak_limiter.h"
+#include "mastering/multiband/crossover.h"
+#include "mastering/multiband/multiband_compressor.h"
+#include "mastering/multiband/multiband_dynamic_eq.h"
+#include "mastering/multiband/multiband_expander.h"
+#include "mastering/multiband/multiband_imager.h"
+#include "mastering/multiband/multiband_limiter.h"
+#include "mastering/multiband/multiband_saturation.h"
+#include "mastering/saturation/amp_sim.h"
+#include "mastering/saturation/bitcrusher.h"
+#include "mastering/saturation/exciter.h"
+#include "mastering/saturation/hard_clipper.h"
+#include "mastering/saturation/multiband_exciter.h"
+#include "mastering/saturation/soft_clipper.h"
+#include "mastering/saturation/tape.h"
+#include "mastering/saturation/transformer.h"
+#include "mastering/saturation/tube.h"
+#include "mastering/saturation/waveshaper.h"
+#include "mastering/spectral/air_band.h"
+#include "mastering/spectral/low_end_focus.h"
+#include "mastering/spectral/presence_enhancer.h"
+#include "mastering/spectral/spectral_shaper.h"
+#include "mastering/stereo/auto_pan.h"
+#include "mastering/stereo/haas_enhancer.h"
+#include "mastering/stereo/imager.h"
+#include "mastering/stereo/mono_maker.h"
+#include "mastering/stereo/phase_align.h"
+#include "mastering/stereo/stereo_balance.h"
+#include "util/constants.h"
+#include "util/exception.h"
+
+namespace sonare::mastering::api::detail {
+
+/// @brief Flat (key -> value) param store that records which keys a config
+/// builder probes.
+///
+/// Every config builder reads a param through `find()` (directly, or via the
+/// `f` / `i` / `b` / `read_field` helpers below), and it probes a key even when
+/// that key is absent (it then falls back to the field's default). Recording
+/// each probed key therefore yields, for free and with no hand-maintained list:
+///   - the set of keys a processor *consumes* (probe an empty map -> the names
+///     it reads for a default configuration; see insert_param_names), and
+///   - the keys a caller supplied that *no* builder read (build the real map ->
+///     `unprobed_keys()`; these took no effect and are surfaced as warnings).
+/// The wrapper is a drop-in for the previous `std::unordered_map` alias: only
+/// `find` / `end` / `operator[]` are used across the param surface.
+class ParamMap {
+ public:
+  using Map = std::unordered_map<std::string, double>;
+  using const_iterator = Map::const_iterator;
+
+  /// @brief Inserts/overwrites a value (used only when building the map).
+  double& operator[](const std::string& key) { return map_[key]; }
+
+  /// @brief Looks up @p key, recording it as probed (whether present or not).
+  const_iterator find(const std::string& key) const {
+    probed_.insert(key);
+    return map_.find(key);
+  }
+  const_iterator find(const char* key) const {
+    probed_.insert(key);
+    return map_.find(key);
+  }
+  const_iterator end() const { return map_.end(); }
+
+  /// @brief Keys this processor read (probed) when built; reflects an empty map
+  /// as the names consumed for a default configuration.
+  const std::unordered_set<std::string>& probed_keys() const { return probed_; }
+
+  /// @brief Records the actual fallback value supplied by a config builder.
+  /// The insert factory uses this to publish authoritative reset/default
+  /// metadata instead of forcing hosts to reverse-engineer processor structs.
+  void record_default(const std::string& key, double value) const {
+    defaults_.insert_or_assign(key, value);
+  }
+
+  const std::unordered_map<std::string, double>& default_values() const {
+    return defaults_;
+  }
+
+  /// @brief Supplied keys that no builder probed, sorted for determinism. These
+  /// were silently ignored by the processor and are reported as warnings.
+  std::vector<std::string> unprobed_keys() const {
+    std::vector<std::string> out;
+    for (const auto& [key, value] : map_) {
+      (void)value;
+      if (probed_.find(key) == probed_.end()) out.push_back(key);
+    }
+    std::sort(out.begin(), out.end());
+    return out;
+  }
+
+ private:
+  Map map_;
+  mutable std::unordered_set<std::string> probed_;
+  mutable std::unordered_map<std::string, double> defaults_;
+};
+
+inline ParamMap make_map(const std::vector<Param>& params) {
+  ParamMap map;
+  for (const auto& param : params) {
+    if (!numeric::finite(param.value) ||
+        std::fabs(param.value) > static_cast<double>(std::numeric_limits<float>::max())) {
+      throw SonareException(ErrorCode::InvalidParameter,
+                            "mastering parameters must be finite and representable");
+    }
+    map[param.key] = param.value;
+  }
+  return map;
+}
+
+inline float f(const ParamMap& params, const char* key, float default_value) {
+  params.record_default(key, default_value);
+  auto it = params.find(key);
+  return it == params.end() ? default_value : static_cast<float>(it->second);
+}
+
+inline int i(const ParamMap& params, const char* key, int default_value) {
+  params.record_default(key, default_value);
+  auto it = params.find(key);
+  if (it == params.end()) return default_value;
+  int converted = 0;
+  if (!numeric::checked_round_cast(it->second, &converted)) {
+    throw SonareException(ErrorCode::InvalidParameter, "mastering integer parameter is invalid");
+  }
+  return converted;
+}
+
+inline bool b(const ParamMap& params, const char* key, bool default_value) {
+  params.record_default(key, default_value ? 1.0 : 0.0);
+  auto it = params.find(key);
+  return it == params.end() ? default_value : it->second != 0.0;
+}
+
+/// @brief Overlays a flat param onto a config field, leaving it untouched when
+/// the key is absent. Paired with the SONARE_FIELDS_* tables so a config
+/// builder is a single table expansion instead of one line per field.
+template <typename T>
+inline void read_field(const ParamMap& params, const char* key, T& dst) {
+  if constexpr (std::is_enum_v<T>) {
+    params.record_default(key, static_cast<double>(
+        static_cast<std::underlying_type_t<T>>(dst)));
+  } else {
+    params.record_default(key, static_cast<double>(dst));
+  }
+  auto it = params.find(key);
+  if (it != params.end()) assign_field(dst, it->second);
+}
+
+inline std::vector<float> cutoffs(const ParamMap& params) {
+  std::vector<float> values;
+  for (int index = 0; index < 8; ++index) {
+    const std::string key = "cutoff" + std::to_string(index) + "Hz";
+    auto it = params.find(key);
+    if (it != params.end()) {
+      values.push_back(static_cast<float>(it->second));
+    }
+  }
+  return values;
+}
+
+inline eq::EqBandType eq_band_type(int value) {
+  switch (value) {
+    case 1:
+      return eq::EqBandType::LowShelf;
+    case 2:
+      return eq::EqBandType::HighShelf;
+    case 3:
+      return eq::EqBandType::LowPass;
+    case 4:
+      return eq::EqBandType::HighPass;
+    case 5:
+      return eq::EqBandType::BandPass;
+    case 6:
+      return eq::EqBandType::Notch;
+    case 7:
+      return eq::EqBandType::TiltShelf;
+    case 8:
+      return eq::EqBandType::FlatTilt;
+    default:
+      return eq::EqBandType::Peak;
+  }
+}
+
+inline eq::StereoPlacement stereo_placement(int value) {
+  switch (value) {
+    case 1:
+      return eq::StereoPlacement::Left;
+    case 2:
+      return eq::StereoPlacement::Right;
+    case 3:
+      return eq::StereoPlacement::Mid;
+    case 4:
+      return eq::StereoPlacement::Side;
+    default:
+      return eq::StereoPlacement::Stereo;
+  }
+}
+
+inline eq::PhaseMode phase_mode(int value) {
+  switch (value) {
+    case 1:
+      return eq::PhaseMode::ZeroLatency;
+    case 2:
+      return eq::PhaseMode::NaturalPhase;
+    case 3:
+      return eq::PhaseMode::LinearPhase;
+    default:
+      return eq::PhaseMode::Inherit;
+  }
+}
+
+inline eq::BiquadCoeffMode coeff_mode(int value) {
+  switch (value) {
+    case 1:
+      return eq::BiquadCoeffMode::Vicanek;
+    default:
+      return eq::BiquadCoeffMode::Rbj;
+  }
+}
+
+inline bool has_eq_band_params(const ParamMap& params, const std::string& prefix) {
+  static constexpr const char* kFields[] = {
+      "type",
+      "frequencyHz",
+      "gainDb",
+      "q",
+      "enabled",
+      "coeffMode",
+      "slopeDbOct",
+      "placement",
+      "phase",
+      "soloed",
+      "bypassed",
+      "proportionalQ",
+      "proportionalQStrength",
+      "dynamic",
+      "thresholdDb",
+      "autoThreshold",
+      "ratio",
+      "rangeDb",
+      "attackMs",
+      "releaseMs",
+      "lookaheadMs",
+      "sidechainFreqHz",
+      "sidechainQ",
+  };
+  for (const char* field : kFields) {
+    if (params.find(prefix + field) != params.end()) return true;
+  }
+  return false;
+}
+
+inline eq::EqBand eq_band(const ParamMap& params, const std::string& prefix) {
+  eq::EqBand band;
+  band.type = eq_band_type(i(params, (prefix + "type").c_str(), 0));
+  band.coeff_mode = coeff_mode(i(params, (prefix + "coeffMode").c_str(), 0));
+  band.frequency_hz = f(params, (prefix + "frequencyHz").c_str(), band.frequency_hz);
+  band.gain_db = f(params, (prefix + "gainDb").c_str(), band.gain_db);
+  band.q = f(params, (prefix + "q").c_str(), band.q);
+  band.enabled = b(params, (prefix + "enabled").c_str(), true);
+  band.slope_db_oct = i(params, (prefix + "slopeDbOct").c_str(), band.slope_db_oct);
+  band.placement = stereo_placement(i(params, (prefix + "placement").c_str(), 0));
+  band.phase = phase_mode(i(params, (prefix + "phase").c_str(), 0));
+  band.soloed = b(params, (prefix + "soloed").c_str(), band.soloed);
+  band.bypassed = b(params, (prefix + "bypassed").c_str(), band.bypassed);
+  band.proportional_q = b(params, (prefix + "proportionalQ").c_str(), band.proportional_q);
+  band.proportional_q_strength =
+      f(params, (prefix + "proportionalQStrength").c_str(), band.proportional_q_strength);
+  band.dyn.enabled = b(params, (prefix + "dynamic").c_str(), band.dyn.enabled);
+  band.dyn.threshold_db = f(params, (prefix + "thresholdDb").c_str(), band.dyn.threshold_db);
+  band.dyn.auto_threshold = b(params, (prefix + "autoThreshold").c_str(), band.dyn.auto_threshold);
+  band.dyn.ratio = f(params, (prefix + "ratio").c_str(), band.dyn.ratio);
+  band.dyn.range_db = f(params, (prefix + "rangeDb").c_str(), band.dyn.range_db);
+  band.dyn.attack_ms = f(params, (prefix + "attackMs").c_str(), band.dyn.attack_ms);
+  band.dyn.release_ms = f(params, (prefix + "releaseMs").c_str(), band.dyn.release_ms);
+  band.dyn.lookahead_ms = f(params, (prefix + "lookaheadMs").c_str(), band.dyn.lookahead_ms);
+  band.dyn.sidechain_freq_hz =
+      f(params, (prefix + "sidechainFreqHz").c_str(), band.dyn.sidechain_freq_hz);
+  band.dyn.sidechain_q = f(params, (prefix + "sidechainQ").c_str(), band.dyn.sidechain_q);
+  return band;
+}
+
+inline void configure_parametric(eq::ParametricEq& processor, const ParamMap& params,
+                                 const std::string& prefix = "band") {
+  for (size_t index = 0; index < eq::ParametricEq::kMaxBands; ++index) {
+    const std::string band_prefix = prefix + std::to_string(index) + ".";
+    if (has_eq_band_params(params, band_prefix)) {
+      processor.set_band(index, eq_band(params, band_prefix));
+    }
+  }
+}
+
+inline void configure_equalizer(eq::EqualizerProcessor& processor, const ParamMap& params,
+                                const std::string& prefix = "band") {
+  processor.set_auto_gain_enabled(b(params, "autoGain", processor.auto_gain_enabled()));
+  processor.set_gain_scale(f(params, "gainScale", processor.gain_scale()));
+  processor.set_output_gain_db(f(params, "outputGainDb", processor.output_gain_db()));
+  processor.set_output_pan(f(params, "outputPan", processor.output_pan()));
+  processor.set_phase_mode(
+      phase_mode(i(params, "phaseMode", static_cast<int>(processor.phase_mode()))));
+  for (size_t index = 0; index < eq::EqualizerProcessor::kMaxBands; ++index) {
+    const std::string band_prefix = prefix + std::to_string(index) + ".";
+    if (has_eq_band_params(params, band_prefix)) {
+      processor.set_band(index, eq_band(params, band_prefix));
+    }
+  }
+}
+
+// Expands one SONARE_FIELDS_* table row into a field overlay. A config builder
+// is then just `Config config; SONARE_FIELDS_X(SONARE_READ_FIELD); return ...`,
+// equivalent to the prior per-field `config.x = f(params, "x", config.x)` lines.
+#define SONARE_READ_FIELD(key, member) read_field(params, key, config.member);
+
+inline dynamics::CompressorConfig compressor_config(const ParamMap& params) {
+  dynamics::CompressorConfig config;
+  SONARE_FIELDS_COMPRESSOR(SONARE_READ_FIELD)
+  return config;
+}
+
+inline dynamics::LimiterConfig limiter_config(const ParamMap& params) {
+  dynamics::LimiterConfig config;
+  SONARE_FIELDS_LIMITER(SONARE_READ_FIELD)
+  return config;
+}
+
+inline multiband::CrossoverConfig crossover_config(const ParamMap& params) {
+  multiband::CrossoverConfig config;
+  auto values = cutoffs(params);
+  if (!values.empty()) {
+    config.cutoffs_hz = values;
+  }
+  config.slope = static_cast<multiband::CrossoverSlope>(i(params, "slope", 1));
+  config.mode = static_cast<multiband::CrossoverMode>(i(params, "mode", 0));
+  config.fir_kernel_size = i(params, "firKernelSize", config.fir_kernel_size);
+  return config;
+}
+
+// ---------------------------------------------------------------------------
+// Multiband per-band population
+//
+// Each multiband processor exposes its sub-bands through a `band{i}.<field>`
+// flat-key convention (matching multiband_exciter_config()). The crossover
+// config decides how many bands exist; these helpers first resize the `bands`
+// vector to match the crossover (one more band than cutoffs) -- preserving the
+// factory defaults at overlapping indices and default-constructing any extra
+// bands -- then overlay any caller-supplied per-band fields onto those defaults
+// so they are not silently ignored. Resizing here is what lets an arbitrary
+// (non-default) cutoff count reach validate_config() with a matching band count
+// instead of hard-failing the "band count must match crossover" check.
+// ---------------------------------------------------------------------------
+
+// Resize @p bands to `cutoffs + 1` to match the crossover's band count, keeping
+// any existing per-band defaults at overlapping indices.
+template <typename BandConfig>
+inline void resize_bands_to_crossover(std::vector<BandConfig>& bands,
+                                      const multiband::CrossoverConfig& crossover) {
+  bands.resize(crossover.cutoffs_hz.size() + 1);
+}
+
+inline void populate_compressor_bands(multiband::MultibandCompressorConfig& config,
+                                      const ParamMap& params) {
+  resize_bands_to_crossover(config.bands, config.crossover);
+  for (size_t index = 0; index < config.bands.size(); ++index) {
+    const std::string prefix = "band" + std::to_string(index) + ".";
+    auto& band = config.bands[index];
+    band.threshold_db = f(params, (prefix + "thresholdDb").c_str(), band.threshold_db);
+    band.ratio = f(params, (prefix + "ratio").c_str(), band.ratio);
+    band.attack_ms = f(params, (prefix + "attackMs").c_str(), band.attack_ms);
+    band.release_ms = f(params, (prefix + "releaseMs").c_str(), band.release_ms);
+    band.knee_db = f(params, (prefix + "kneeDb").c_str(), band.knee_db);
+    band.makeup_gain_db = f(params, (prefix + "makeupGainDb").c_str(), band.makeup_gain_db);
+  }
+}
+
+inline void populate_expander_bands(multiband::MultibandExpanderConfig& config,
+                                    const ParamMap& params) {
+  resize_bands_to_crossover(config.bands, config.crossover);
+  for (size_t index = 0; index < config.bands.size(); ++index) {
+    const std::string prefix = "band" + std::to_string(index) + ".";
+    auto& band = config.bands[index];
+    band.threshold_db = f(params, (prefix + "thresholdDb").c_str(), band.threshold_db);
+    band.ratio = f(params, (prefix + "ratio").c_str(), band.ratio);
+    band.attack_ms = f(params, (prefix + "attackMs").c_str(), band.attack_ms);
+    band.release_ms = f(params, (prefix + "releaseMs").c_str(), band.release_ms);
+    band.range_db = f(params, (prefix + "rangeDb").c_str(), band.range_db);
+  }
+}
+
+inline void populate_limiter_bands(multiband::MultibandLimiterConfig& config,
+                                   const ParamMap& params) {
+  resize_bands_to_crossover(config.bands, config.crossover);
+  for (size_t index = 0; index < config.bands.size(); ++index) {
+    const std::string prefix = "band" + std::to_string(index) + ".";
+    auto& band = config.bands[index];
+    band.threshold_db = f(params, (prefix + "thresholdDb").c_str(), band.threshold_db);
+    band.lookahead_ms = f(params, (prefix + "lookaheadMs").c_str(), band.lookahead_ms);
+    band.release_ms = f(params, (prefix + "releaseMs").c_str(), band.release_ms);
+  }
+}
+
+inline void populate_saturation_bands(multiband::MultibandSaturationConfig& config,
+                                      const ParamMap& params) {
+  resize_bands_to_crossover(config.bands, config.crossover);
+  for (size_t index = 0; index < config.bands.size(); ++index) {
+    const std::string prefix = "band" + std::to_string(index) + ".";
+    auto& band = config.bands[index];
+    band.drive_db = f(params, (prefix + "driveDb").c_str(), band.drive_db);
+    band.mix = f(params, (prefix + "mix").c_str(), band.mix);
+    band.output_gain_db = f(params, (prefix + "outputGainDb").c_str(), band.output_gain_db);
+  }
+}
+
+// Resize the imager bands to match the crossover, then overlay per-band fields
+// (band{i}.width / .decorrelationAmount / .enabled / .preserveEnergy) so a
+// non-default crossover works and per-band settings are not silently dropped.
+inline void populate_imager_bands(multiband::MultibandImagerConfig& config,
+                                  const ParamMap& params) {
+  resize_bands_to_crossover(config.bands, config.crossover);
+  for (size_t index = 0; index < config.bands.size(); ++index) {
+    const std::string prefix = "band" + std::to_string(index) + ".";
+    auto& band = config.bands[index];
+    band.width = f(params, (prefix + "width").c_str(), band.width);
+    band.decorrelation_amount =
+        f(params, (prefix + "decorrelationAmount").c_str(), band.decorrelation_amount);
+    band.enabled = b(params, (prefix + "enabled").c_str(), band.enabled);
+    band.preserve_energy = b(params, (prefix + "preserveEnergy").c_str(), band.preserve_energy);
+  }
+}
+
+// Resize the dynamic-EQ crossover bands to match the crossover, then read each
+// crossover band's list of dynamic sub-bands from band{i}.dyn{j}.<field> keys.
+// A sub-band is created only when its frequency key is present (mirroring
+// configure_dynamic_eq_bands for the single-band DynamicEq insert).
+inline void populate_dynamic_eq_bands(multiband::MultibandDynamicEqConfig& config,
+                                      const ParamMap& params) {
+  config.bands.resize(config.crossover.cutoffs_hz.size() + 1);
+  for (size_t index = 0; index < config.bands.size(); ++index) {
+    auto& dyn_bands = config.bands[index];
+    dyn_bands.clear();
+    for (size_t sub = 0; sub < eq::DynamicEq::kMaxBands; ++sub) {
+      const std::string prefix =
+          "band" + std::to_string(index) + ".dyn" + std::to_string(sub) + ".";
+      if (params.find(prefix + "frequencyHz") == params.end()) {
+        continue;
+      }
+      eq::DynamicEqBand band;
+      band.type = eq_band_type(i(params, (prefix + "type").c_str(), 0));
+      band.frequency_hz = f(params, (prefix + "frequencyHz").c_str(), band.frequency_hz);
+      band.static_gain_db = f(params, (prefix + "staticGainDb").c_str(), band.static_gain_db);
+      band.q = f(params, (prefix + "q").c_str(), band.q);
+      band.threshold_db = f(params, (prefix + "thresholdDb").c_str(), band.threshold_db);
+      band.ratio = f(params, (prefix + "ratio").c_str(), band.ratio);
+      band.range_db = f(params, (prefix + "rangeDb").c_str(), band.range_db);
+      band.enabled = b(params, (prefix + "enabled").c_str(), true);
+      band.sidechain_q = f(params, (prefix + "sidechainQ").c_str(), band.sidechain_q);
+      band.sidechain_freq_hz =
+          f(params, (prefix + "sidechainFreqHz").c_str(), band.sidechain_freq_hz);
+      band.attack_ms = f(params, (prefix + "attackMs").c_str(), band.attack_ms);
+      band.release_ms = f(params, (prefix + "releaseMs").c_str(), band.release_ms);
+      band.lookahead_ms = f(params, (prefix + "lookaheadMs").c_str(), band.lookahead_ms);
+      dyn_bands.push_back(band);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Dynamics
+// ---------------------------------------------------------------------------
+
+inline dynamics::BrickwallLimiterConfig brickwall_limiter_config(const ParamMap& params) {
+  dynamics::BrickwallLimiterConfig config;
+  SONARE_FIELDS_BRICKWALL_LIMITER(SONARE_READ_FIELD)
+  return config;
+}
+
+inline dynamics::DeEsserConfig deesser_config(const ParamMap& params) {
+  dynamics::DeEsserConfig config;
+  SONARE_FIELDS_DEESSER(SONARE_READ_FIELD)
+  return config;
+}
+
+inline dynamics::ExpanderConfig expander_config(const ParamMap& params) {
+  dynamics::ExpanderConfig config;
+  SONARE_FIELDS_EXPANDER(SONARE_READ_FIELD)
+  return config;
+}
+
+inline dynamics::GateConfig gate_config(const ParamMap& params) {
+  dynamics::GateConfig config;
+  SONARE_FIELDS_GATE(SONARE_READ_FIELD)
+  return config;
+}
+
+inline dynamics::ParallelCompConfig parallel_comp_config(const ParamMap& params) {
+  dynamics::ParallelCompConfig config;
+  SONARE_FIELDS_PARALLEL_COMP(SONARE_READ_FIELD)
+  return config;
+}
+
+inline dynamics::SidechainRouterConfig sidechain_router_config(const ParamMap& params) {
+  dynamics::SidechainRouterConfig config;
+  SONARE_FIELDS_SIDECHAIN_ROUTER(SONARE_READ_FIELD)
+  return config;
+}
+
+inline dynamics::DuckingConfig ducking_config(const ParamMap& params) {
+  dynamics::DuckingConfig config;
+  SONARE_FIELDS_DUCKING(SONARE_READ_FIELD)
+  return config;
+}
+
+inline dynamics::TransientShaperConfig transient_shaper_config(const ParamMap& params) {
+  dynamics::TransientShaperConfig config;
+  SONARE_FIELDS_TRANSIENT_SHAPER(SONARE_READ_FIELD)
+  return config;
+}
+
+inline dynamics::UpwardCompressorConfig upward_compressor_config(const ParamMap& params) {
+  dynamics::UpwardCompressorConfig config;
+  SONARE_FIELDS_UPWARD_COMPRESSOR(SONARE_READ_FIELD)
+  return config;
+}
+
+inline dynamics::UpwardExpanderConfig upward_expander_config(const ParamMap& params) {
+  dynamics::UpwardExpanderConfig config;
+  SONARE_FIELDS_UPWARD_EXPANDER(SONARE_READ_FIELD)
+  return config;
+}
+
+inline dynamics::VocalRiderConfig vocal_rider_config(const ParamMap& params) {
+  dynamics::VocalRiderConfig config;
+  SONARE_FIELDS_VOCAL_RIDER(SONARE_READ_FIELD)
+  return config;
+}
+
+// ---------------------------------------------------------------------------
+// EQ (setter-based and config-based)
+// ---------------------------------------------------------------------------
+
+inline void configure_tilt(eq::TiltEq& p, const ParamMap& params) {
+  p.set_tilt_db(f(params, "tiltDb", 0.0f));
+  p.set_pivot_hz(f(params, "pivotHz", 1000.0f));
+}
+
+inline void configure_api_style(eq::ApiStyleEq& p, const ParamMap& params) {
+  p.set_band(eq::ApiStyleEq::Band::Low, f(params, "lowFrequencyHz", 100.0f),
+             f(params, "lowGainDb", 0.0f));
+  p.set_band(eq::ApiStyleEq::Band::LowMid, f(params, "lowMidFrequencyHz", 400.0f),
+             f(params, "lowMidGainDb", 0.0f));
+  p.set_band(eq::ApiStyleEq::Band::HighMid, f(params, "highMidFrequencyHz", 3000.0f),
+             f(params, "highMidGainDb", 0.0f));
+  p.set_band(eq::ApiStyleEq::Band::High, f(params, "highFrequencyHz", 10000.0f),
+             f(params, "highGainDb", 0.0f));
+}
+
+inline void configure_minimum_phase(eq::MinimumPhaseEq& p, const ParamMap& params) {
+  for (size_t index = 0; index < eq::MinimumPhaseEq::kMaxBands; ++index) {
+    const std::string prefix = "band" + std::to_string(index) + ".";
+    if (params.find(prefix + "frequencyHz") != params.end() ||
+        params.find(prefix + "gainDb") != params.end()) {
+      p.set_band(index, eq_band(params, prefix));
+    }
+  }
+}
+
+inline eq::LinearPhaseEqConfig linear_phase_config(const ParamMap& params) {
+  eq::LinearPhaseEqConfig config;
+  config.resolution = static_cast<eq::LinearPhaseEqConfig::Resolution>(i(params, "resolution", 0));
+  config.fft_size = i(params, "fftSize", config.fft_size);
+  config.kernel_size = i(params, "kernelSize", config.kernel_size);
+  config.use_partitioned_convolution =
+      b(params, "usePartitionedConvolution", config.use_partitioned_convolution);
+  config.partition_size = i(params, "partitionSize", config.partition_size);
+  return config;
+}
+
+inline eq::EqualizerProcessorConfig equalizer_config(const ParamMap& params, int max_channels) {
+  eq::EqualizerProcessorConfig config;
+  config.max_channels = max_channels;
+  config.linear_phase_config = linear_phase_config(params);
+  return config;
+}
+
+inline void configure_linear_phase_bands(eq::LinearPhaseEq& p, const ParamMap& params) {
+  for (size_t index = 0; index < eq::LinearPhaseEq::kMaxBands; ++index) {
+    const std::string prefix = "band" + std::to_string(index) + ".";
+    if (params.find(prefix + "frequencyHz") != params.end() ||
+        params.find(prefix + "gainDb") != params.end()) {
+      p.set_band(index, eq_band(params, prefix));
+    }
+  }
+}
+
+inline void configure_dynamic_eq_bands(eq::DynamicEq& p, const ParamMap& params) {
+  for (size_t index = 0; index < eq::DynamicEq::kMaxBands; ++index) {
+    const std::string prefix = "band" + std::to_string(index) + ".";
+    if (params.find(prefix + "frequencyHz") != params.end()) {
+      eq::DynamicEqBand band;
+      band.type = eq_band_type(i(params, (prefix + "type").c_str(), 0));
+      band.frequency_hz = f(params, (prefix + "frequencyHz").c_str(), band.frequency_hz);
+      band.static_gain_db = f(params, (prefix + "staticGainDb").c_str(), band.static_gain_db);
+      band.q = f(params, (prefix + "q").c_str(), band.q);
+      band.threshold_db = f(params, (prefix + "thresholdDb").c_str(), band.threshold_db);
+      band.ratio = f(params, (prefix + "ratio").c_str(), band.ratio);
+      band.range_db = f(params, (prefix + "rangeDb").c_str(), band.range_db);
+      band.enabled = b(params, (prefix + "enabled").c_str(), true);
+      band.sidechain_q = f(params, (prefix + "sidechainQ").c_str(), band.sidechain_q);
+      band.sidechain_freq_hz =
+          f(params, (prefix + "sidechainFreqHz").c_str(), band.sidechain_freq_hz);
+      band.attack_ms = f(params, (prefix + "attackMs").c_str(), band.attack_ms);
+      band.release_ms = f(params, (prefix + "releaseMs").c_str(), band.release_ms);
+      band.lookahead_ms = f(params, (prefix + "lookaheadMs").c_str(), band.lookahead_ms);
+      p.set_band(index, band);
+    }
+  }
+}
+
+inline void configure_pultec(eq::PultecEq& p, const ParamMap& params) {
+  p.set_low_frequency(f(params, "lowFrequencyHz", 60.0f));
+  p.set_low_boost(f(params, "lowBoost", 0.0f));
+  p.set_low_attenuation(f(params, "lowAttenuation", 0.0f));
+  p.set_high_boost(f(params, "highBoostFrequencyHz", 8000.0f), f(params, "highBoost", 0.0f),
+                   f(params, "highBandwidth", 0.5f));
+  p.set_high_attenuation(f(params, "highAttenuationFrequencyHz", 10000.0f),
+                         f(params, "highAttenuation", 0.0f));
+  p.set_component_model(static_cast<eq::PultecComponentModel>(i(params, "componentModel", 0)));
+  p.set_output_drive(f(params, "outputDrive", 0.0f));
+}
+
+inline void configure_cut_filter(eq::CutFilter& p, const ParamMap& params) {
+  p.set_high_pass(f(params, "highPassFrequencyHz", 20.0f),
+                  f(params, "highPassQ", constants::kButterworthQ),
+                  static_cast<eq::CutFilterSlope>(i(params, "highPassSlope", 0)),
+                  b(params, "highPassEnabled", false));
+  p.set_low_pass(f(params, "lowPassFrequencyHz", 20000.0f),
+                 f(params, "lowPassQ", constants::kButterworthQ),
+                 static_cast<eq::CutFilterSlope>(i(params, "lowPassSlope", 0)),
+                 b(params, "lowPassEnabled", false));
+}
+
+inline void configure_band_pass(eq::BandPassEq& p, const ParamMap& params) {
+  p.set_band_pass(f(params, "bandPassFrequencyHz", 1000.0f), f(params, "bandPassQ", 1.0f),
+                  b(params, "bandPassEnabled", true));
+  p.set_notch(f(params, "notchFrequencyHz", 1000.0f), f(params, "notchQ", 1.0f),
+              b(params, "notchEnabled", false));
+}
+
+inline void configure_shelving(eq::ShelvingEq& p, const ParamMap& params) {
+  p.set_low_shelf(f(params, "lowFrequencyHz", 100.0f), f(params, "lowGainDb", 0.0f),
+                  f(params, "lowQ", constants::kButterworthQ), b(params, "lowEnabled", true));
+  p.set_high_shelf(f(params, "highFrequencyHz", 10000.0f), f(params, "highGainDb", 0.0f),
+                   f(params, "highQ", constants::kButterworthQ), b(params, "highEnabled", true));
+}
+
+inline void configure_graphic(eq::GraphicEq& p, const ParamMap& params) {
+  for (size_t index = 0; index < eq::GraphicEq::kNumBands; ++index) {
+    const std::string key = "band" + std::to_string(index) + "GainDb";
+    if (params.find(key) != params.end()) p.set_gain_db(index, f(params, key.c_str(), 0.0f));
+  }
+}
+
+inline void configure_mid_side(eq::MidSideEq& p, const ParamMap& params) {
+  for (size_t index = 0; index < eq::MidSideEq::kMaxBands; ++index) {
+    const std::string mid = "midBand" + std::to_string(index) + ".";
+    const std::string side = "sideBand" + std::to_string(index) + ".";
+    if (params.find(mid + "frequencyHz") != params.end() ||
+        params.find(mid + "gainDb") != params.end()) {
+      p.set_mid_band(index, eq_band(params, mid));
+    }
+    if (params.find(side + "frequencyHz") != params.end() ||
+        params.find(side + "gainDb") != params.end()) {
+      p.set_side_band(index, eq_band(params, side));
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Saturation
+// ---------------------------------------------------------------------------
+
+inline saturation::TapeConfig tape_config(const ParamMap& params) {
+  saturation::TapeConfig config;
+  SONARE_FIELDS_TAPE(SONARE_READ_FIELD)
+  return config;
+}
+
+inline saturation::ExciterConfig exciter_config(const ParamMap& params) {
+  saturation::ExciterConfig config;
+  SONARE_FIELDS_EXCITER(SONARE_READ_FIELD)
+  return config;
+}
+
+inline saturation::BitCrusherConfig bitcrusher_config(const ParamMap& params) {
+  saturation::BitCrusherConfig config;
+  SONARE_FIELDS_BITCRUSHER(SONARE_READ_FIELD)
+  return config;
+}
+
+inline saturation::HardClipperConfig hard_clipper_config(const ParamMap& params) {
+  saturation::HardClipperConfig config;
+  SONARE_FIELDS_HARD_CLIPPER(SONARE_READ_FIELD)
+  return config;
+}
+
+inline saturation::SoftClipperConfig soft_clipper_config(const ParamMap& params) {
+  saturation::SoftClipperConfig config;
+  SONARE_FIELDS_SOFT_CLIPPER(SONARE_READ_FIELD)
+  return config;
+}
+
+inline saturation::WaveshaperConfig waveshaper_config(const ParamMap& params) {
+  saturation::WaveshaperConfig config;
+  SONARE_FIELDS_WAVESHAPER(SONARE_READ_FIELD)
+  return config;
+}
+
+inline saturation::TubeConfig tube_config(const ParamMap& params) {
+  saturation::TubeConfig config;
+  SONARE_FIELDS_TUBE(SONARE_READ_FIELD)
+  return config;
+}
+
+inline saturation::TransformerConfig transformer_config(const ParamMap& params) {
+  saturation::TransformerConfig config;
+  SONARE_FIELDS_TRANSFORMER(SONARE_READ_FIELD)
+  return config;
+}
+
+inline saturation::MultibandExciterConfig multiband_exciter_config(const ParamMap& params) {
+  saturation::MultibandExciterConfig config;
+  config.crossover = crossover_config(params);
+  for (size_t index = 0; index < config.bands.size(); ++index) {
+    const std::string prefix = "band" + std::to_string(index) + ".";
+    config.bands[index].frequency_hz =
+        f(params, (prefix + "frequencyHz").c_str(), config.bands[index].frequency_hz);
+    config.bands[index].drive_db =
+        f(params, (prefix + "driveDb").c_str(), config.bands[index].drive_db);
+    config.bands[index].amount = f(params, (prefix + "amount").c_str(), config.bands[index].amount);
+    config.bands[index].q = f(params, (prefix + "q").c_str(), config.bands[index].q);
+    config.bands[index].even_odd_mix =
+        f(params, (prefix + "evenOddMix").c_str(), config.bands[index].even_odd_mix);
+  }
+  return config;
+}
+
+inline saturation::CabModel cab_model(int value) {
+  return value == 1 ? saturation::CabModel::kBass8x10 : saturation::CabModel::kGuitar4x12;
+}
+
+inline saturation::AmpModel amp_model(int value) {
+  switch (value) {
+    case 1:
+      return saturation::AmpModel::kFenderClean;
+    case 2:
+      return saturation::AmpModel::kModernHiGain;
+    case 3:
+      return saturation::AmpModel::kTweed;
+    case 4:
+      return saturation::AmpModel::kVoxChime;
+    case 5:
+      return saturation::AmpModel::kRectifier;
+    default:
+      return saturation::AmpModel::kClassicCrunch;
+  }
+}
+
+inline saturation::AmpSimConfig amp_sim_config(const ParamMap& params) {
+  saturation::AmpSimConfig config;
+  config.drive = f(params, "drive", config.drive);
+  config.bass_db = f(params, "bassDb", config.bass_db);
+  config.mid_db = f(params, "midDb", config.mid_db);
+  config.treble_db = f(params, "trebleDb", config.treble_db);
+  config.presence_db = f(params, "presenceDb", config.presence_db);
+  config.cab = b(params, "cab", config.cab);
+  config.cab_model = cab_model(i(params, "cabModel", 0));
+  config.amp_model = amp_model(i(params, "ampModel", 0));
+  config.level_db = f(params, "levelDb", config.level_db);
+  config.power = f(params, "power", config.power);
+  config.sag = f(params, "sag", config.sag);
+  config.transformer = f(params, "transformer", config.transformer);
+  config.nfb = f(params, "nfb", config.nfb);
+  return config;
+}
+
+// ---------------------------------------------------------------------------
+// Spectral
+// ---------------------------------------------------------------------------
+
+inline spectral::AirBandConfig air_band_config(const ParamMap& params) {
+  spectral::AirBandConfig config;
+  SONARE_FIELDS_AIR_BAND(SONARE_READ_FIELD)
+  return config;
+}
+
+inline spectral::LowEndFocusConfig low_end_focus_config(const ParamMap& params) {
+  spectral::LowEndFocusConfig config;
+  SONARE_FIELDS_LOW_END_FOCUS(SONARE_READ_FIELD)
+  return config;
+}
+
+inline spectral::PresenceEnhancerConfig presence_enhancer_config(const ParamMap& params) {
+  spectral::PresenceEnhancerConfig config;
+  SONARE_FIELDS_PRESENCE_ENHANCER(SONARE_READ_FIELD)
+  return config;
+}
+
+inline spectral::SpectralShaperConfig spectral_shaper_config(const ParamMap& params) {
+  spectral::SpectralShaperConfig config;
+  SONARE_FIELDS_SPECTRAL_SHAPER(SONARE_READ_FIELD)
+  return config;
+}
+
+// ---------------------------------------------------------------------------
+// Stereo
+// ---------------------------------------------------------------------------
+
+inline stereo::AutoPanConfig auto_pan_config(const ParamMap& params) {
+  stereo::AutoPanConfig config;
+  SONARE_FIELDS_AUTO_PAN(SONARE_READ_FIELD)
+  return config;
+}
+
+inline stereo::HaasEnhancerConfig haas_enhancer_config(const ParamMap& params) {
+  stereo::HaasEnhancerConfig config;
+  SONARE_FIELDS_HAAS_ENHANCER(SONARE_READ_FIELD)
+  return config;
+}
+
+inline stereo::ImagerConfig imager_config(const ParamMap& params) {
+  stereo::ImagerConfig config;
+  SONARE_FIELDS_IMAGER(SONARE_READ_FIELD)
+  SONARE_CHECK_RANGE("stereo.imager.width", config.width, 0.0f, 2.0f);
+  SONARE_CHECK_RANGE("stereo.imager.decorrelationAmount", config.decorrelation_amount, 0.0f, 1.0f);
+  return config;
+}
+
+inline stereo::MonoMakerConfig mono_maker_config(const ParamMap& params) {
+  stereo::MonoMakerConfig config;
+  SONARE_FIELDS_MONO_MAKER(SONARE_READ_FIELD)
+  return config;
+}
+
+inline stereo::PhaseAlignConfig phase_align_config(const ParamMap& params) {
+  stereo::PhaseAlignConfig config;
+  SONARE_FIELDS_PHASE_ALIGN(SONARE_READ_FIELD)
+  return config;
+}
+
+inline stereo::StereoBalanceConfig stereo_balance_config(const ParamMap& params) {
+  stereo::StereoBalanceConfig config;
+  SONARE_FIELDS_STEREO_BALANCE(SONARE_READ_FIELD)
+  return config;
+}
+
+// ---------------------------------------------------------------------------
+// Maximizer
+// ---------------------------------------------------------------------------
+
+inline maximizer::MaximizerConfig maximizer_config(const ParamMap& params) {
+  maximizer::MaximizerConfig config;
+  SONARE_FIELDS_MAXIMIZER(SONARE_READ_FIELD)
+  return config;
+}
+
+inline maximizer::TruePeakLimiterConfig true_peak_limiter_config(const ParamMap& params) {
+  maximizer::TruePeakLimiterConfig config;
+  SONARE_FIELDS_TRUE_PEAK_LIMITER(SONARE_READ_FIELD)
+  return config;
+}
+
+inline maximizer::SoftKneeMaxConfig soft_knee_max_config(const ParamMap& params) {
+  maximizer::SoftKneeMaxConfig config;
+  SONARE_FIELDS_SOFT_KNEE_MAX(SONARE_READ_FIELD)
+  return config;
+}
+
+inline maximizer::AdaptiveReleaseConfig adaptive_release_config(const ParamMap& params) {
+  maximizer::AdaptiveReleaseConfig config;
+  SONARE_FIELDS_ADAPTIVE_RELEASE(SONARE_READ_FIELD)
+  return config;
+}
+
+}  // namespace sonare::mastering::api::detail

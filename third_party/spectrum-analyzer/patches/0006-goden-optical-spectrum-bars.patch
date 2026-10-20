@@ -1,0 +1,177 @@
+diff --git a/Visuals/Spectrum/Spectrum.cpp b/Visuals/Spectrum/Spectrum.cpp
+index fd23918..7286dec 100644
+--- a/Visuals/Spectrum/Spectrum.cpp
++++ b/Visuals/Spectrum/Spectrum.cpp
+@@ -172,13 +172,49 @@ void spectrum_t::RenderBars(ID2D1DeviceContext * deviceContext) noexcept
+     if (_Settings->_HorizontalAlignment != HorizontalAlignment::Fit)
+         t = std::floor(t);
+ 
+-    const FLOAT BarWidth = std::max(t, 2.f); // In DIP
+-    const FLOAT SpectrumWidth = BarWidth * (FLOAT) _Analysis->_FrequencyBands.size();
++    // BandPitch is the immutable musical grid: every one of the 120 notes owns
++    // exactly one cell. BodyWidth is only the optical ink inside that cell. A
++    // fixed one-DIP gap made the bars look hair-thin in compact windows and
++    // comically wide on ultrawide windows, even though the note distribution
++    // itself was correct.
++    const FLOAT BandPitch = std::max(t, 2.f); // In DIP
++    const FLOAT SpectrumWidth = BandPitch * (FLOAT) _Analysis->_FrequencyBands.size();
++
++    FLOAT dpiX = 96.f;
++    FLOAT dpiY = 96.f;
++    deviceContext->GetDpi(&dpiX, &dpiY);
++    const FLOAT pixelScale = std::max(dpiX / 96.f, 0.25f);
++    const FLOAT physicalPixel = 1.f / pixelScale;
++    const FLOAT minimumGap = std::min(0.75f, BandPitch * 0.18f);
++    const FLOAT maximumBody = std::max(physicalPixel, BandPitch - minimumGap);
++    const FLOAT preferredBody = std::clamp(BandPitch * 0.80f, 3.5f, 7.5f);
++    const FLOAT BodyWidth = std::min(
++        std::max(physicalPixel,
++            std::round(std::min(preferredBody, maximumBody) * pixelScale) /
++                pixelScale),
++        BandPitch);
++    const FLOAT BodyInset = (BandPitch - BodyWidth) / 2.f;
++
++    const auto GetBodyRect = [this, BandPitch, BodyWidth, BodyInset,
++        pixelScale](FLOAT cellLeft) noexcept
++    {
++        const FLOAT cellRight = cellLeft + BandPitch;
++        const FLOAT left = std::round((cellLeft + BodyInset) * pixelScale) /
++            pixelScale;
++        return D2D1_RECT_F
++        {
++            std::clamp(left, 0.f, _ClientSize.width),
++            0.f,
++            std::clamp(std::min(left + BodyWidth, cellRight),
++                0.f, _ClientSize.width),
++            _ClientSize.height
++        };
++    };
+ 
+     const FLOAT HOffset = GetHOffset(_Settings->_HorizontalAlignment, _ClientSize.width - SpectrumWidth);
+ 
+     FLOAT x1 = HOffset;
+-    FLOAT x2 = x1 + BarWidth;
++    FLOAT x2 = x1 + BandPitch;
+ 
+     deviceContext->SetAntialiasMode( D2D1_ANTIALIAS_MODE_ALIASED); // Required by FillOpacityMask() and results in crispier graphics.
+ 
+@@ -189,7 +224,10 @@ void spectrum_t::RenderBars(ID2D1DeviceContext * deviceContext) noexcept
+         x1 = std::clamp(x1, 0.f, _ClientSize.width);
+         x2 = std::clamp(x2, 0.f, _ClientSize.width);
+ 
+-        D2D1_RECT_F Rect = { x1, 0.f, x2 - 1.f, _ClientSize.height};
++        // The musical-key background still owns the complete cell. Only the
++        // signal body uses optical width, so the note grid never develops
++        // empty gutters on a wide panel.
++        D2D1_RECT_F Rect = { x1, 0.f, x2, _ClientSize.height};
+ 
+         // Draw the bar background, even above the Nyquist frequency.
+         if (fb.HasDarkBackground)
+@@ -204,17 +242,17 @@ void spectrum_t::RenderBars(ID2D1DeviceContext * deviceContext) noexcept
+         }
+ 
+         x1 = x2;
+-        x2 = x1 + BarWidth;
++        x2 = x1 + BandPitch;
+     }
+ 
+     if (_State->_IsPaused && !_State->_VisualizeDuringPause)
+         return;
+ 
+     UpdateNekoTemporalLayers();
+-    RenderNekoTemporalLayers(deviceContext, BarWidth, HOffset);
++    RenderNekoTemporalLayers(deviceContext, BandPitch, BodyWidth, HOffset);
+ 
+     x1 = HOffset;
+-    x2 = x1 + BarWidth;
++    x2 = x1 + BandPitch;
+ 
+     // The current artwork-derived body and peak marks are deliberately last.
+     // The slower secondary exposure remains visible only where the signal has
+@@ -224,7 +262,7 @@ void spectrum_t::RenderBars(ID2D1DeviceContext * deviceContext) noexcept
+         x1 = std::clamp(x1, 0.f, _ClientSize.width);
+         x2 = std::clamp(x2, 0.f, _ClientSize.width);
+ 
+-        D2D1_RECT_F Rect = { x1, 0.f, x2 - 1.f, _ClientSize.height };
++        D2D1_RECT_F Rect = GetBodyRect(x1);
+         const bool GreaterThanNyquist = fb.Lo >= _Analysis->_NyquistFrequency;
+ 
+         if (!GreaterThanNyquist || !_State->_SuppressMirrorImage)
+@@ -237,7 +275,7 @@ void spectrum_t::RenderBars(ID2D1DeviceContext * deviceContext) noexcept
+         }
+ 
+         x1 = x2;
+-        x2 = x1 + BarWidth;
++        x2 = x1 + BandPitch;
+     }
+ }
+ 
+@@ -260,7 +298,7 @@ void spectrum_t::UpdateNekoTemporalLayers() noexcept
+ /// Draws the slow artwork-derived shadow. It reuses the analyzer bins and
+ /// allocates only when the band count changes.
+ /// </summary>
+-void spectrum_t::RenderNekoTemporalLayers(ID2D1DeviceContext * deviceContext, FLOAT barWidth, FLOAT horizontalOffset) noexcept
++void spectrum_t::RenderNekoTemporalLayers(ID2D1DeviceContext * deviceContext, FLOAT bandPitch, FLOAT bodyWidth, FLOAT horizontalOffset) noexcept
+ {
+     const auto & shadow = _NekoDoubleExposure.Shadow();
+ 
+@@ -269,23 +307,43 @@ void spectrum_t::RenderNekoTemporalLayers(ID2D1DeviceContext * deviceContext, FL
+ 
+     deviceContext->SetAntialiasMode(D2D1_ANTIALIAS_MODE_ALIASED);
+ 
++    FLOAT dpiX = 96.f;
++    FLOAT dpiY = 96.f;
++    deviceContext->GetDpi(&dpiX, &dpiY);
++    const FLOAT pixelScale = std::max(dpiX / 96.f, 0.25f);
++    const FLOAT physicalPixel = 1.f / pixelScale;
++    const FLOAT minimumGap = std::min(0.75f, bandPitch * 0.18f);
++    const FLOAT maximumShoulder = std::max(
++        physicalPixel, bandPitch - minimumGap);
++    const FLOAT preferredShoulder = bodyWidth + std::min(
++        2.f, std::max(0.f, bandPitch - bodyWidth) * 0.35f);
++    const FLOAT shoulderWidth = std::min(
++        std::max(physicalPixel,
++            std::round(std::min(preferredShoulder, maximumShoulder) *
++                pixelScale) / pixelScale),
++        bandPitch);
++    const FLOAT shoulderInset = (bandPitch - shoulderWidth) / 2.f;
++
+     FLOAT x1 = horizontalOffset;
+ 
+     for (size_t i = 0; i < shadow.size(); ++i)
+     {
+         const auto & fb = _Analysis->_FrequencyBands[i];
+-        const FLOAT x2 = x1 + barWidth;
++        const FLOAT x2 = x1 + bandPitch;
+         const bool GreaterThanNyquist = fb.Lo >= _Analysis->_NyquistFrequency;
+ 
+         if ((!GreaterThanNyquist || !_State->_SuppressMirrorImage) && (shadow[i] > 0.))
+         {
+             _NekoShadowBrush->SetColor(nekorox_visual::ArtworkShadowColor(
+                 _NekoTheme, shadow[i]));
++            const FLOAT left = std::round((x1 + shoulderInset) * pixelScale) /
++                pixelScale;
+             const D2D1_RECT_F rect =
+             {
+-                std::clamp(x1, 0.f, _ClientSize.width),
++                std::clamp(left, 0.f, _ClientSize.width),
+                 0.f,
+-                std::clamp(x2 - 1.f, 0.f, _ClientSize.width),
++                std::clamp(std::min(left + shoulderWidth, x2),
++                    0.f, _ClientSize.width),
+                 std::clamp((FLOAT) (shadow[i] * _ClientSize.height), 0.f, _ClientSize.height)
+             };
+ 
+diff --git a/Visuals/Spectrum/Spectrum.h b/Visuals/Spectrum/Spectrum.h
+index 02221d5..ec2b246 100644
+--- a/Visuals/Spectrum/Spectrum.h
++++ b/Visuals/Spectrum/Spectrum.h
+@@ -59,7 +59,7 @@ private:
+     void RenderBars(ID2D1DeviceContext * deviceContext) noexcept;
+     void RenderBar(ID2D1DeviceContext * deviceContext, D2D1_RECT_F & rect, style_t * areaStyle, style_t * topStyle, double value, double opacity, double frequency) noexcept;
+     void RenderBarTop(ID2D1DeviceContext * deviceContext, D2D1_RECT_F & rect, style_t * topStyle, double value, double opacity, double frequency) noexcept;
+-    void RenderNekoTemporalLayers(ID2D1DeviceContext * deviceContext, FLOAT barWidth, FLOAT horizontalOffset) noexcept;
++    void RenderNekoTemporalLayers(ID2D1DeviceContext * deviceContext, FLOAT bandPitch, FLOAT bodyWidth, FLOAT horizontalOffset) noexcept;
+     void UpdateNekoTemporalLayers() noexcept;
+ 
+     void RenderBarPart(ID2D1DeviceContext * deviceContext, D2D1_RECT_F & rect, const style_t * style) const noexcept;

@@ -1,0 +1,553 @@
+# Parity-checker allowlist: intentional, reviewed divergences.
+# See README.md for the meaning of each section and how to add an entry.
+# Keys are the canonical snake_case names (C name without the `sonare_` prefix).
+
+# ---------------------------------------------------------------------------
+# [surface_only] — symbols with NO C-API counterpart that are intentional.
+# These are platform-specific helpers, not coverage drift.
+# Suffix/prefix wildcards (`*progress`, `engine_*`) are supported.
+# ---------------------------------------------------------------------------
+[surface_only]
+# Symbols that exist on multiple bindings but are deliberately binding-only.
+# The `mastering*` / `mix_stereo` / `onset_envelope` entries are ERGONOMIC
+# facade free-function names for C operations that exist under a different
+# (reordered) C name — see the matching [coverage] notes. Renaming the public
+# facade API to mirror C is out of scope, so these are intentional, not drift:
+#   mastering_pair_analyze   <- C mastering_analyze_pair
+#   mastering_stereo_analyze <- C mastering_analyze_stereo
+#   mastering_process_stereo <- C mastering_apply_processor_stereo
+#   mastering_pair_process   <- C mastering_apply_pair_processor
+#   mastering                <- high-level convenience wrapper (apply_processor)
+#   mix_stereo               <- stereo mix convenience
+#   onset_envelope           <- facade name for C onset_strength
+#   validate_realtime_voice_changer_preset_json <- facade-side JSON validator
+#                                                   (no C free function)
+any = [
+  "init",                  # WASM async module init
+  "assert_samples",        # exported input validators (Node + WASM)
+  "assert_finite_samples",
+  "assert_finite_scalar",
+  "assert_non_empty_samples",
+  "mastering",
+  "mastering_pair_analyze",
+  "mastering_pair_process",
+  "mastering_process_stereo",
+  "mastering_stereo_analyze",
+  "mix_stereo",
+  "onset_envelope",
+  "validate_realtime_voice_changer_preset_json",
+]
+
+node = [
+  "analyze_async",          # libuv async variant, JS-only
+  "analyze_with_progress",  # progress-callback variant, JS-only
+  "*with_progress",
+  "master_audio_async",         # libuv async variant, JS-only
+  "master_audio_stereo_async",  # libuv async variant, JS-only
+  # Node-only INTERNAL input/MIDI validation helpers exported from
+  # bindings/node/src/validation.ts. Only the `ValidateOptions` TYPE is
+  # re-exported through index.ts; these value functions are consumed by sibling
+  # facade modules (project/scale/lufs), not part of the public C-mapped API and
+  # have no C counterpart by design. (assert_samples / assert_finite_scalar /
+  # assert_non_empty_samples / assert_finite_samples are covered by the shared
+  # `any` list above; the rest are Node-specific MIDI helpers.)
+  "assert_u7",
+  "assert_nibble",
+  "assert_u32",
+  "assert_project_midi_events",
+  "midi1_event",
+  "synth_enum_tables",      # facade-visible snapshot built from C enum names
+  "is_sonare_error",        # TS type guard for the SonareError shape; no C symbol
+]
+
+wasm = [
+  "require_module",         # WASM module-handle accessor
+  "is_sonare_error",        # TS type guard for the SonareError shape; no C symbol
+  "is_initialized",         # WASM init-state probe
+  "engine_capabilities",    # WASM build capability descriptor
+  "assert_interleaved_samples",  # WASM test helper: validates interleaved buffers before embind calls
+  "assert_non_negative_integer", # WASM test helper: mirrors TS facade argument validation
+  "assert_positive_integer",     # WASM test helper: mirrors TS facade argument validation
+  "assert_sample_rate",          # WASM test helper: centralizes sample-rate validation
+  "stream_analyzer_config_defaults", # WASM facade default snapshot, not a C API symbol
+  "synth_enum_tables",      # facade-visible snapshot built from C enum names
+  "synth_patch_round_trip_for_test", # WASM-only regression hook for embind patch shape
+  "*with_progress",                  # WASM progress callbacks are facade-only async ergonomics
+  "analyze_with_progress",           # WASM progress callback wrapper, no C ABI equivalent
+  "bind_web_midi",                   # Browser Web MIDI listener glue; routes to existing realtime-engine MIDI input APIs
+  "is_web_midi_available",           # Browser capability probe for Web MIDI; platform-only facade helper
+  "bind_microphone_input",           # Browser getUserMedia -> AudioWorkletNode glue; platform-only realtime input helper
+  "create_opfs_clip_page_provider",  # Browser OPFS Worker -> paged clip provider glue; platform-only long-clip helper
+  "create_opfs_clip_page_worker",    # Browser OPFS Worker constructor for paged clip supply; platform-only helper
+  "attach_opfs_clip_stream",         # One-call OPFS streaming-clip wiring over create_opfs_clip_page_provider; platform-only helper
+]
+
+python = [
+  # Deprecated Python-only alias for `realtime_voice_changer_preset_config`
+  # (which wraps C `sonare_realtime_voice_changer_preset_config`); kept for
+  # backward compatibility, no C counterpart of its own. See
+  # bindings/python/src/libsonare/_effects.py:1040.
+  "realtime_voice_changer_preset_pod",
+  # Progress-callback variant of analyze(), named without the C `_json_` infix
+  # (it wraps C sonare_analyze_json_with_progress). Node/WASM expose the same
+  # ergonomic name (see their surface_only blocks above).
+  "analyze_with_progress",
+  "synth_enum_tables",      # facade-visible snapshot built from C enum names
+]
+
+# ---------------------------------------------------------------------------
+# [coverage] — canonical C functions allowed to be ABSENT on a surface.
+# Seed empty: we want to SURFACE coverage gaps, not pre-hide them. Add an
+# entry only after confirming the omission is deliberate (e.g. file I/O in WASM).
+# ---------------------------------------------------------------------------
+[coverage]
+# Example (disabled): wasm = ["audio_from_file"]
+#
+# --- C functions FOLDED INTO the base facade (extended / options variants) ---
+# These C entry points are NOT separate facade functions: the base facade
+# function exposes them through an options/mode argument or a callback, the same
+# pattern as detect_chords -> detect_chords_ex (the template below).
+#
+#   detect_chords_ex: the facade `detect_chords` IS the extended form (it
+#     exposes all SonareChordDetectionOptions fields and calls
+#     sonare_detect_chords_ex). So the `_ex` variant is covered, not missing.
+#   detect_key_with_options / _and_modes / _with_extended_options and the
+#     detect_key_candidates_with_modes / _with_extended_options family: folded
+#     into the facade `detect_key` / `detect_key_candidates` extended params
+#     (modes / profile / genre_hint).
+#   tempogram_with_mode: folded into `tempogram`'s `mode` selector.
+#   (mel_spectrogram_ex / mfcc_ex are credited by _ALIAS_COVERAGE in compare.py,
+#    anchored to the base mel_spectrogram / mfcc facade which now exposes the
+#    fmin/fmax/htk arguments and routes to the _ex C entry point — so they are
+#    not allowlisted here.)
+#   onset_strength: exposed by the facades under the ergonomic name
+#     `onset_envelope`.
+#   error_message / last_error_message / last_warning_message: C-ABI
+#     error/warning-string helpers consumed internally by each facade (errors map
+#     to native exceptions; the scene-load warning surfaces as Mixer.sceneWarnings
+#     / scene_warnings), not standalone public facade functions.
+#
+# --- mastering ops exposed under ERGONOMIC facade names (see [surface_only]) ---
+#   mastering_analyze_pair / mastering_analyze_stereo / mastering_apply_processor
+#   / mastering_apply_pair_processor / mastering_apply_processor_stereo: these C
+#   operations are surfaced by the facade free functions mastering_pair_analyze /
+#   mastering_stereo_analyze / mastering_process / mastering_pair_process /
+#   mastering_process_stereo (listed in [surface_only] below). Same op, facade
+#   spelling.
+node = [
+  "detect_chords_ex",
+  "detect_key_with_options",
+  "detect_key_with_options_and_modes",
+  "detect_key_with_extended_options",
+  "detect_key_candidates_with_modes",
+  "detect_key_candidates_with_extended_options",
+  "tempogram_with_mode",
+  "onset_strength",
+  "error_message",
+  "last_error_message",
+  "last_warning_message",
+  "mastering_chain_with_progress",
+  "mastering_chain_stereo_with_progress",
+  "mastering_analyze_pair",
+  "mastering_analyze_stereo",
+  "mastering_apply_processor",
+  "mastering_apply_pair_processor",
+  "mastering_apply_processor_stereo",
+  # Independent source/reference-length pair variants. Node DOES expose a pair
+  # facade (masteringPairProcess / masteringPairAnalyze) and it accepts
+  # independent source/reference lengths, but it binds the C++ core api::
+  # apply_named_pair_processor / analyze_named_pair (two-length overload)
+  # directly, so the C-ABI _ex symbols themselves are not mirrored as named
+  # functions. Same capability, core-bound rather than C-ABI-bound.
+  "mastering_apply_pair_processor_ex",
+  "mastering_analyze_pair_ex",
+  # Node folds these into a base free function via an extra parameter rather than
+  # exposing a separately-named function (Python/WASM expose them by name):
+  #   metering_vectorscope_decimated -> meteringVectorscope(left, right, sr, maxPoints)
+  #   metering_phase_scope_decimated -> meteringPhaseScope(left, right, sr, maxPoints)
+  # (metering_spectrum_frame IS exposed by name as meteringSpectrumFrame.)
+  # (decompose_with_init -> the base decompose() facade, which exposes the `init`
+  #  initialiser argument; credited by _ALIAS_COVERAGE in compare.py.)
+  "metering_phase_scope_decimated",
+  "metering_vectorscope_decimated",
+  # Unified-analysis variants folded into the base facade `analyze` (the rich
+  # result IS what analyze() returns, serialized via sonare_analyze_json) and
+  # `analyzeWithProgress` (the progress-callback variant). analyze_melody_ex is
+  # folded into analyzeMelody's usePyin/center options.
+  "analyze_json",
+  "analyze_json_with_progress",
+  "analyze_melody_ex",
+  # C-ABI-internal length-checked inverse variants: bindings build their own
+  # arrays with known lengths and call the base function, so the explicit-length
+  # guards are not part of the binding surface.
+  "mel_to_stft_checked",
+  "mel_to_audio_checked",
+  "mfcc_to_mel_checked",
+  "mfcc_to_audio_checked",
+  "cqt_to_audio_checked",
+  "vqt_to_audio_checked",
+  # HTK-aware inverse variants are folded into the base facades through the
+  # `htk` option and route to the _ex C entry points internally.
+  "mel_to_stft_ex",
+  "mel_to_audio_ex",
+  "mfcc_to_audio_ex",
+  "mel_to_stft_checked_ex",
+  "mel_to_audio_checked_ex",
+  "mfcc_to_audio_checked_ex",
+  # C-side canonical enum-name supplier consumed internally by the facade
+  # snapshot/test helpers; not exposed as a same-named public function.
+  "synth_enum_names",
+  # --- Internal default-struct seeders (no public facade member) ---
+  # *_default fns fill a C options/config POD with the documented defaults. The
+  # facades apply the identical defaults inline (or via a typed config object /
+  # dataclass) and never call the seeder, so there is no 1:1 facade member.
+  "engine_bounce_options_default",
+  "stream_analyzer_config_default",
+  "stream_quantize_config_default",
+  # pitch_correction_config_default seeds a SonarePitchCorrectionConfig POD with
+  # the documented defaults; the facade pitchCorrectTimevarying applies them
+  # inline through its PitchCorrectOptions bag, so there is no 1:1 facade member.
+  "pitch_correction_config_default",
+  # External-instrument bounce is deliberately Python-only: Node batch jobs never
+  # play instruments, and a synchronous JS render callback fired from deep in the
+  # offline graph overflows V8's shared C++/JS stack. The interactive/native path
+  # is served by built-in instruments, not host callbacks. (See _project.py.)
+  "project_bounce_with_instruments",
+]
+wasm = [
+  "detect_chords_ex",
+  "detect_key_with_options",
+  "detect_key_with_options_and_modes",
+  "detect_key_with_extended_options",
+  "detect_key_candidates_with_modes",
+  "detect_key_candidates_with_extended_options",
+  "tempogram_with_mode",
+  "onset_strength",
+  "error_message",
+  "last_error_message",
+  "last_warning_message",
+  "mastering_analyze_pair",
+  "mastering_analyze_stereo",
+  "mastering_apply_processor",
+  "mastering_apply_pair_processor",
+  "mastering_apply_processor_stereo",
+  # Independent source/reference-length pair variants. WASM DOES expose a pair
+  # facade (masteringPairProcess / masteringPairAnalyze) accepting independent
+  # source/reference lengths; it binds the C++ core api:: two-length overload
+  # directly, so the C-ABI _ex symbols are not mirrored as named functions.
+  "mastering_apply_pair_processor_ex",
+  "mastering_analyze_pair_ex",
+  # C-ABI-internal length-checked inverse variants (see node note above).
+  "mel_to_stft_checked",
+  "mel_to_audio_checked",
+  "mfcc_to_mel_checked",
+  "mfcc_to_audio_checked",
+  "cqt_to_audio_checked",
+  "vqt_to_audio_checked",
+  "mel_to_stft_ex",
+  "mel_to_audio_ex",
+  "mfcc_to_audio_ex",
+  "mel_to_stft_checked_ex",
+  "mel_to_audio_checked_ex",
+  "mfcc_to_audio_checked_ex",
+  "synth_enum_names",
+  # Unified-analysis variants folded into the base facade analyze /
+  # analyzeWithProgress / analyzeMelody (WASM keeps its native analyze() object).
+  "analyze_json",
+  "analyze_json_with_progress",
+  "analyze_melody_ex",
+  # --- Internal default-struct seeders (see node note above) ---
+  "engine_bounce_options_default",
+  "stream_analyzer_config_default",
+  "stream_quantize_config_default",
+  "pitch_correction_config_default",
+  # --- WASM platform / API-shape differences ---
+  # No host filesystem and no compressed-audio decoder in the WASM build: the
+  # WASM Audio class is a pure-JS sample wrapper constructed via Audio.fromBuffer.
+  # (sonare_audio_from_file is #ifndef __EMSCRIPTEN__-excluded in core_audio.cpp.)
+  "audio_from_file",
+  "audio_from_memory",
+  # Audio data/length/duration ARE exposed as WASM `get data/length/duration`
+  # accessors (audio.ts); the WASM TS extractor does not parse get-accessor
+  # syntax, so they read as missing. Capability is present.
+  "audio_data",
+  "audio_length",
+  "audio_duration",
+  # External-instrument bounce is Python-only by design (see node note); WASM is
+  # additionally single-threaded and cannot host a synchronous render callback.
+  "project_bounce_with_instruments",
+  # WASM exposes a zero-copy planar realtime path (getPlanarChannelBuffer +
+  # processPreparedPlanar) suited to AudioWorklet instead of a copy-in
+  # process_planar_stereo(left, right); same capability, AudioWorklet-shaped API.
+  "realtime_voice_changer_process_planar_stereo",
+]
+python = [
+  "detect_chords_ex",
+  "detect_key_with_options",
+  "detect_key_with_options_and_modes",
+  "detect_key_with_extended_options",
+  "detect_key_candidates_with_modes",
+  "detect_key_candidates_with_extended_options",
+  "tempogram_with_mode",
+  "onset_strength",
+  "error_message",
+  "last_error_message",
+  "last_warning_message",
+  "mastering_chain_with_progress",
+  "mastering_chain_stereo_with_progress",
+  "mastering_analyze_pair",
+  "mastering_analyze_stereo",
+  "mastering_apply_processor",
+  "mastering_apply_pair_processor",
+  "mastering_apply_processor_stereo",
+  # The _ex pair variants ARE what the mastering_pair_process / mastering_pair_analyze
+  # facade functions call (independent source/reference lengths); folded, not named.
+  "mastering_apply_pair_processor_ex",
+  "mastering_analyze_pair_ex",
+  # C-ABI-internal length-checked inverse variants (see node note above).
+  "mel_to_stft_checked",
+  "mel_to_audio_checked",
+  "mfcc_to_mel_checked",
+  "mfcc_to_audio_checked",
+  "cqt_to_audio_checked",
+  "vqt_to_audio_checked",
+  "mel_to_stft_ex",
+  "mel_to_audio_ex",
+  "mfcc_to_audio_ex",
+  "mel_to_stft_checked_ex",
+  "mel_to_audio_checked_ex",
+  "mfcc_to_audio_checked_ex",
+  "synth_enum_names",
+  # Unified-analysis variants folded into the base facade `analyze` /
+  # `analyze_with_progress` / `analyze_melody` (use_pyin/center params).
+  "analyze_json",
+  "analyze_json_with_progress",
+  "analyze_melody_ex",
+  # --- Internal default-struct seeders (see node note above) ---
+  # The Python facade calls these inside its constructors/dataclasses to seed
+  # defaults; they are not re-exposed as standalone public methods.
+  "engine_bounce_options_default",
+  "stream_analyzer_config_default",
+  "stream_quantize_config_default",
+  # pitch_correct_timevarying seeds its SonarePitchCorrectionConfig by calling
+  # this internally; not re-exposed as a standalone public function.
+  "pitch_correction_config_default",
+]
+
+# ---------------------------------------------------------------------------
+# [order] — keys whose facade param order legitimately differs from the C ABI
+# beyond the options-bag-prefix convention. Seed empty.
+# ---------------------------------------------------------------------------
+[order]
+# scale_quantize_midi / scale_correction_semitones: C orders the optional
+# reference pitch BEFORE the value being quantized (root, mode_mask,
+# reference_midi, midi). All facades use the ergonomic order (root, mode_mask,
+# midi, reference_midi=default) and remap to C order internally (verified in the
+# addon / embind / ctypes wrappers).
+#
+# preemphasis / deemphasis: C is (coef, zi, use_zi); Node/WASM expose
+# (coef, zi?) and derive use_zi from whether zi was supplied.
+# tempogram: the facades expose a single `mode` selector (cyclic / fourier /
+# autocorr) that folds the C `center` / `norm` flags; Node/WASM replace
+# center+norm with `mode`, Python keeps center+norm and adds `mode`. Documented
+# ergonomic convenience, not order drift.
+# strip_meter (wasm/node): the C handle method `sonare_strip_meter` takes a
+# `strip` handle; the facades follow the documented handle->index convention
+# (the handle becomes a numeric `strip_index`) and add a `tap` metering-tap
+# selector, the same extended-facade shape already accepted for strip_meter
+# (python) below. Same op, handle->index + tap-selector — not order drift.
+# lufs_interleaved: C is (samples, frames, channels, sample_rate). All facades
+# expose (samples, channels, sample_rate) and DERIVE frames = len(samples) /
+# channels internally — passing both an interleaved buffer and a redundant frame
+# count would let them disagree. The frames-derived shape is the documented
+# cross-binding convention; not order drift.
+# chord_functional_analysis: C is (options-bag, key_root, key_mode); the facades
+# put (key_root, key_mode) first and INLINE the SonareChordDetectionOptions
+# fields after them — the same ergonomic options-inlining + key-first shape
+# already used for detect_chords. Remapped internally; not order drift.
+# analyze_melody (node/python): the facade appends the extended use_pyin/center
+# params that map to C sonare_analyze_melody_ex; the base C analyze_melody lacks
+# them. Folded extended-facade params, not order drift. (WASM passes them via an
+# options object, so it is not flagged here.)
+# pitch_correct_to_midi_timevarying (all): C is (f0_hz, voiced_prob, voiced,
+# n_frames, hop_length, target_midi). Every facade uses the ergonomic order
+# (f0_hz, target_midi, hop_length, voiced?, voiced_prob?) and DERIVES n_frames
+# from the f0_hz array length — passing both the contour array and a redundant
+# frame count would let them disagree. Remapped to C order internally (ctypes /
+# addon / embind wrappers). Documented ergonomic convenience, not order drift.
+# pitch_correct_timevarying (all): C is (f0_hz, voiced_prob, voiced, n_frames,
+# hop_length, config). Every facade exposes (f0_hz, sampleRate, hopLength, ...)
+# and DERIVES n_frames from the f0_hz array length, then folds the
+# SonarePitchCorrectionConfig fields + the voiced/voicedProb companion arrays —
+# Node/WASM into a trailing PitchCorrectOptions bag, Python into keyword args.
+# Same ergonomic options-fold + array-length derivation as spectral_edit /
+# pitch_correct_to_midi_timevarying. Remapped to C order internally. Not order drift.
+# midi_cc_learn (node/wasm/python): C is (events, count, param_id, min_value,
+# max_value, min_movement). The facades DERIVE `count` from the events array
+# length; Node/WASM additionally fold the optional (min_value, max_value,
+# min_movement) range params into a MidiCcLearnOptions bag (Python keeps them as
+# keyword args). Passing both the array and a redundant count would let them
+# disagree. Remapped to C order internally; ergonomic convenience, not order drift.
+# midi_route_events (all): C is (events, count, config). Every facade exposes
+# (events, config) and DERIVES `count` from the events array length — same
+# array-length derivation as lufs_interleaved. (The facade method is
+# `midiRouteEvents` / `route_midi_events`, mapped to this C key.)
+# spectral_edit (all): C is (config, ops, n_ops). Every facade exposes (ops, ...)
+# and DERIVES `n_ops` from the ops array length, then folds the
+# SonareSpectralEditConfig fields — Node/WASM into a trailing options bag
+# (nFft/hopLength/window/healRadiusFrames), Python into keyword args. Passing both
+# the ops array and a redundant count would let them disagree; same ergonomic
+# options-fold + array-length derivation already accepted for midi_route_events.
+# Remapped to C order internally (addon / embind / ctypes). Not order drift.
+node = [
+  "scale_quantize_midi",
+  "scale_correction_semitones",
+  "preemphasis",
+  "deemphasis",
+  "tempogram",
+  "strip_meter",
+  "lufs_interleaved",
+  "chord_functional_analysis",
+  "analyze_melody",
+  "pitch_correct_to_midi_timevarying",
+  "pitch_correct_timevarying",
+  "midi_cc_learn",
+  "midi_route_events",
+  "spectral_edit",
+  "mel_to_stft",  # Node facade derives matrix extents from typed arrays; C requires explicit dims
+  "mel_to_audio", # Node facade derives matrix extents from typed arrays; C requires explicit dims
+  "mfcc_to_audio", # Node facade derives matrix extents from typed arrays; C requires explicit dims
+]
+wasm = [
+  "scale_quantize_midi",
+  "scale_correction_semitones",
+  "preemphasis",
+  "deemphasis",
+  "tempogram",
+  "strip_meter",
+  "lufs_interleaved",
+  "chord_functional_analysis",
+  "pitch_correct_to_midi_timevarying",
+  "pitch_correct_timevarying",
+  "midi_cc_learn",
+  "midi_route_events",
+  "spectral_edit",
+  "mel_to_stft",  # WASM facade derives matrix extents from typed arrays; C requires explicit dims
+  "mel_to_audio", # WASM facade derives matrix extents from typed arrays; C requires explicit dims
+  "mfcc_to_audio", # WASM facade derives matrix extents from typed arrays; C requires explicit dims
+]
+
+# detect_key_candidates (python): exposes `modes, profile, genre_hint` extras
+# that map to the extended C variants (detect_key_candidates_with_modes /
+# _with_extended_options). strip_meter (python): the extra `tap` selector maps
+# to the metering-tap variant. Both are legitimate extended-facade params.
+# scale_quantize_midi / scale_correction_semitones (python): same ergonomic
+# (root, mode_mask, midi, reference_midi=default) order as Node/WASM above,
+# remapped to the C order internally by the ctypes wrapper.
+python = [
+  "detect_key_candidates",
+  "strip_meter",
+  "tempogram",
+  "scale_quantize_midi",
+  "scale_correction_semitones",
+  "lufs_interleaved",
+  "chord_functional_analysis",
+  "analyze_melody",
+  "pitch_correct_to_midi_timevarying",
+  "pitch_correct_timevarying",
+  "midi_cc_learn",
+  "midi_route_events",
+  "spectral_edit",
+  "mel_to_stft",  # Python facade derives matrix extents from sequences; C requires explicit dims
+  "mel_to_audio", # Python facade derives matrix extents from sequences; C requires explicit dims
+  "mfcc_to_audio", # Python facade derives matrix extents from sequences; C requires explicit dims
+]
+
+# ---------------------------------------------------------------------------
+# [default] — "key.param" entries whose default may differ across facades.
+# Seed empty: default drift is the highest-value signal; do not pre-hide it.
+# ---------------------------------------------------------------------------
+[default]
+# Empty-collection sentinels (Node/WASM `[]` vs Python `None`, both meaning
+# "no value") and enum-member-vs-string-union spellings (`SendTiming.POST_FADER`
+# vs `postFader`) are folded to a common form in compare._default_drift /
+# normalize.canonical_default, so they are NOT allowlisted per-key here. That
+# covers mastering_streaming_preview.platforms, add_vca_group.members, and the
+# add_send/meter_tap/strip_meter/schedule_*_automation enum defaults generally.
+#
+# set_builtin_instrument.destination_id: all three facades default it to 0.
+# Node/WASM read it from the config object (`config.destinationId ?? 0`) while
+# Python takes it as a separate `destination_id=0` keyword arg (the dataclass
+# config is the synth patch; the routing target is a distinct concern). Same
+# default, idiomatic representation difference — not behavioural drift.
+# set_sf2_instrument.destination_id: identical situation for the SF2 player
+# entry (same 0 default, same config-object vs keyword-arg representation).
+# set_synth_instrument.destination_id: identical situation for the NativeSynth
+# entry (same 0 default; Node/WASM read patch.destinationId when the patch is
+# an object — preset-name strings carry no routing — Python keyword arg).
+params = [
+  "set_builtin_instrument.destination_id",
+  "set_sf2_instrument.destination_id",
+  "set_synth_instrument.destination_id",
+]
+
+# ---------------------------------------------------------------------------
+# [core_default] — "key.param" entries whose facade default is ALLOWED to differ
+# from the C++ core config-struct field initializer (compare._core_default_drift,
+# driven by core_map.toml). Use ONLY for an intentional facade-vs-core
+# difference, e.g. a "0 = use library default" sentinel the facade exposes that
+# the core struct spells as its concrete value. Seed empty: every mapped numeric
+# / boolean default currently matches its core struct initializer.
+# ---------------------------------------------------------------------------
+[core_default]
+params = []
+
+# ---------------------------------------------------------------------------
+# [enum] — "key.param" entries whose enum value-sets may differ across surfaces.
+# TS unions often carry extra alias spellings (e.g. 'stereo-pan' + 'stereoPan')
+# that the C enum lacks; add reviewed aliases here.
+# ---------------------------------------------------------------------------
+[enum]
+params = []
+
+# ---------------------------------------------------------------------------
+# [input_naming] — canonical keys whose audio-input params (samples/sr/...) are
+# allowed to be named differently across surfaces. Seed empty: input naming is
+# real signal worth triaging.
+# ---------------------------------------------------------------------------
+[input_naming]
+# WASM renames the primary feature-buffer input for clarity: `mel` -> `melPower`
+# and `mfcc` -> `mfccCoefficients`. Same buffer, descriptive spelling — not a
+# drift. (Node and C keep `mel` / `mfcc`.)
+keys = ["mel_to_stft", "mel_to_audio", "mfcc_to_mel", "mfcc_to_audio"]
+
+# ---------------------------------------------------------------------------
+# [wasm_internal] — WASM embind / SonareModule / index.ts names whose
+# intra-binding wiring inconsistency is intentional. This suppresses the ACTIVE
+# legs (a free embind registration not in the SonareModule type, or an index.ts
+# `module.X` call not in the type). The INFORMATIONAL "typed but no facade
+# wrapper" leg is already non-gating, so the current cases (detectKey /
+# detectKeyCandidates superseded by `_detectKeyWithOptions` / `_detectKeyCandidates`,
+# and the unwrapped `mixerPresetJson`) need no entry here. Seed empty: a missing
+# type declaration is a real TS break worth surfacing.
+# ---------------------------------------------------------------------------
+[wasm_internal]
+# projectAbiVersion: the embind free function is reachable from TypeScript via
+# the `ProjectModule` cast in index.ts (projectModule().projectAbiVersion(),
+# guarded by a runtime `typeof candidate.projectAbiVersion !== 'function'`
+# check). The generated `SonareModule` type only gains `projectAbiVersion` /
+# `Project` after a WASM rebuild regenerates sonare.js.d.ts, so the facade
+# deliberately does not depend on that type for the arrangement surface.
+names = ["projectAbiVersion"]
+
+# ---------------------------------------------------------------------------
+# [tuning] — central knobs. Leave empty to use the built-in defaults in
+# compare.py. Set these only to override.
+#   input_roles:     leading audio-input param names stripped before the
+#                    config-order comparison (and compared by the input check).
+#   handle_prefixes: C name prefixes treated as handle/class APIs (coverage of
+#                    these is informational; matched against facade class methods).
+# ---------------------------------------------------------------------------
+[tuning]
+# input_roles = ["samples", "sample_rate", "sr", "left", "right", "mono", "audio", "x", "y", "buffer", "data", "length"]
+# handle_prefixes = ["audio", "eq", "mixer", "engine", "strip", "stream", "streaming", "realtime", "voice", "free", "master"]

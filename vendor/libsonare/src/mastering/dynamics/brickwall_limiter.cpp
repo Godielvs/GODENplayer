@@ -1,0 +1,192 @@
+#include "mastering/dynamics/brickwall_limiter.h"
+
+#include <algorithm>
+#include <cmath>
+#include <limits>
+#include <memory>
+#include <utility>
+
+#include "rt/scoped_no_denormals.h"
+#include "util/db.h"
+#include "util/exception.h"
+
+namespace sonare::mastering::dynamics {
+namespace {
+
+float sanitize_sample(float sample, float ceiling) {
+  if (std::isnan(sample)) return 0.0f;
+  if (sample == std::numeric_limits<float>::infinity()) return ceiling;
+  if (sample == -std::numeric_limits<float>::infinity()) return -ceiling;
+  return sample;
+}
+
+}  // namespace
+
+// The configuration lifecycle (validate + seed active_ + publish the initial
+// snapshot) is handled by RtConfigLifecycle's constructor.
+BrickwallLimiter::BrickwallLimiter(BrickwallLimiterConfig config) : ConfigBase(std::move(config)) {}
+
+void BrickwallLimiter::prepare(double sample_rate, int max_block_size) {
+  if (!(sample_rate > 0.0)) {
+    throw SonareException(ErrorCode::InvalidParameter, "sample_rate must be positive");
+  }
+  if (max_block_size < 0) {
+    throw SonareException(ErrorCode::InvalidParameter, "max_block_size must be non-negative");
+  }
+
+  sample_rate_ = sample_rate;
+  max_block_size_ = max_block_size;
+  // Inner limiter owns the lookahead buffer sizing. lookahead_ms changes
+  // require buffer resize and are routed through prepare() (the non-RT-safe
+  // control-thread path); the RT-safe snapshot path only forwards ceiling and
+  // release updates via update_coefficients().
+  limiter_.set_config({config_.ceiling_db, config_.lookahead_ms, config_.release_ms});
+  limiter_.prepare(sample_rate_, max_block_size_);
+  // Seed the audio thread's live working config from the prepared baseline; the
+  // hard-clip stage reads active_.ceiling_db, not config_.
+  active_ = config_;
+  prepared_ = true;
+  reset();
+  // Re-publish so the audio thread observes the same snapshot that prepare()
+  // already applied; adopt_snapshot_for_block() skips the redundant
+  // recomputation when current() == applied_snapshot_.
+  republish_after_prepare();
+}
+
+void BrickwallLimiter::process(float* const* channels, int num_channels, int num_samples) {
+  sonare::rt::ScopedNoDenormals guard;
+  ensure_prepared(prepared_, "BrickwallLimiter");
+  if (num_channels < 0 || num_samples < 0) {
+    throw SonareException(ErrorCode::InvalidParameter,
+                          "num_channels and num_samples must be non-negative");
+  }
+  if (num_channels == 0 || num_samples == 0) {
+    return;
+  }
+  if (channels == nullptr) {
+    throw SonareException(ErrorCode::InvalidParameter, "channels must not be null");
+  }
+  for (int ch = 0; ch < num_channels; ++ch) {
+    if (channels[ch] == nullptr) {
+      throw SonareException(ErrorCode::InvalidParameter, "channel buffer must not be null");
+    }
+  }
+
+  // Adopt the latest published configuration once per block. The returned
+  // pointer is stable for the entire per-sample loop — RtPublisher only
+  // changes its current() value inside acquire(), and we already called it.
+  const BrickwallLimiterConfig& cfg = *adopt_snapshot_for_block();
+
+  limiter_.process(channels, num_channels, num_samples);
+
+  const float ceiling = db_to_linear(cfg.ceiling_db);
+  float min_sample_gain = 1.0f;
+  hard_clip_count_ = 0;
+  for (int ch = 0; ch < num_channels; ++ch) {
+    for (int i = 0; i < num_samples; ++i) {
+      const float before = channels[ch][i];
+      channels[ch][i] = sanitize_sample(channels[ch][i], ceiling);
+      const float abs_sample = std::abs(channels[ch][i]);
+      if (abs_sample > ceiling && abs_sample > 0.0f) {
+        const float gain = ceiling / abs_sample;
+        channels[ch][i] *= gain;
+        min_sample_gain = std::min(min_sample_gain, gain);
+        ++hard_clip_count_;
+      } else if (!std::isfinite(before)) {
+        min_sample_gain = 0.0f;
+        ++hard_clip_count_;
+      }
+    }
+  }
+
+  last_gain_reduction_db_ =
+      std::min(limiter_.last_gain_reduction_db(), linear_to_db(min_sample_gain));
+}
+
+void BrickwallLimiter::reset() {
+  limiter_.reset();
+  last_gain_reduction_db_ = 0.0f;
+  hard_clip_count_ = 0;
+}
+
+void BrickwallLimiter::set_config(const BrickwallLimiterConfig& config) {
+  // Control-thread side: validate before mutating any state so any throw
+  // leaves both the control-thread mirror (config_) and the audio-thread
+  // snapshot unchanged.
+  validate_config(config);
+  const bool lookahead_changed = prepared_ && config.lookahead_ms != config_.lookahead_ms;
+  config_ = config;
+  if (lookahead_changed) {
+    // Lookahead change resizes the inner limiter's ring buffers — that is NOT
+    // RT-safe. Preserved as control-thread behaviour for callers that change
+    // lookahead_ms via set_config; this branch MUST NOT race with process().
+    // prepare() publishes the snapshot itself, so no extra publish here.
+    prepare(sample_rate_, max_block_size_);
+    return;
+  }
+  // RT-safe path: ceiling/release updates propagate through the publisher and
+  // are applied on the audio thread via adopt_snapshot_for_block().
+  publish_current_config();
+}
+
+void BrickwallLimiter::set_release_ms(float release_ms) {
+  if (release_ms < 0.0f) {
+    throw SonareException(ErrorCode::InvalidParameter,
+                          "brickwall limiter release must be non-negative");
+  }
+  config_.release_ms = release_ms;
+  limiter_.set_release_ms(release_ms);
+}
+
+void BrickwallLimiter::set_release_ms_in_place(float release_ms) noexcept {
+  // RT-safe: forward to the inner limiter's in-place setter (scalar coefficient
+  // recompute, no publish, no allocation). config_ and the published snapshot
+  // are intentionally left unchanged.
+  limiter_.set_release_ms_in_place(release_ms);
+}
+
+bool BrickwallLimiter::set_parameter(unsigned int param_id, float value) {
+  // RT-safe in-place automation: mutate the audio thread's live working config
+  // (active_) and forward ceiling/release to the inner limiter via its in-place
+  // setters (update_coefficients). No shared_ptr publish, no allocation; the
+  // control-thread mirror (config_) and the published snapshot stay untouched.
+  switch (param_id) {
+    case 0:
+      active_.ceiling_db = value;
+      break;
+    case 1:
+      active_.release_ms = std::max(0.0f, value);
+      break;
+    default:
+      return false;
+  }
+  // Mirror the live value into the control-thread config so config() reads back
+  // the automated state (matching the historical contract); this writes config_
+  // only, never the published snapshot, so no allocation occurs. set_parameter
+  // and set_config still must not run concurrently (single-producer contract).
+  config_ = active_;
+  update_coefficients(active_);
+  return true;
+}
+
+std::vector<rt::ParamDescriptor> BrickwallLimiter::parameter_descriptors() const {
+  return {{"ceilingDb", 0}, {"releaseMs", 1}};
+}
+
+void BrickwallLimiter::validate_config(const BrickwallLimiterConfig& config) {
+  if (!std::isfinite(config.ceiling_db) || config.lookahead_ms < 0.0f || config.release_ms < 0.0f) {
+    throw SonareException(ErrorCode::InvalidParameter,
+                          "brickwall limiter timing values must be non-negative");
+  }
+}
+
+void BrickwallLimiter::update_coefficients(const BrickwallLimiterConfig& config) {
+  // RT-safe: forward ceiling and release to the inner limiter via its in-place
+  // setters, which update scalar coefficients without publishing a snapshot
+  // (no shared_ptr allocation) and without resizing the lookahead buffers.
+  // Called from the audio thread on snapshot adoption, so it must not allocate.
+  limiter_.set_threshold_in_place(config.ceiling_db);
+  limiter_.set_release_ms_in_place(config.release_ms);
+}
+
+}  // namespace sonare::mastering::dynamics

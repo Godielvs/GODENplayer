@@ -1,0 +1,101 @@
+{
+  "schema": "nekorox.spectrum-preset.v7",
+  "component": "foo_vis_spectrum_analyzer",
+  "componentVersion": "0.10.0.0-goden6",
+  "immutable": true,
+  "refreshRateLimit": 200,
+  "windowDurationMs": 50,
+  "fftSize": 4096,
+  "fftDurationMs": 100,
+  "smoothing": {
+    "method": 1,
+    "factor": 0.68,
+    "kernelSize": 32,
+    "smoothLowFrequencies": true,
+    "gainTransition": true
+  },
+  "bands": {
+    "distribution": "octaves",
+    "activeCount": 120,
+    "storedLinearCount": 320,
+    "minimumHz": 20,
+    "maximumHz": 20000,
+    "minimumNote": 4,
+    "minimumCenterHz": 20.6017223071,
+    "maximumNote": 123,
+    "maximumCenterHz": 19912.1269582,
+    "perOctave": 12
+  },
+  "amplitude": {
+    "minimumDb": -80,
+    "maximumDb": -10,
+    "legacyCalibrationDb": -10
+  },
+  "peaks": {
+    "mode": 2,
+    "model": "time-based-gravity",
+    "holdMs": 0,
+    "acceleration": 0.5,
+    "gravityDbPerSecondSquared": 500
+  },
+  "barGradient": [
+    { "position": 0.0, "color": "#151515" },
+    { "position": 0.25, "color": "#1F1F1F" },
+    { "position": 0.50, "color": "#2A2A2A" },
+    { "position": 0.75, "color": "artwork-accent", "legacyColor": "#008080" },
+    { "position": 1.0, "color": "#FFFFFF" }
+  ],
+  "peakGradient": ["#00c7c7", "#131818"],
+  "renderer": {
+    "mode": "double-exposure",
+    "horizontalAlignment": "fit",
+    "body": "legacy-neutral-ramp-with-artwork-accent-and-full-scale-white",
+    "paletteSource": "shared-theme-snapshot-v2",
+    "paletteInterpolation": "theme-service-oklch",
+    "shadow": {
+      "attackMs": 28,
+      "releaseMs": 460,
+      "palette": "artwork-secondary-dark-ramp",
+      "maximumLuminance": 0.17,
+      "opacity": 0.72
+    },
+    "memory": false,
+    "peakArea": false,
+    "peakMarker": {
+      "color": "amplitude-curve-at-held-peak",
+      "heightSource": "fb.MaxValue",
+      "independentFromCurrentBar": true,
+      "opacityFollowsDecay": true
+    },
+    "fullScaleHighlight": {
+      "start": 0.75,
+      "full": 1.0,
+      "maximumColor": "#FFFFFF",
+      "pureWhiteOnlyAtFullScale": true,
+      "body": true,
+      "wholeBarSolidColor": true,
+      "peakUsesOwnHeight": true
+    },
+    "grid": {
+      "line": "#20282A",
+      "text": "#536669",
+      "accented": false
+    },
+    "surface": {
+      "background": "#080909",
+      "darkBand": "#0A0C0D",
+      "lightBand": "#0D1112",
+      "artworkBackdrop": false,
+      "purpleSeparators": false
+    }
+  },
+  "legacyPalette": {
+    "source": "x86 Musical Spectrum panel payload in the frozen NekoRoX profile",
+    "highToLow": ["#FFFFFF", "#008080", "#2A2A2A", "#1F1F1F", "#151515"],
+    "dynamicSubstitution": {
+      "#008080": "artwork-accent"
+    }
+  },
+  "amplitudeBased": true,
+  "artworkPalette": "shared-theme-snapshot-v2"
+}

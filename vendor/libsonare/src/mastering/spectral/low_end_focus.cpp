@@ -1,0 +1,125 @@
+#include "mastering/spectral/low_end_focus.h"
+
+#include <algorithm>
+#include <cmath>
+
+#include "mastering/dynamics/channel_limits.h"
+#include "rt/biquad_design.h"
+#include "rt/scoped_no_denormals.h"
+#include "util/exception.h"
+
+namespace sonare::mastering::spectral {
+
+LowEndFocus::LowEndFocus(LowEndFocusConfig config) : config_(config) { validate_config(config_); }
+
+void LowEndFocus::prepare(double sample_rate, int max_block_size) {
+  if (!(sample_rate > 0.0) || max_block_size < 0) {
+    throw SonareException(ErrorCode::InvalidParameter, "invalid prepare arguments");
+  }
+  sample_rate_ = sample_rate;
+  const size_t channel_count = dynamics::kRealtimePreparedChannels;
+  low_state_.assign(channel_count, 0.0f);
+  sub_state_.assign(channel_count, 0.0f);
+  transient_state_.assign(channel_count, 0.0f);
+  previous_low_.assign(channel_count, 0.0f);
+  divider_polarity_.assign(channel_count, 1.0f);
+  prepared_ = true;
+  reset();
+}
+
+void LowEndFocus::process(float* const* channels, int num_channels, int num_samples) {
+  sonare::rt::ScopedNoDenormals guard;
+  ensure_prepared(prepared_, "LowEndFocus");
+  if (num_channels < 0 || num_samples < 0)
+    throw SonareException(ErrorCode::InvalidParameter, "invalid dimensions");
+  if (num_channels == 0 || num_samples == 0) return;
+  if (channels == nullptr)
+    throw SonareException(ErrorCode::InvalidParameter, "channels must not be null");
+  if (static_cast<size_t>(num_channels) > low_state_.size()) {
+    throw SonareException(ErrorCode::InvalidParameter,
+                          "LowEndFocus channel count exceeds prepared capacity");
+  }
+  for (int ch = 0; ch < num_channels; ++ch) {
+    if (channels[ch] == nullptr)
+      throw SonareException(ErrorCode::InvalidParameter, "channel buffer must not be null");
+  }
+
+  const float low_alpha = rt::one_pole_lowpass_alpha(config_.cutoff_hz, sample_rate_);
+  const float sub_alpha = rt::one_pole_lowpass_alpha(config_.cutoff_hz * 0.5f, sample_rate_);
+  const float transient_alpha = rt::one_pole_lowpass_alpha(25.0f, sample_rate_);
+  for (int i = 0; i < num_samples; ++i) {
+    for (int ch = 0; ch < num_channels; ++ch) {
+      const auto index = static_cast<size_t>(ch);
+      low_state_[index] += low_alpha * (channels[ch][i] - low_state_[index]);
+      if (previous_low_[index] < 0.0f && low_state_[index] >= 0.0f) {
+        divider_polarity_[index] = -divider_polarity_[index];
+      }
+      previous_low_[index] = low_state_[index];
+
+      const float divided = std::abs(low_state_[index]) * divider_polarity_[index];
+      sub_state_[index] += sub_alpha * (divided - sub_state_[index]);
+      transient_state_[index] += transient_alpha * (low_state_[index] - transient_state_[index]);
+    }
+    // Width is a front L/R relationship. The low-end enhancement itself is
+    // per-plane, so center/LFE/surround/height planes must still receive their
+    // own subharmonic and transient processing under the catalog's
+    // Multichannel policy.
+    const float front_mono_low = num_channels >= 2 ? 0.5f * (low_state_[0] + low_state_[1]) : 0.0f;
+    for (int ch = 0; ch < num_channels; ++ch) {
+      const auto index = static_cast<size_t>(ch);
+      const float low = ch < 2 && num_channels >= 2
+                            ? front_mono_low + (low_state_[index] - front_mono_low) * config_.width
+                            : low_state_[index];
+      const float high = channels[ch][i] - low_state_[index];
+      const float transient = low_state_[index] - transient_state_[index];
+      channels[ch][i] = high + low + config_.subharmonic_amount * sub_state_[index] +
+                        config_.transient_tightness * transient;
+    }
+  }
+}
+
+void LowEndFocus::reset() {
+  std::fill(low_state_.begin(), low_state_.end(), 0.0f);
+  std::fill(sub_state_.begin(), sub_state_.end(), 0.0f);
+  std::fill(transient_state_.begin(), transient_state_.end(), 0.0f);
+  std::fill(previous_low_.begin(), previous_low_.end(), 0.0f);
+  std::fill(divider_polarity_.begin(), divider_polarity_.end(), 1.0f);
+}
+
+void LowEndFocus::set_config(const LowEndFocusConfig& config) {
+  validate_config(config);
+  config_ = config;
+}
+
+bool LowEndFocus::set_parameter(unsigned int param_id, float value) {
+  switch (param_id) {
+    case 0:
+      config_.cutoff_hz = std::max(value, 1.0e-3f);
+      return true;
+    case 1:
+      config_.width = std::clamp(value, 0.0f, 2.0f);
+      return true;
+    case 2:
+      config_.subharmonic_amount = std::clamp(value, 0.0f, 1.0f);
+      return true;
+    case 3:
+      config_.transient_tightness = std::clamp(value, 0.0f, 1.0f);
+      return true;
+    default:
+      return false;
+  }
+}
+
+std::vector<rt::ParamDescriptor> LowEndFocus::parameter_descriptors() const {
+  return {{"cutoffHz", 0}, {"width", 1}, {"subharmonicAmount", 2}, {"transientTightness", 3}};
+}
+
+void LowEndFocus::validate_config(const LowEndFocusConfig& config) {
+  if (!(config.cutoff_hz > 0.0f) || !(config.width >= 0.0f && config.width <= 2.0f) ||
+      !(config.subharmonic_amount >= 0.0f && config.subharmonic_amount <= 1.0f) ||
+      !(config.transient_tightness >= 0.0f && config.transient_tightness <= 1.0f)) {
+    throw SonareException(ErrorCode::InvalidParameter, "invalid low end focus configuration");
+  }
+}
+
+}  // namespace sonare::mastering::spectral

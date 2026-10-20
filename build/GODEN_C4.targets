@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+ <PropertyGroup>
+  <C4Root>$(MSBuildThisFileDirectory)..\</C4Root>
+  <C4Source>$(C4Root)src\component\collection\</C4Source>
+  <C4Generated>$(IntDir)c4-shaders\</C4Generated>
+  <C4Python Condition="'$(C4Python)'==''">python</C4Python>
+  <C4ToolsRoot Condition="'$(C4ToolsRoot)'==''">$(C4Root)out\c4-tools\</C4ToolsRoot>
+  <C4Glslang Condition="'$(C4Glslang)'==''">$(C4ToolsRoot)bin\glslangValidator.exe</C4Glslang>
+  <C4SpirvCross Condition="'$(C4SpirvCross)'==''">$(C4ToolsRoot)bin\spirv-cross.exe</C4SpirvCross>
+  <C4Fxc Condition="'$(C4Fxc)'==''">$(WindowsSdkDir)bin\$(WindowsTargetPlatformVersion)\x64\fxc.exe</C4Fxc>
+ </PropertyGroup>
+ <ItemDefinitionGroup><ClCompile><AdditionalIncludeDirectories>$(C4Generated);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories><AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions></ClCompile></ItemDefinitionGroup>
+ <ItemGroup>
+  <ClCompile Include="$(C4Source)collection_bridge.cpp" />
+  <ClCompile Include="$(C4Source)collection_renderer.cpp" />
+  <ClCompile Include="$(C4Source)collection_registry.cpp" />
+  <ClCompile Include="$(C4Source)remote_frame_client.cpp" />
+  <ClCompile Include="$(C4Source)collection_preferences.cpp" />
+  <ClInclude Include="$(C4Source)*.h" />
+  <None Include="$(C4Source)shaders\*.frag;$(C4Source)shaders\*.comp;$(C4Source)catalogue.json" />
+ </ItemGroup>
+ <Target Name="GodenC4Compile" BeforeTargets="ClCompile">
+  <Error Condition="!Exists('$(C4Glslang)') Or !Exists('$(C4SpirvCross)')" Text="C4 offline compilers missing. Run tools/c4-bootstrap.ps1 once; no runtime shader compilation or placeholders." />
+  <Error Condition="!Exists('$(C4Fxc)')" Text="FXC missing; set C4Fxc to the installed Windows SDK fxc.exe." />
+  <MakeDir Directories="$(C4Generated)" />
+  <Exec Command="&quot;$(C4Python)&quot; &quot;$(C4Root)tools\c4_compile_collection.py&quot; --source &quot;$(C4Source).&quot; --out &quot;$(C4Generated).&quot; --glslang &quot;$(C4Glslang)&quot; --spirv-cross &quot;$(C4SpirvCross)&quot; --fxc &quot;$(C4Fxc)&quot;" />
+  <ItemGroup><FileWrites Include="$(C4Generated)*" /></ItemGroup>
+ </Target>
+</Project>

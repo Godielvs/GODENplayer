@@ -1,0 +1,18 @@
+{
+  "covers": [
+    {
+      "prompt": "Original tasteful indie electronic square album art. Deep cobalt field and an abstract sculptural flowing form, like a curving folded fluid ribbon or eroded wave, in broad distinct deep cobalt, warm coral/orange, and turquoise areas. Refined contemporary abstract illustration, tactile matte print grain, luminous rhythmic calm. Strong central form and crisp readable title near top, artist smaller near bottom. No logos, extra text, watermark, border, copied album art, or gradients dominating the canvas.",
+      "filename": "tidal-signal.png",
+      "artist": "LOW TIDE CLUB",
+      "title": "TIDAL SIGNAL"
+    },
+    {
+      "prompt": "Original tasteful indie electronic square album art, visually distinct from cobalt/coral ribbon art. Pale lilac field with a lush abstract translucent leaf/geometric botanical shape, layered like cut glass and sculpted foliage, broad lime and verdigris regions with small hot pink accents. Refined contemporary abstract illustration, diffused after-rain glow, translucent layering and subtle paper grain. Strong central form and crisp readable title near top, artist smaller near bottom. No logos, extra text, watermark, border, copied album art, full-canvas gradients, or flowing cobalt-coral composition.",
+      "filename": "after-the-rain.png",
+      "artist": "GLASS ORCHARD",
+      "title": "AFTER THE RAIN"
+    }
+  ],
+  "generation_tool": "built-in image_gen",
+  "use_case": "stylized-concept"
+}

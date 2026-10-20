@@ -1,0 +1,113 @@
+diff --git a/Visuals/Spectrum/Spectrum.cpp b/Visuals/Spectrum/Spectrum.cpp
+index aa64af8..f85cc96 100644
+--- a/Visuals/Spectrum/Spectrum.cpp
++++ b/Visuals/Spectrum/Spectrum.cpp
+@@ -231,32 +231,52 @@ void spectrum_t::RenderBars(ID2D1DeviceContext * deviceContext) noexcept
+ 
+     deviceContext->SetAntialiasMode( D2D1_ANTIALIAS_MODE_ALIASED); // Required by FillOpacityMask() and results in crispier graphics.
+ 
+-    // Paint the frequency-key backgrounds first so the temporal layers remain
+-    // one continuous composition instead of being clipped per band.
+-    for (const auto & fb : _NekoRenderBands)
++    // The signal may merge or interpolate bars, but the musical-key backdrop
++    // must never inherit that presentation density. Draw it from the original
++    // 120-note lattice and coalesce equal neighbouring keys into one region.
++    // This prevents a single note from looking like two or three repeated
++    // background tiles on wide panels.
++    const FLOAT BackgroundPitch = SpectrumWidth / (FLOAT) sourceBandCount;
++    FLOAT runLeft = HOffset;
++    bool runDark = _Analysis->_FrequencyBands.front().HasDarkBackground;
++    for (size_t sourceIndex = 1; sourceIndex <= sourceBandCount; ++sourceIndex)
+     {
+-        x1 = std::clamp(x1, 0.f, _ClientSize.width);
+-        x2 = std::clamp(x2, 0.f, _ClientSize.width);
+-
+-        // The musical-key background still owns the complete cell. Only the
+-        // signal body uses optical width, so the note grid never develops
+-        // empty gutters on a wide panel.
+-        D2D1_RECT_F Rect = { x1, 0.f, x2, _ClientSize.height};
+-
+-        // Draw the bar background, even above the Nyquist frequency.
+-        if (fb.HasDarkBackground)
++        const bool end = sourceIndex == sourceBandCount;
++        const bool nextDark = !end &&
++            _Analysis->_FrequencyBands[sourceIndex].HasDarkBackground;
++        if (!end && nextDark == runDark)
++            continue;
++
++        const FLOAT runRight = HOffset +
++            BackgroundPitch * (FLOAT) sourceIndex;
++        D2D1_RECT_F Rect =
+         {
+-            if (_DarkBackgroundStyle->IsEnabled())
+-                RenderBarPart(deviceContext, Rect, _DarkBackgroundStyle);
+-        }
+-        else
++            std::clamp(
++                std::round(runLeft * pixelScale) / pixelScale,
++                0.f,
++                _ClientSize.width),
++            0.f,
++            std::clamp(
++                std::round(runRight * pixelScale) / pixelScale,
++                0.f,
++                _ClientSize.width),
++            _ClientSize.height
++        };
++
++        // Draw the note background even above the Nyquist frequency.
++        if (Rect.right > Rect.left)
+         {
+-            if (_LightBackgroundStyle->IsEnabled())
++            if (runDark)
++            {
++                if (_DarkBackgroundStyle->IsEnabled())
++                    RenderBarPart(deviceContext, Rect, _DarkBackgroundStyle);
++            }
++            else if (_LightBackgroundStyle->IsEnabled())
+                 RenderBarPart(deviceContext, Rect, _LightBackgroundStyle);
+         }
+ 
+-        x1 = x2;
+-        x2 = x1 + BandPitch;
++        runLeft = runRight;
++        runDark = nextDark;
+     }
+ 
+     if (!renderSignal)
+@@ -314,14 +334,11 @@ void spectrum_t::UpdateNekoRenderBands(size_t renderBandCount) noexcept
+             const size_t first = targetIndex * sourceCount / renderBandCount;
+             const size_t last = std::max(first + 1,
+                 (targetIndex + 1) * sourceCount / renderBandCount);
+-            const size_t middle = first + (last - first - 1) / 2;
+             auto & target = _NekoRenderBands[targetIndex];
+             target = {};
+             target.Lo = source[first].Lo;
+             target.Center = std::sqrt(
+                 source[first].Center * source[last - 1].Center);
+-            target.HasDarkBackground = source[middle].HasDarkBackground;
+-
+             for (size_t sourceIndex = first; sourceIndex < last;
+                 ++sourceIndex)
+             {
+@@ -356,8 +373,6 @@ void spectrum_t::UpdateNekoRenderBands(size_t renderBandCount) noexcept
+             std::log(a.Lo), std::log(b.Lo), fraction));
+         target.Center = std::exp(std::lerp(
+             std::log(a.Center), std::log(b.Center), fraction));
+-        target.HasDarkBackground =
+-            source[(size_t) std::llround(position)].HasDarkBackground;
+         target.Shadow = hasShadow
+             ? std::lerp(shadow[lower], shadow[upper], fraction)
+             : 0.;
+diff --git a/Visuals/Spectrum/Spectrum.h b/Visuals/Spectrum/Spectrum.h
+index 12c1ccd..d0376d4 100644
+--- a/Visuals/Spectrum/Spectrum.h
++++ b/Visuals/Spectrum/Spectrum.h
+@@ -104,7 +104,6 @@ private:
+         double Lo = 0.;
+         double Center = 0.;
+         double Shadow = 0.;
+-        bool HasDarkBackground = false;
+     };
+ 
+     const FLOAT PaddingX = 0.f;

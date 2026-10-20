@@ -1,0 +1,6 @@
+{
+  "generation_tool": "built-in image_gen edit",
+  "prompt": "Revise the supplied AFTER THE RAIN square cover for a strong multicolor responsive shader palette. Preserve exact title and artist, layout, and abstract translucent botanical composition. Replace pale near-white lilac with rich saturated medium-to-dark violet/lilac planes. Use saturated emerald and vivid lime foliage across roughly 40% of the image and hot pink accents around 10%. Keep elegant luminous print texture and glass-like depth. Avoid large pale, gray, or near-white fields, muted washed-out color, neon noise, extra text, logos, watermark, and border.",
+  "source": "after-the-rain.png",
+  "output": "after-the-rain-v2.png"
+}

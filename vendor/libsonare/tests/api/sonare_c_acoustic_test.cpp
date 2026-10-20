@@ -1,0 +1,567 @@
+#include <sonare/sonare_c.h>
+
+#include <catch2/catch_test_macros.hpp>
+#include <cmath>
+#include <limits>
+#include <vector>
+
+namespace {
+
+SonareRirSynthConfig valid_rir_config() {
+  SonareRirSynthConfig cfg{};
+  cfg.length_m = 7.0f;
+  cfg.width_m = 5.0f;
+  cfg.height_m = 3.0f;
+  cfg.source_x = 1.5f;
+  cfg.source_y = 1.0f;
+  cfg.source_z = 1.2f;
+  cfg.listener_x = 5.0f;
+  cfg.listener_y = 4.0f;
+  cfg.listener_z = 1.7f;
+  cfg.absorption = 0.15f;
+  cfg.max_seconds = 0.1f;
+  cfg.mixing_time_ms = 0.0f;
+  cfg.crossfade_ms = 0.0f;
+  cfg.ism_order = 3;
+  cfg.late_model = SONARE_REVERB_MODEL_EYRING;
+  cfg.seed = 1u;
+  return cfg;
+}
+
+SonareRoomEstimateConfig valid_estimate_config() {
+  SonareRoomEstimateConfig cfg{};
+  cfg.aspect_hint_lw = 7.0f / 5.0f;
+  cfg.aspect_hint_lh = 7.0f / 3.0f;
+  cfg.reference_absorption = 0.15f;
+  cfg.min_decay_db = 0.0f;
+  cfg.noise_floor_margin_db = 0.0f;
+  cfg.prefer_eyring = 1;
+  cfg.n_octave_bands = 0;
+  cfg.mode = SONARE_ACOUSTIC_MODE_AUTO;
+  return cfg;
+}
+
+}  // namespace
+
+TEST_CASE("sonare acoustic C API synthesizes and frees RIRs", "[c_api][acoustic]") {
+  SonareRirSynthConfig cfg = valid_rir_config();
+  SonareRirSynthResult result{};
+
+  const SonareError err = sonare_synthesize_rir(&cfg, 48000, &result);
+
+  REQUIRE(err == SONARE_OK);
+  REQUIRE(result.has_error == 0);
+  REQUIRE(result.sample_rate == 48000);
+  REQUIRE(result.length > 0);
+  REQUIRE(result.rir != nullptr);
+
+  bool nonzero = false;
+  for (size_t i = 0; i < result.length; ++i) {
+    nonzero = nonzero || std::abs(result.rir[i]) > 0.0f;
+  }
+  REQUIRE(nonzero);
+
+  sonare_free_rir_synth_result(&result);
+  REQUIRE(result.rir == nullptr);
+  REQUIRE(result.length == 0);
+}
+
+TEST_CASE("sonare acoustic C API rejects non-finite and out-of-range RIR inputs",
+          "[c_api][acoustic][numeric]") {
+  const float nan = std::numeric_limits<float>::quiet_NaN();
+  const float inf = std::numeric_limits<float>::infinity();
+
+  for (float invalid : {nan, inf, -inf}) {
+    SonareRirSynthConfig cfg = valid_rir_config();
+    cfg.max_seconds = invalid;
+    SonareRirSynthResult result{};
+    REQUIRE(sonare_synthesize_rir(&cfg, 48000, &result) == SONARE_ERROR_INVALID_PARAMETER);
+    REQUIRE(result.rir == nullptr);
+  }
+
+  float absorption[] = {0.2f, nan};
+  SonareRirSynthConfig cfg = valid_rir_config();
+  cfg.absorption_bands = absorption;
+  cfg.absorption_band_count = 2;
+  SonareRirSynthResult result{};
+  REQUIRE(sonare_synthesize_rir(&cfg, 48000, &result) == SONARE_ERROR_INVALID_PARAMETER);
+
+  cfg = valid_rir_config();
+  cfg.mixing_time_ms = 10001.0f;
+  REQUIRE(sonare_synthesize_rir(&cfg, 48000, &result) == SONARE_ERROR_INVALID_PARAMETER);
+}
+
+TEST_CASE("sonare acoustic C API honors the late-tail model selector", "[c_api][acoustic]") {
+  // A more absorptive room makes Sabine and Eyring diverge (Eyring is preferred
+  // for alpha-bar above ~0.2); the two models must produce different tails.
+  SonareRirSynthConfig sabine = valid_rir_config();
+  sabine.absorption = 0.4f;
+  sabine.max_seconds = 0.3f;
+  sabine.late_model = SONARE_REVERB_MODEL_SABINE;
+  SonareRirSynthConfig eyring = sabine;
+  eyring.late_model = SONARE_REVERB_MODEL_EYRING;
+
+  SonareRirSynthResult sabine_rir{};
+  SonareRirSynthResult eyring_rir{};
+  REQUIRE(sonare_synthesize_rir(&sabine, 48000, &sabine_rir) == SONARE_OK);
+  REQUIRE(sonare_synthesize_rir(&eyring, 48000, &eyring_rir) == SONARE_OK);
+  REQUIRE(sabine_rir.has_error == 0);
+  REQUIRE(eyring_rir.has_error == 0);
+  REQUIRE(sabine_rir.length > 0);
+  REQUIRE(eyring_rir.length > 0);
+
+  bool differs = sabine_rir.length != eyring_rir.length;
+  const size_t common =
+      sabine_rir.length < eyring_rir.length ? sabine_rir.length : eyring_rir.length;
+  for (size_t i = 0; i < common && !differs; ++i) {
+    differs = std::abs(sabine_rir.rir[i] - eyring_rir.rir[i]) > 1e-6f;
+  }
+  REQUIRE(differs);
+
+  sonare_free_rir_synth_result(&sabine_rir);
+  sonare_free_rir_synth_result(&eyring_rir);
+}
+
+TEST_CASE("sonare acoustic C API zero-init late_model selects the Eyring default",
+          "[c_api][acoustic]") {
+  // A {}-zeroed config leaves late_model == SONARE_REVERB_MODEL_DEFAULT (0). It
+  // must resolve to the C++ library default (Eyring) on every surface: identical
+  // to an explicit Eyring selection and different from an explicit Sabine. This
+  // pins the zero-init contract: it must not silently select Sabine.
+  SonareRirSynthConfig base = valid_rir_config();
+  base.absorption = 0.4f;  // absorptive enough that Sabine and Eyring diverge
+  base.max_seconds = 0.3f;
+
+  SonareRirSynthConfig zero_init = base;
+  zero_init.late_model = 0;  // SONARE_REVERB_MODEL_DEFAULT (the zeroed value)
+  SonareRirSynthConfig eyring = base;
+  eyring.late_model = SONARE_REVERB_MODEL_EYRING;
+  SonareRirSynthConfig sabine = base;
+  sabine.late_model = SONARE_REVERB_MODEL_SABINE;
+
+  SonareRirSynthResult zero_rir{};
+  SonareRirSynthResult eyring_rir{};
+  SonareRirSynthResult sabine_rir{};
+  REQUIRE(sonare_synthesize_rir(&zero_init, 48000, &zero_rir) == SONARE_OK);
+  REQUIRE(sonare_synthesize_rir(&eyring, 48000, &eyring_rir) == SONARE_OK);
+  REQUIRE(sonare_synthesize_rir(&sabine, 48000, &sabine_rir) == SONARE_OK);
+  REQUIRE(zero_rir.length > 0);
+  REQUIRE(eyring_rir.length > 0);
+  REQUIRE(sabine_rir.length > 0);
+
+  // zero-init == explicit Eyring (identical length and samples).
+  REQUIRE(zero_rir.length == eyring_rir.length);
+  bool matches_eyring = true;
+  for (size_t i = 0; i < zero_rir.length && matches_eyring; ++i) {
+    matches_eyring = std::abs(zero_rir.rir[i] - eyring_rir.rir[i]) <= 1e-6f;
+  }
+  REQUIRE(matches_eyring);
+
+  // zero-init != explicit Sabine (the footgun the fix removes).
+  bool differs_from_sabine = zero_rir.length != sabine_rir.length;
+  const size_t common = zero_rir.length < sabine_rir.length ? zero_rir.length : sabine_rir.length;
+  for (size_t i = 0; i < common && !differs_from_sabine; ++i) {
+    differs_from_sabine = std::abs(zero_rir.rir[i] - sabine_rir.rir[i]) > 1e-6f;
+  }
+  REQUIRE(differs_from_sabine);
+
+  sonare_free_rir_synth_result(&zero_rir);
+  sonare_free_rir_synth_result(&eyring_rir);
+  sonare_free_rir_synth_result(&sabine_rir);
+}
+
+TEST_CASE("sonare acoustic C API zero-init seed matches the library default", "[c_api][acoustic]") {
+  // A {}-zeroed config leaves seed == 0. It must resolve to the C++/Node/Python/
+  // WASM library default (1) so a default-constructed config produces the same
+  // deterministic RIR on every surface, rather than silently seeding with 0.
+  SonareRirSynthConfig base = valid_rir_config();
+  base.absorption = 0.3f;
+  base.max_seconds = 0.4f;  // long enough that the seeded late tail contributes
+
+  SonareRirSynthConfig zero_seed = base;
+  zero_seed.seed = 0u;  // the zeroed value
+  SonareRirSynthConfig one_seed = base;
+  one_seed.seed = 1u;  // the explicit library default
+  SonareRirSynthConfig other_seed = base;
+  other_seed.seed = 9999u;  // a different seed must diverge
+
+  SonareRirSynthResult zero_rir{};
+  SonareRirSynthResult one_rir{};
+  SonareRirSynthResult other_rir{};
+  REQUIRE(sonare_synthesize_rir(&zero_seed, 48000, &zero_rir) == SONARE_OK);
+  REQUIRE(sonare_synthesize_rir(&one_seed, 48000, &one_rir) == SONARE_OK);
+  REQUIRE(sonare_synthesize_rir(&other_seed, 48000, &other_rir) == SONARE_OK);
+  REQUIRE(zero_rir.length > 0);
+
+  // zero-init seed == explicit seed 1 (identical length and samples).
+  REQUIRE(zero_rir.length == one_rir.length);
+  bool matches_one = true;
+  for (size_t i = 0; i < zero_rir.length && matches_one; ++i) {
+    matches_one = std::abs(zero_rir.rir[i] - one_rir.rir[i]) <= 1e-6f;
+  }
+  REQUIRE(matches_one);
+
+  // A different seed produces a different late tail (the seed is actually used).
+  bool differs_from_other = zero_rir.length != other_rir.length;
+  const size_t common = zero_rir.length < other_rir.length ? zero_rir.length : other_rir.length;
+  for (size_t i = 0; i < common && !differs_from_other; ++i) {
+    differs_from_other = std::abs(zero_rir.rir[i] - other_rir.rir[i]) > 1e-6f;
+  }
+  REQUIRE(differs_from_other);
+
+  sonare_free_rir_synth_result(&zero_rir);
+  sonare_free_rir_synth_result(&one_rir);
+  sonare_free_rir_synth_result(&other_rir);
+}
+
+TEST_CASE("sonare acoustic C API morph zero-init late_model matches Eyring", "[c_api][acoustic]") {
+  // The same zero-init == Eyring guarantee for the morph path: a {}-zeroed
+  // SonareRoomMorphConfig must render identically to an explicit Eyring morph
+  // and differently from an explicit Sabine morph.
+  std::vector<float> input(4000, 0.0f);
+  input[0] = 1.0f;
+
+  SonareRoomMorphConfig base{};
+  base.length_m = 12.0f;
+  base.width_m = 9.0f;
+  base.height_m = 5.0f;
+  base.source_x = 2.0f;
+  base.source_y = 2.0f;
+  base.source_z = 1.5f;
+  base.listener_x = 8.0f;
+  base.listener_y = 6.0f;
+  base.listener_z = 1.7f;
+  base.absorption = 0.4f;
+  base.source_tail_suppression = 0.0f;
+  base.wet = 1.0f;
+  base.max_seconds = 0.3f;
+  base.ism_order = 3;
+  base.seed = 1u;
+  base.late_model = 0;  // SONARE_REVERB_MODEL_DEFAULT
+
+  SonareRoomMorphConfig eyring = base;
+  eyring.late_model = SONARE_REVERB_MODEL_EYRING;
+  SonareRoomMorphConfig sabine = base;
+  sabine.late_model = SONARE_REVERB_MODEL_SABINE;
+
+  float* zero_out = nullptr;
+  float* eyr_out = nullptr;
+  float* sab_out = nullptr;
+  size_t zero_len = 0;
+  size_t eyr_len = 0;
+  size_t sab_len = 0;
+  REQUIRE(sonare_room_morph(input.data(), input.size(), 48000, &base, &zero_out, &zero_len) ==
+          SONARE_OK);
+  REQUIRE(sonare_room_morph(input.data(), input.size(), 48000, &eyring, &eyr_out, &eyr_len) ==
+          SONARE_OK);
+  REQUIRE(sonare_room_morph(input.data(), input.size(), 48000, &sabine, &sab_out, &sab_len) ==
+          SONARE_OK);
+
+  REQUIRE(zero_len == eyr_len);
+  bool matches_eyring = true;
+  for (size_t i = 0; i < zero_len && matches_eyring; ++i) {
+    matches_eyring = std::abs(zero_out[i] - eyr_out[i]) <= 1e-6f;
+  }
+  REQUIRE(matches_eyring);
+
+  bool differs_from_sabine = zero_len != sab_len;
+  const size_t common = zero_len < sab_len ? zero_len : sab_len;
+  for (size_t i = 0; i < common && !differs_from_sabine; ++i) {
+    differs_from_sabine = std::abs(zero_out[i] - sab_out[i]) > 1e-6f;
+  }
+  REQUIRE(differs_from_sabine);
+
+  sonare_free_floats(zero_out);
+  sonare_free_floats(eyr_out);
+  sonare_free_floats(sab_out);
+}
+
+TEST_CASE("sonare acoustic C API morph honours the mixing-time / crossfade controls",
+          "[c_api][acoustic]") {
+  // A different crossfade width must change the rendered tail, proving the morph
+  // now plumbs mixing_time_ms / crossfade_ms. Use a fixed Eyring model
+  // so only the crossfade differs.
+  std::vector<float> input(4000, 0.0f);
+  input[0] = 1.0f;
+
+  SonareRoomMorphConfig base{};
+  base.length_m = 12.0f;
+  base.width_m = 9.0f;
+  base.height_m = 5.0f;
+  base.source_x = 2.0f;
+  base.source_y = 2.0f;
+  base.source_z = 1.5f;
+  base.listener_x = 8.0f;
+  base.listener_y = 6.0f;
+  base.listener_z = 1.7f;
+  base.absorption = 0.2f;
+  base.source_tail_suppression = 0.0f;
+  base.wet = 1.0f;
+  base.max_seconds = 0.3f;
+  base.ism_order = 3;
+  base.seed = 1u;
+  base.late_model = SONARE_REVERB_MODEL_EYRING;
+  base.mixing_time_ms = 20.0f;
+  base.crossfade_ms = 2.0f;
+
+  SonareRoomMorphConfig wide = base;
+  wide.crossfade_ms = 30.0f;
+
+  float* narrow_out = nullptr;
+  float* wide_out = nullptr;
+  size_t narrow_len = 0;
+  size_t wide_len = 0;
+  REQUIRE(sonare_room_morph(input.data(), input.size(), 48000, &base, &narrow_out, &narrow_len) ==
+          SONARE_OK);
+  REQUIRE(sonare_room_morph(input.data(), input.size(), 48000, &wide, &wide_out, &wide_len) ==
+          SONARE_OK);
+  REQUIRE(narrow_out != nullptr);
+  REQUIRE(wide_out != nullptr);
+
+  bool differs = narrow_len != wide_len;
+  const size_t common = narrow_len < wide_len ? narrow_len : wide_len;
+  for (size_t i = 0; i < common && !differs; ++i) {
+    differs = std::abs(narrow_out[i] - wide_out[i]) > 1e-6f;
+  }
+  REQUIRE(differs);
+
+  sonare_free_floats(narrow_out);
+  sonare_free_floats(wide_out);
+}
+
+TEST_CASE("sonare acoustic C API reports invalid geometry as empty RIR", "[c_api][acoustic]") {
+  SonareRirSynthConfig cfg = valid_rir_config();
+  cfg.source_x = 99.0f;
+  SonareRirSynthResult result{};
+
+  const SonareError err = sonare_synthesize_rir(&cfg, 48000, &result);
+
+  REQUIRE(err == SONARE_OK);
+  REQUIRE(result.has_error == 1);
+  REQUIRE(result.length == 0);
+  REQUIRE(result.rir == nullptr);
+  sonare_free_rir_synth_result(&result);
+}
+
+TEST_CASE("sonare acoustic C API estimates a room from a synthesized RIR", "[c_api][acoustic]") {
+  SonareRirSynthConfig synth_cfg = valid_rir_config();
+  synth_cfg.max_seconds = 0.0f;
+  SonareRirSynthResult rir{};
+  REQUIRE(sonare_synthesize_rir(&synth_cfg, 48000, &rir) == SONARE_OK);
+  REQUIRE(rir.rir != nullptr);
+  REQUIRE(rir.length > 0);
+
+  SonareRoomEstimateConfig estimate_cfg = valid_estimate_config();
+  SonareRoomEstimate estimate{};
+  const SonareError err =
+      sonare_estimate_room(rir.rir, rir.length, 48000, &estimate_cfg, &estimate);
+
+  REQUIRE(err == SONARE_OK);
+  REQUIRE(estimate.volume > 0.0f);
+  REQUIRE(estimate.length_m > 0.0f);
+  REQUIRE(estimate.width_m > 0.0f);
+  REQUIRE(estimate.height_m > 0.0f);
+  REQUIRE(estimate.confidence > 0.0f);
+  REQUIRE(estimate.band_count > 0);
+  REQUIRE(estimate.absorption_bands != nullptr);
+  REQUIRE(estimate.rt60_bands != nullptr);
+
+  sonare_free_room_estimate(&estimate);
+  REQUIRE(estimate.absorption_bands == nullptr);
+  REQUIRE(estimate.rt60_bands == nullptr);
+  REQUIRE(estimate.band_count == 0);
+  sonare_free_rir_synth_result(&rir);
+}
+
+TEST_CASE("sonare acoustic C API room morph appends a target tail", "[c_api][acoustic]") {
+  std::vector<float> input(4000, 0.0f);
+  input[0] = 1.0f;
+
+  SonareRoomMorphConfig cfg{};
+  cfg.length_m = 12.0f;
+  cfg.width_m = 9.0f;
+  cfg.height_m = 5.0f;
+  cfg.source_x = 2.0f;
+  cfg.source_y = 2.0f;
+  cfg.source_z = 1.5f;
+  cfg.listener_x = 8.0f;
+  cfg.listener_y = 6.0f;
+  cfg.listener_z = 1.7f;
+  cfg.absorption = 0.08f;
+  cfg.source_tail_suppression = 0.5f;
+  cfg.wet = 0.7f;
+  cfg.max_seconds = 0.1f;
+  cfg.ism_order = 3;
+  cfg.seed = 1u;
+
+  float* out = nullptr;
+  size_t out_length = 0;
+  const SonareError err =
+      sonare_room_morph(input.data(), input.size(), 48000, &cfg, &out, &out_length);
+
+  REQUIRE(err == SONARE_OK);
+  REQUIRE(out != nullptr);
+  REQUIRE(out_length > input.size());
+  REQUIRE(std::abs(out[0]) > 0.0f);
+  sonare_free_floats(out);
+}
+
+TEST_CASE("sonare acoustic C API uses per-band wall absorption", "[c_api][acoustic]") {
+  // A per-octave-band absorption array (high bands far more absorptive) must
+  // override the scalar `absorption` and yield a different RIR than the scalar
+  // path, while a zeroed/NULL bands array preserves the scalar back-compat path.
+  const float bands[6] = {0.05f, 0.05f, 0.10f, 0.30f, 0.55f, 0.70f};
+
+  SonareRirSynthConfig banded = valid_rir_config();
+  banded.absorption = 0.05f;  // scalar that would be used if bands were ignored
+  banded.absorption_bands = bands;
+  banded.absorption_band_count = 6;
+  banded.material_preset = SONARE_MATERIAL_PRESET_NONE;  // bands apply
+  banded.max_seconds = 0.3f;
+
+  SonareRirSynthConfig scalar = banded;
+  scalar.absorption_bands = nullptr;  // fall back to the scalar 0.05 absorption
+  scalar.absorption_band_count = 0;
+
+  SonareRirSynthResult banded_rir{};
+  SonareRirSynthResult scalar_rir{};
+  REQUIRE(sonare_synthesize_rir(&banded, 48000, &banded_rir) == SONARE_OK);
+  REQUIRE(sonare_synthesize_rir(&scalar, 48000, &scalar_rir) == SONARE_OK);
+  REQUIRE(banded_rir.has_error == 0);
+  REQUIRE(scalar_rir.has_error == 0);
+  REQUIRE(banded_rir.length > 0);
+  REQUIRE(scalar_rir.length > 0);
+
+  bool differs = banded_rir.length != scalar_rir.length;
+  const size_t common =
+      banded_rir.length < scalar_rir.length ? banded_rir.length : scalar_rir.length;
+  for (size_t i = 0; i < common && !differs; ++i) {
+    differs = std::abs(banded_rir.rir[i] - scalar_rir.rir[i]) > 1e-6f;
+  }
+  REQUIRE(differs);  // the per-band array genuinely changed the synthesis
+
+  sonare_free_rir_synth_result(&banded_rir);
+  sonare_free_rir_synth_result(&scalar_rir);
+}
+
+TEST_CASE("sonare acoustic C API uses per-band wall scattering", "[c_api][acoustic]") {
+  const float absorption[6] = {0.12f, 0.12f, 0.12f, 0.12f, 0.12f, 0.12f};
+  const float smooth_scattering[6] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+  const float rough_scattering[6] = {0.75f, 0.75f, 0.75f, 0.75f, 0.75f, 0.75f};
+
+  SonareRirSynthConfig smooth = valid_rir_config();
+  smooth.absorption_bands = absorption;
+  smooth.absorption_band_count = 6;
+  smooth.scattering_bands = smooth_scattering;
+  smooth.scattering_band_count = 6;
+  smooth.material_preset = SONARE_MATERIAL_PRESET_NONE;
+  smooth.max_seconds = 0.3f;
+  smooth.mixing_time_ms = 0.0f;
+
+  SonareRirSynthConfig rough = smooth;
+  rough.scattering_bands = rough_scattering;
+
+  SonareRirSynthResult smooth_rir{};
+  SonareRirSynthResult rough_rir{};
+  REQUIRE(sonare_synthesize_rir(&smooth, 48000, &smooth_rir) == SONARE_OK);
+  REQUIRE(sonare_synthesize_rir(&rough, 48000, &rough_rir) == SONARE_OK);
+  REQUIRE(smooth_rir.has_error == 0);
+  REQUIRE(rough_rir.has_error == 0);
+  REQUIRE(smooth_rir.length > 0);
+  REQUIRE(rough_rir.length > 0);
+
+  bool differs = smooth_rir.length != rough_rir.length;
+  const size_t common = smooth_rir.length < rough_rir.length ? smooth_rir.length : rough_rir.length;
+  for (size_t i = 0; i < common && !differs; ++i) {
+    differs = std::abs(smooth_rir.rir[i] - rough_rir.rir[i]) > 1e-6f;
+  }
+  REQUIRE(differs);
+
+  sonare_free_rir_synth_result(&smooth_rir);
+  sonare_free_rir_synth_result(&rough_rir);
+}
+
+TEST_CASE("sonare acoustic C API selects a material preset", "[c_api][acoustic]") {
+  // A preset (non-zero) wins over both the per-band array and the scalar, so two
+  // distinct presets must yield distinct RIRs from the same geometry.
+  SonareRirSynthConfig curtain = valid_rir_config();
+  curtain.material_preset = SONARE_MATERIAL_PRESET_CURTAIN;  // heavy HF absorption
+  curtain.max_seconds = 0.3f;
+  SonareRirSynthConfig concrete = curtain;
+  concrete.material_preset = SONARE_MATERIAL_PRESET_CONCRETE;  // near-rigid
+
+  SonareRirSynthResult curtain_rir{};
+  SonareRirSynthResult concrete_rir{};
+  REQUIRE(sonare_synthesize_rir(&curtain, 48000, &curtain_rir) == SONARE_OK);
+  REQUIRE(sonare_synthesize_rir(&concrete, 48000, &concrete_rir) == SONARE_OK);
+  REQUIRE(curtain_rir.has_error == 0);
+  REQUIRE(concrete_rir.has_error == 0);
+  REQUIRE(curtain_rir.length > 0);
+  REQUIRE(concrete_rir.length > 0);
+
+  // Concrete (near-rigid) and curtain (heavy HF absorption) imprint very
+  // different reflection coefficients and decay, so the synthesized RIRs differ
+  // in CONTENT. Compare sample-by-sample (max_seconds caps both to the same
+  // length, so a length comparison alone would be vacuous).
+  bool differs = concrete_rir.length != curtain_rir.length;
+  const size_t common =
+      concrete_rir.length < curtain_rir.length ? concrete_rir.length : curtain_rir.length;
+  for (size_t i = 0; i < common && !differs; ++i) {
+    differs = std::abs(concrete_rir.rir[i] - curtain_rir.rir[i]) > 1e-6f;
+  }
+  REQUIRE(differs);
+
+  sonare_free_rir_synth_result(&curtain_rir);
+  sonare_free_rir_synth_result(&concrete_rir);
+}
+
+TEST_CASE("sonare acoustic C API morph honours the new tail controls", "[c_api][acoustic]") {
+  std::vector<float> input(4000, 0.0f);
+  input[0] = 1.0f;
+
+  SonareRoomMorphConfig base{};
+  base.length_m = 12.0f;
+  base.width_m = 9.0f;
+  base.height_m = 5.0f;
+  base.source_x = 2.0f;
+  base.source_y = 2.0f;
+  base.source_z = 1.5f;
+  base.listener_x = 8.0f;
+  base.listener_y = 6.0f;
+  base.listener_z = 1.7f;
+  base.absorption = 0.4f;  // absorptive enough that Sabine/Eyring diverge
+  base.source_tail_suppression = 0.0f;
+  base.wet = 1.0f;
+  base.max_seconds = 0.3f;
+  base.ism_order = 3;
+  base.seed = 1u;
+  base.late_model = SONARE_REVERB_MODEL_SABINE;
+  base.mixing_time_ms = 0.0f;  // auto
+  base.crossfade_ms = 0.0f;    // library default
+
+  SonareRoomMorphConfig eyring = base;
+  eyring.late_model = SONARE_REVERB_MODEL_EYRING;
+
+  float* sab_out = nullptr;
+  float* eyr_out = nullptr;
+  size_t sab_len = 0;
+  size_t eyr_len = 0;
+  REQUIRE(sonare_room_morph(input.data(), input.size(), 48000, &base, &sab_out, &sab_len) ==
+          SONARE_OK);
+  REQUIRE(sonare_room_morph(input.data(), input.size(), 48000, &eyring, &eyr_out, &eyr_len) ==
+          SONARE_OK);
+  REQUIRE(sab_out != nullptr);
+  REQUIRE(eyr_out != nullptr);
+
+  // The late-tail model now propagates through the morph, so the two renders
+  // differ (length and/or samples).
+  bool differs = sab_len != eyr_len;
+  const size_t common = sab_len < eyr_len ? sab_len : eyr_len;
+  for (size_t i = 0; i < common && !differs; ++i) {
+    differs = std::abs(sab_out[i] - eyr_out[i]) > 1e-6f;
+  }
+  REQUIRE(differs);
+
+  sonare_free_floats(sab_out);
+  sonare_free_floats(eyr_out);
+}

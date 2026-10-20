@@ -1,0 +1,296 @@
+#include "mastering/eq/parametric.h"
+
+#include <algorithm>
+#include <cmath>
+
+#include "mastering/dynamics/channel_limits.h"
+#include "rt/biquad_design.h"
+#include "rt/scoped_no_denormals.h"
+#include "util/constants.h"
+#include "util/exception.h"
+
+namespace sonare::mastering::eq {
+namespace {
+
+using sonare::constants::kPiD;
+using sonare::mastering::dynamics::kRealtimePreparedChannels;
+
+float safe_q(float q) {
+  if (!(q > 0.0f)) {
+    throw SonareException(ErrorCode::InvalidParameter, "EQ band Q must be positive");
+  }
+  return std::max(q, 1.0e-6f);
+}
+
+}  // namespace
+
+void ParametricEq::prepare(double sample_rate, int max_block_size) {
+  if (!(sample_rate > 0.0)) {
+    throw SonareException(ErrorCode::InvalidParameter, "sample_rate must be positive");
+  }
+  if (max_block_size < 0) {
+    throw SonareException(ErrorCode::InvalidParameter, "max_block_size must be non-negative");
+  }
+
+  sample_rate_ = sample_rate;
+  max_block_size_ = max_block_size;
+  prepared_ = true;
+  // Preallocate per-channel biquad state up front so the audio-thread process()
+  // path never resizes the state vectors (resize there would malloc). Blocks
+  // wider than this throw instead of allocating.
+  prepare_channels(static_cast<int>(kRealtimePreparedChannels));
+  reset();
+
+  for (size_t i = 0; i < kMaxBands; ++i) {
+    update_coefficients(i);
+  }
+}
+
+void ParametricEq::prepare_channels(int num_channels) {
+  if (num_channels < 0) {
+    throw SonareException(ErrorCode::InvalidParameter, "num_channels must be non-negative");
+  }
+  num_channels_ = num_channels;
+  for (auto& band_states : states_) {
+    band_states.resize(static_cast<size_t>(num_channels));
+  }
+}
+
+void ParametricEq::process(float* const* channels, int num_channels, int num_samples) {
+  sonare::rt::ScopedNoDenormals guard;
+  ensure_prepared();
+  if (num_channels < 0 || num_samples < 0) {
+    throw SonareException(ErrorCode::InvalidParameter,
+                          "num_channels and num_samples must be non-negative");
+  }
+  if (num_channels == 0 || num_samples == 0) {
+    return;
+  }
+  if (channels == nullptr) {
+    throw SonareException(ErrorCode::InvalidParameter, "channels must not be null");
+  }
+
+  // Per-channel biquad state is preallocated to kRealtimePreparedChannels in
+  // prepare(); never resize on the audio thread. Reject blocks wider than the
+  // prepared state (matches the dynamics-processor pattern).
+  if (num_channels_ < num_channels) {
+    throw SonareException(ErrorCode::InvalidParameter,
+                          "num_channels exceeds prepared ParametricEq state");
+  }
+
+  for (int ch = 0; ch < num_channels; ++ch) {
+    if (channels[ch] == nullptr) {
+      throw SonareException(ErrorCode::InvalidParameter, "channel buffer must not be null");
+    }
+  }
+
+  for (size_t band_index = 0; band_index < kMaxBands; ++band_index) {
+    if (!bands_[band_index].enabled) {
+      continue;
+    }
+
+    const auto c = coefficients_[band_index];
+    auto& band_states = states_[band_index];
+    for (int ch = 0; ch < num_channels; ++ch) {
+      auto& state = band_states[static_cast<size_t>(ch)];
+      float* samples = channels[ch];
+      for (int i = 0; i < num_samples; ++i) {
+        const float x = samples[i];
+        const float y = c.b0 * x + state.z1;
+        state.z1 = c.b1 * x - c.a1 * y + state.z2;
+        state.z2 = c.b2 * x - c.a2 * y;
+        samples[i] = y;
+      }
+    }
+  }
+}
+
+void ParametricEq::reset() {
+  for (auto& band_states : states_) {
+    for (auto& state : band_states) {
+      state = {};
+    }
+  }
+}
+
+void ParametricEq::set_band(size_t index, const EqBand& band) {
+  validate_band_index(index);
+  bands_[index] = band;
+  update_coefficients(index);
+}
+
+bool ParametricEq::set_parameter(unsigned int param_id, float value) {
+  const size_t band_index = param_id / 3u;
+  if (band_index >= kMaxBands) {
+    return false;
+  }
+  EqBand band = bands_[band_index];
+  // Tilt band types have no coefficient design here (make_coefficients throws
+  // for them). set_parameter is the RT-safe automation path, so skip rather than
+  // throw on the audio thread; the throwing path stays reserved for the control-
+  // thread set_band(). A tilt type can never be validly installed in the first
+  // place (set_band itself throws), so this is purely defensive.
+  if (band.type == EqBandType::TiltShelf || band.type == EqBandType::FlatTilt) {
+    return false;
+  }
+  switch (param_id % 3u) {
+    case 0:
+      // Clamp to the open interval (0 Hz, Nyquist) so coefficient design never
+      // throws on the audio thread.
+      band.frequency_hz =
+          std::clamp(value, 1.0e-3f, static_cast<float>(sample_rate_ * 0.5) - 1.0e-3f);
+      break;
+    case 1:
+      band.gain_db = value;
+      break;
+    case 2:
+      band.q = std::max(value, 1.0e-6f);
+      break;
+    default:
+      return false;
+  }
+  // set_band recomputes only this band's coefficients without touching state.
+  set_band(band_index, band);
+  return true;
+}
+
+std::vector<rt::ParamDescriptor> ParametricEq::parameter_descriptors() const {
+  std::vector<rt::ParamDescriptor> descriptors;
+  descriptors.reserve(kMaxBands * 3u);
+  // Keys mirror the construction-time band prefix (configure_parametric): band<b>.<field>.
+  for (unsigned int b = 0; b < kMaxBands; ++b) {
+    const std::string prefix = "band" + std::to_string(b) + ".";
+    descriptors.push_back({prefix + "frequencyHz", b * 3u + 0u});
+    descriptors.push_back({prefix + "gainDb", b * 3u + 1u});
+    descriptors.push_back({prefix + "q", b * 3u + 2u});
+  }
+  return descriptors;
+}
+
+void ParametricEq::clear_band(size_t index) {
+  validate_band_index(index);
+  bands_[index] = {};
+  coefficients_[index] = {};
+  if (index < states_.size()) {
+    for (auto& state : states_[index]) {
+      state = {};
+    }
+  }
+}
+
+void ParametricEq::clear() {
+  for (size_t i = 0; i < kMaxBands; ++i) {
+    clear_band(i);
+  }
+}
+
+const EqBand& ParametricEq::band(size_t index) const {
+  validate_band_index(index);
+  return bands_[index];
+}
+
+ParametricEq::Coefficients ParametricEq::make_coefficients(const EqBand& band, double sample_rate) {
+  if (!band.enabled) {
+    return {};
+  }
+  if (!(sample_rate > 0.0)) {
+    throw SonareException(ErrorCode::InvalidParameter, "sample_rate must be positive");
+  }
+  if (!(band.frequency_hz > 0.0f) || !(band.frequency_hz < static_cast<float>(sample_rate * 0.5))) {
+    throw SonareException(ErrorCode::InvalidParameter,
+                          "EQ band frequency must be between 0 Hz and Nyquist");
+  }
+
+  const double q = safe_q(band.q);
+  const double w0 = 2.0 * kPiD * static_cast<double>(band.frequency_hz) / sample_rate;
+  const float w0f = static_cast<float>(w0);
+  const float qf = static_cast<float>(q);
+  const auto from_common = [](const sonare::rt::BiquadCoeffs& c) {
+    return Coefficients{c.b0, c.b1, c.b2, c.a1, c.a2};
+  };
+  if (band.slope_db_oct == 6) {
+    if (band.type == EqBandType::LowPass) {
+      return from_common(sonare::rt::first_order_lowpass(w0f));
+    }
+    if (band.type == EqBandType::HighPass) {
+      return from_common(sonare::rt::first_order_highpass(w0f));
+    }
+  }
+
+  if (band.coeff_mode == BiquadCoeffMode::Vicanek) {
+    switch (band.type) {
+      case EqBandType::Peak:
+        return from_common(sonare::rt::vicanek_peak(w0f, qf, band.gain_db));
+      case EqBandType::LowPass:
+        return from_common(sonare::rt::vicanek_lowpass(w0f, qf));
+      case EqBandType::HighPass:
+        return from_common(sonare::rt::vicanek_highpass(w0f, qf));
+      case EqBandType::BandPass:
+        return from_common(sonare::rt::vicanek_bandpass(w0f, qf));
+      case EqBandType::Notch:
+        return from_common(sonare::rt::vicanek_notch(w0f, qf));
+      case EqBandType::LowShelf:
+        // Vicanek matched-Z shelves have a fixed slope and no Q/S parameter, so
+        // band.q is intentionally not passed here (it is honored only by the RBJ
+        // shelves below). See EqBand::q for the reflected-value caveat.
+        return from_common(sonare::rt::vicanek_low_shelf(w0f, band.gain_db));
+      case EqBandType::HighShelf:
+        return from_common(sonare::rt::vicanek_high_shelf(w0f, band.gain_db));
+      case EqBandType::TiltShelf:
+      case EqBandType::FlatTilt:
+        // Vicanek matched-Z designs have no closed-form for tilt/flat-tilt;
+        // surfacing the error lets the caller pick BiquadCoeffMode::RBJ (which
+        // does support tilt) instead of silently falling through to a
+        // different magnitude/phase response.
+        throw SonareException(ErrorCode::InvalidParameter,
+                              "Vicanek EQ coefficient mode does not support TiltShelf/FlatTilt; "
+                              "use BiquadCoeffMode::RBJ for these band types");
+    }
+  }
+
+  switch (band.type) {
+    case EqBandType::Peak:
+      return from_common(sonare::rt::rbj_peak(w0f, qf, band.gain_db));
+
+    case EqBandType::LowPass:
+      return from_common(sonare::rt::rbj_lowpass(w0f, qf));
+
+    case EqBandType::HighPass:
+      return from_common(sonare::rt::rbj_highpass(w0f, qf));
+
+    case EqBandType::BandPass:
+      return from_common(sonare::rt::rbj_bandpass(w0f, qf));
+
+    case EqBandType::Notch:
+      return from_common(sonare::rt::rbj_notch(w0f, qf));
+
+    case EqBandType::LowShelf:
+      return from_common(sonare::rt::rbj_low_shelf(w0f, qf, band.gain_db));
+
+    case EqBandType::HighShelf:
+      return from_common(sonare::rt::rbj_high_shelf(w0f, qf, band.gain_db));
+
+    case EqBandType::TiltShelf:
+    case EqBandType::FlatTilt:
+      throw SonareException(ErrorCode::InvalidParameter, "unsupported EQ band type");
+  }
+
+  return {};
+}
+
+void ParametricEq::update_coefficients(size_t index) {
+  validate_band_index(index);
+  coefficients_[index] = make_coefficients(bands_[index], sample_rate_);
+}
+
+void ParametricEq::validate_band_index(size_t index) {
+  if (index >= kMaxBands) {
+    throw SonareException(ErrorCode::InvalidParameter, "EQ band index out of range");
+  }
+}
+
+void ParametricEq::ensure_prepared() const {
+  ProcessorBase::ensure_prepared(prepared_, "ParametricEq");
+}
+
+}  // namespace sonare::mastering::eq

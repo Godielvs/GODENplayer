@@ -1,0 +1,38 @@
+GODENplayer — local public candidate
+
+GODENplayer is an independent foobar2000 configuration and set of native
+components. It is not affiliated with or endorsed by the foobar2000 authors.
+This package contains the complete unmodified official foobar2000 2.25.10 x64
+installer and freshly built GODENplayer, Columns UI and Spectrum components.
+Playback Statistics 3.1.11 is an optional download from the official site;
+its DLL is not bundled. Installation can finish without internet.
+
+Original project code is MIT. Third-party code, shaders, fonts and icons are
+excluded. This candidate retains effects with unresolved redistribution rights
+and the approved B icon's unresolved similarity/rights question. It is not wholly MIT or fully
+cleared for public distribution. Read LICENSE-SCOPE.md, SHADER-PROVENANCE.md
+and ICON-PROVENANCE.md and all installed notices before redistributing.
+
+Fresh installs offer cover thumbnails through anonymous Catbox upload, after
+showing a disclosure. A metadata-free PNG thumbnail (at most 512 x 512 and
+1 MiB) becomes public on Catbox; it is not ephemeral. Delivery currently uses
+wsrv as an additional image proxy. Catbox documents removal after two years of
+inactivity, subject to its policy. Disabling covers stops new uploads and does
+not delete prior anonymous uploads. No music file or local path is uploaded.
+Presence text/progress works without covers. Existing profiles retain saved
+choices; they never silently switch a private relay to Catbox. Custom private
+relay credentials are protected locally using Windows DPAPI.
+
+The public payload contains no personal library or profile. Upgrades copy the
+existing installation and profile locally to preserve preferences, playlists,
+ratings, history and caches, and retain a rollback. Profile data is not uploaded
+by the installer. The complete corresponding-source ZIP accompanies this installer;
+its manifest identifies effective source files, patches, dependencies and hashes.
+
+foobar2000 license: https://www.foobar2000.org/license
+Columns UI: https://github.com/reupen/columns_ui
+Spectrum: https://github.com/stuerp/foo_vis_spectrum_analyzer
+Catbox API and retention: https://catbox.moe/tools.php / https://catbox.moe/faq.php
+
+Installed licenses and source correspondence are under the Goden licenses
+folder. Internal NekoRoX identifiers remain for configuration compatibility.

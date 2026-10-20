@@ -1,0 +1,159 @@
+#include "midi/midi_clip.h"
+
+#include <algorithm>
+#include <array>
+#include <utility>
+
+namespace sonare::midi {
+
+// A deterministic ordering rank for events sharing the same timestamp. Note-off
+// must precede note-on so a same-timestamp re-trigger releases before
+// re-attacking (no stuck/dropped note). Other messages fall in between by status
+// nibble.
+int same_time_rank(const Ump& ump) noexcept {
+  if (ump.is_note_off()) return 0;
+  const auto message_type = ump.message_type();
+  if (message_type == UmpMessageType::kMidi1ChannelVoice) {
+    const auto status = static_cast<UmpStatus>(ump.status_nibble());
+    if (status == UmpStatus::kControlChange) {
+      const uint8_t controller = ump.note_number();
+      if (controller == 0) return 1;
+      if (controller == 32) return 2;
+      return 4;
+    }
+    if (status == UmpStatus::kProgramChange) return 3;
+  } else if (message_type == UmpMessageType::kMidi2ChannelVoice) {
+    // MIDI 2.0 carries bank select inside the program-change message itself, so
+    // there is no separate bank-select CC to order ahead of it; rank the banked
+    // PC before note-on exactly like the MIDI 1.0 program change, so a note at
+    // the same timestamp uses the new program/bank.
+    if (static_cast<UmpStatus>(ump.status_nibble()) == UmpStatus::kProgramChange) return 3;
+  }
+  if (ump.is_note_on()) return 5;
+  return 4;
+}
+
+bool render_event_before(const MidiEvent& a, const MidiEvent& b) noexcept {
+  if (a.render_frame != b.render_frame) return a.render_frame < b.render_frame;
+  const int ra = same_time_rank(a.ump);
+  const int rb = same_time_rank(b.ump);
+  if (ra != rb) return ra < rb;
+  // Deterministic tiebreak on note then channel then first word so identical
+  // timestamps are fully ordered regardless of insertion order. Mirrors
+  // MidiClip::sort_stable.
+  if (a.ump.note_number() != b.ump.note_number()) {
+    return a.ump.note_number() < b.ump.note_number();
+  }
+  if (a.ump.channel() != b.ump.channel()) {
+    return a.ump.channel() < b.ump.channel();
+  }
+  return a.ump.words[0] < b.ump.words[0];
+}
+
+void sort_render_events_stable(std::vector<MidiEvent>& events) {
+  std::stable_sort(events.begin(), events.end(), render_event_before);
+}
+
+void sort_render_events_stable(MidiEvent* events, size_t count) {
+  if (events == nullptr || count < 2) return;
+  // Binary insertion sort: stable and fully in place. std::stable_sort requests
+  // a temporary heap buffer (operator new), which is forbidden on the audio
+  // thread -- this overload exists precisely for the fixed-capacity MidiFxBuffer
+  // that process() sorts per block. Event counts here are small (a few dozen,
+  // capped at MidiFxBuffer::kCapacity), so the O(n^2) moves are negligible.
+  for (size_t i = 1; i < count; ++i) {
+    MidiEvent key = events[i];
+    // upper_bound keeps equal-key elements in their original relative order
+    // (stability), matching render_event_before's deterministic tiebreak.
+    size_t lo = 0;
+    size_t hi = i;
+    while (lo < hi) {
+      const size_t mid = lo + (hi - lo) / 2;
+      if (render_event_before(key, events[mid])) {
+        hi = mid;
+      } else {
+        lo = mid + 1;
+      }
+    }
+    for (size_t j = i; j > lo; --j) {
+      events[j] = events[j - 1];
+    }
+    events[lo] = key;
+  }
+}
+
+void MidiClip::set_events(std::vector<MidiClipEvent> events) { events_ = std::move(events); }
+
+void MidiClip::add_event(const MidiClipEvent& event) { events_.push_back(event); }
+
+void MidiClip::sort_stable() {
+  std::stable_sort(events_.begin(), events_.end(),
+                   [](const MidiClipEvent& a, const MidiClipEvent& b) {
+                     if (a.ppq != b.ppq) return a.ppq < b.ppq;
+                     const int ra = same_time_rank(a.ump);
+                     const int rb = same_time_rank(b.ump);
+                     if (ra != rb) return ra < rb;
+                     // Stable tiebreak on note then channel then first word so
+                     // identical-timestamp ordering is fully deterministic
+                     // regardless of insertion order.
+                     if (a.ump.note_number() != b.ump.note_number()) {
+                       return a.ump.note_number() < b.ump.note_number();
+                     }
+                     if (a.ump.channel() != b.ump.channel()) {
+                       return a.ump.channel() < b.ump.channel();
+                     }
+                     return a.ump.words[0] < b.ump.words[0];
+                   });
+}
+
+NotePairValidation MidiClip::validate_note_pairs() const {
+  NotePairValidation result;
+  // Count of currently-open note-ons per (group, channel, note). UMP group is
+  // part of the MIDI endpoint identity and must not match across groups.
+  std::array<std::array<std::array<int, 128>, 16>, 16> open{};
+
+  for (const MidiClipEvent& ev : events_) {
+    const uint8_t group = ev.ump.group;
+    const uint8_t channel = ev.ump.channel();
+    const uint8_t note = ev.ump.note_number();
+    if (group >= 16 || channel >= 16 || note >= 128) continue;
+    if (ev.ump.is_note_on()) {
+      open[group][channel][note]++;
+    } else if (ev.ump.is_note_off()) {
+      if (open[group][channel][note] > 0) {
+        open[group][channel][note]--;
+      } else {
+        result.unmatched_note_offs++;
+      }
+    }
+  }
+  for (const auto& group : open) {
+    for (const auto& ch : group) {
+      for (int count : ch) {
+        if (count > 0) result.unmatched_note_ons += static_cast<uint32_t>(count);
+      }
+    }
+  }
+  result.ok = result.unmatched_note_ons == 0 && result.unmatched_note_offs == 0;
+  return result;
+}
+
+void MidiClip::to_render_events(const transport::TempoMap& tempo_map, double clip_start_ppq,
+                                std::vector<MidiEvent>* out) const {
+  if (out == nullptr) return;
+  const int64_t clip_start_sample = tempo_map.ppq_to_sample(clip_start_ppq);
+  for (const MidiClipEvent& ev : events_) {
+    const int64_t abs_sample = tempo_map.ppq_to_sample(clip_start_ppq + ev.ppq);
+    MidiEvent rendered;
+    // Anchor relative to the clip start so any small PPQ->sample rounding stays
+    // consistent with the clip's own start_sample baking in the compiler.
+    rendered.render_frame = abs_sample;
+    rendered.ump = ev.ump;
+    rendered.sysex_payload = ev.sysex_payload;
+    rendered.sysex_payload_size = ev.sysex_payload_size;
+    (void)clip_start_sample;
+    out->push_back(rendered);
+  }
+}
+
+}  // namespace sonare::midi

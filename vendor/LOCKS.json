@@ -1,0 +1,33 @@
+{
+  "schema": "nekorox.vendor-locks.v1",
+  "dependencies": [
+    {
+      "name": "libsonare",
+      "version": "1.5.2",
+      "tag": "v1.5.2",
+      "commit": "30931acd0d16e5d890b728548dd74675ec13758c",
+      "source": "https://github.com/libraz/libsonare.git",
+      "license": "Apache-2.0",
+      "buildTarget": "sonare_rt",
+      "linkedArchives": ["sonare_core.lib", "sonare_rt.lib", "kissfft.lib"]
+    },
+    {
+      "name": "Eigen",
+      "version": "3.4.0",
+      "tag": "3.4.0",
+      "commit": "3147391d946bb4b6c68edd901f2add6ac1f31f8c",
+      "source": "https://gitlab.com/libeigen/eigen.git",
+      "license": "MPL-2.0"
+    },
+    {
+      "name": "Zstandard",
+      "version": "1.5.7",
+      "tag": "v1.5.7",
+      "commit": "f8745da6ff1ad1e7bab384bd1f9d742439278e99",
+      "source": "https://github.com/facebook/zstd.git",
+      "license": "BSD-3-Clause",
+      "buildTarget": "libzstd_static",
+      "linkedArchives": ["zstd_static.lib"]
+    }
+  ]
+}

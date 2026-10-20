@@ -1,0 +1,326 @@
+diff --git a/UIElement.cpp b/UIElement.cpp
+index a579f85..4486cd8 100644
+--- a/UIElement.cpp
++++ b/UIElement.cpp
+@@ -421,6 +421,7 @@ void uielement_t::OnLButtonDblClk(UINT flags, CPoint point)
+ LRESULT uielement_t::OnDPIChanged(UINT dpiX, UINT dpiY, PRECT newRect)
+ {
+     _DPI = dpiX;
++    _DisplayEnvironmentDirty.store(true, std::memory_order_release);
+ 
+     DeleteDeviceSpecificResources();
+ 
+@@ -652,6 +653,11 @@ void uielement_t::UpdateState(ConfigurationChanges settings) noexcept
+ /// </summary>
+ LRESULT uielement_t::OnWindowPositionChanged(UINT uMsg, WPARAM wParam, LPARAM lParam)
+ {
++    const auto root = ::GetAncestor(m_hWnd, GA_ROOT);
++    const auto monitor = ::MonitorFromWindow(
++        root != nullptr ? root : m_hWnd, MONITOR_DEFAULTTONEAREST);
++    if (_DisplayMonitor.exchange(monitor, std::memory_order_acq_rel) != monitor)
++        _DisplayEnvironmentDirty.store(true, std::memory_order_release);
+     WakeRenderer();
+     SetMsgHandled(FALSE);
+     return 0;
+@@ -672,6 +678,23 @@ UINT uielement_t::RootPresentationVisibilityMessage() noexcept
+ 
+ LRESULT uielement_t::OnRootPresentationVisibility(UINT, WPARAM, LPARAM)
+ {
++    _DisplayEnvironmentDirty.store(true, std::memory_order_release);
++    WakeRenderer();
++    Invalidate();
++    SetMsgHandled(FALSE);
++    return 0;
++}
++
++UINT uielement_t::DisplayEnvironmentChangedMessage() noexcept
++{
++    static const auto message = ::RegisterWindowMessageW(
++        L"Goden.DisplayEnvironmentChanged.V1");
++    return message;
++}
++
++LRESULT uielement_t::OnDisplayEnvironmentChanged(UINT, WPARAM, LPARAM)
++{
++    _DisplayEnvironmentDirty.store(true, std::memory_order_release);
+     WakeRenderer();
+     Invalidate();
+     SetMsgHandled(FALSE);
+diff --git a/UIElement.h b/UIElement.h
+index 27dca9c..5d944d3 100644
+--- a/UIElement.h
++++ b/UIElement.h
+@@ -78,6 +78,8 @@ private:
+     LRESULT OnWindowPositionChanged(UINT uMsg, WPARAM wParam, LPARAM lParam);
+     static UINT RootPresentationVisibilityMessage() noexcept;
+     LRESULT OnRootPresentationVisibility(UINT uMsg, WPARAM wParam, LPARAM lParam);
++    static UINT DisplayEnvironmentChangedMessage() noexcept;
++    LRESULT OnDisplayEnvironmentChanged(UINT uMsg, WPARAM wParam, LPARAM lParam);
+ 
+     void OnMouseMove(UINT, CPoint);
+     void OnMouseLeave();
+@@ -143,6 +145,8 @@ private:
+         MESSAGE_HANDLER_EX(WM_WINDOWPOSCHANGED, OnWindowPositionChanged)
+         MESSAGE_HANDLER_EX(RootPresentationVisibilityMessage(),
+             OnRootPresentationVisibility)
++        MESSAGE_HANDLER_EX(DisplayEnvironmentChangedMessage(),
++            OnDisplayEnvironmentChanged)
+ 
+         MSG_WM_MOUSEMOVE(OnMouseMove)   // Required for CToolTip
+         MSG_WM_MOUSELEAVE(OnMouseLeave) // Required for tracking tooltip
+@@ -163,6 +167,7 @@ private:
+     void Render() noexcept;
+     void ProcessAudio() noexcept;
+     void Animate() noexcept;
++    void RefreshDisplayEnvironment() noexcept;
+ 
+     void InitializeSampleRateDependentParameters(const audio_chunk_impl & chunk) noexcept;
+ 
+@@ -206,6 +211,8 @@ private:
+ 
+     UINT _DPI;
+     double _DisplayRefreshRate;
++    std::atomic_bool _DisplayEnvironmentDirty { true };
++    std::atomic<HMONITOR> _DisplayMonitor { nullptr };
+ 
+     // Device-independent resources.
+     CComPtr<ID2D1Factory1> _D2DFactory;
+diff --git a/UIElementRendering.cpp b/UIElementRendering.cpp
+index 7d0af1e..d83b904 100644
+--- a/UIElementRendering.cpp
++++ b/UIElementRendering.cpp
+@@ -143,6 +143,10 @@ void uielement_t::RenderThreadProc() noexcept
+             }
+         }
+ 
++        if (_DisplayEnvironmentDirty.exchange(
++                false, std::memory_order_acq_rel))
++            RefreshDisplayEnvironment();
++
+         if (IsRenderable())
+         {
+             bool HaveColorsChanged = false;
+@@ -394,6 +398,25 @@ void uielement_t::Animate() noexcept
+         Iter._Graph->_Analysis.UpdatePeakValues(_RenderState._PlaybackTime == 0.);
+ }
+ 
++void uielement_t::RefreshDisplayEnvironment() noexcept
++{
++    const auto root = ::GetAncestor(m_hWnd, GA_ROOT);
++    _DisplayMonitor.store(::MonitorFromWindow(
++        root != nullptr ? root : m_hWnd,
++        MONITOR_DEFAULTTONEAREST), std::memory_order_release);
++    if (_D3DDevice == nullptr)
++        return;
++
++    CComPtr<IDXGIDevice1> dxgiDevice;
++    if (FAILED(_D3DDevice->QueryInterface(&dxgiDevice)))
++        return;
++    double refreshRate = 0.;
++    if (SUCCEEDED(_Direct2D.GetRefreshRate(
++            dxgiDevice, m_hWnd, refreshRate)) &&
++        std::isfinite(refreshRate) && refreshRate >= 24.)
++        _DisplayRefreshRate = refreshRate;
++}
++
+ /// <summary>
+ /// Initializes the parameters that depend on the sample rate of the chunk.
+ /// </summary>
+@@ -523,7 +546,8 @@ HRESULT uielement_t::CreateDeviceSpecificResources() noexcept
+             }
+ 
+             if (SUCCEEDED(hr))
+-                _Direct2D.GetRefreshRate(DXGIDevice, _DisplayRefreshRate);
++                _Direct2D.GetRefreshRate(
++                    DXGIDevice, m_hWnd, _DisplayRefreshRate);
+         }
+ 
+         if (SUCCEEDED(hr))
+diff --git a/Windows/Direct2D.cpp b/Windows/Direct2D.cpp
+index b8b0402..16adfd2 100644
+--- a/Windows/Direct2D.cpp
++++ b/Windows/Direct2D.cpp
+@@ -11,6 +11,51 @@
+ 
+ #pragma hdrstop
+ 
++namespace
++{
++    bool GetActivePathRefreshRate(
++        const WCHAR * deviceName,
++        double & refreshRate) noexcept
++    {
++        UINT32 pathCount = 0;
++        UINT32 modeCount = 0;
++        if (::GetDisplayConfigBufferSizes(
++                QDC_ONLY_ACTIVE_PATHS, &pathCount, &modeCount) != ERROR_SUCCESS ||
++            pathCount == 0)
++            return false;
++
++        std::vector<DISPLAYCONFIG_PATH_INFO> paths(pathCount);
++        std::vector<DISPLAYCONFIG_MODE_INFO> modes(modeCount);
++        if (::QueryDisplayConfig(
++                QDC_ONLY_ACTIVE_PATHS,
++                &pathCount, paths.data(),
++                &modeCount, modes.data(), nullptr) != ERROR_SUCCESS)
++            return false;
++
++        paths.resize(pathCount);
++        for (const auto & path : paths)
++        {
++            DISPLAYCONFIG_SOURCE_DEVICE_NAME source = { };
++            source.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
++            source.header.size = sizeof(source);
++            source.header.adapterId = path.sourceInfo.adapterId;
++            source.header.id = path.sourceInfo.id;
++            if (::DisplayConfigGetDeviceInfo(&source.header) != ERROR_SUCCESS ||
++                ::_wcsicmp(source.viewGdiDeviceName, deviceName) != 0)
++                continue;
++
++            const auto numerator = path.targetInfo.refreshRate.Numerator;
++            const auto denominator = path.targetInfo.refreshRate.Denominator;
++            if (numerator == 0 || denominator == 0)
++                return false;
++            refreshRate = static_cast<double>(numerator) /
++                static_cast<double>(denominator);
++            return std::isfinite(refreshRate) && refreshRate > 0.;
++        }
++        return false;
++    }
++}
++
+ /// <summary>
+ /// Initializes this instance.
+ /// </summary>
+@@ -41,11 +86,14 @@ void Direct2D::Terminate() noexcept
+ /// <summary>
+ /// Gets the refresh rate of the current display.
+ /// </summary>
+-HRESULT Direct2D::GetRefreshRate(_In_ IDXGIDevice1 * dxgiDevice, _Out_ double & refreshRate) const noexcept
++HRESULT Direct2D::GetRefreshRate(
++    _In_ IDXGIDevice1 * dxgiDevice,
++    _In_ HWND window,
++    _Out_ double & refreshRate) const noexcept
+ {
+     refreshRate = 0.;
+ 
+-    if (dxgiDevice == nullptr)
++    if (dxgiDevice == nullptr || window == nullptr)
+         return E_POINTER;
+ 
+     CComPtr<IDXGIAdapter> DXGIAdapter;
+@@ -55,67 +103,45 @@ HRESULT Direct2D::GetRefreshRate(_In_ IDXGIDevice1 * dxgiDevice, _Out_ double &
+     if (FAILED(hr))
+         return hr;
+ 
+-    CComPtr<IDXGIOutput> DXGIOutput;
+-
+-    hr = DXGIAdapter->EnumOutputs(0, &DXGIOutput);  // Primary output (index 0)
+-
+-    if (FAILED(hr))
+-        return hr;
+-
+-    // Get the current desktop resolution for mode matching.
+-    DEVMODE DisplaySettings = { .dmSize = sizeof(DEVMODE) };
+-
+-    if (!::EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &DisplaySettings))
+-        return HRESULT_FROM_WIN32(::GetLastError());
+-
+-    const DXGI_MODE_DESC TargetMode =
+-    {
+-        .Width            = DisplaySettings.dmPelsWidth,
+-        .Height           = DisplaySettings.dmPelsHeight,
+-        .Format           = DXGI_FORMAT_R8G8B8A8_UNORM,  // Common format
+-        .ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED,
+-        .Scaling          = DXGI_MODE_SCALING_UNSPECIFIED
+-    };
+-
+-    // Find the closest matching mode (includes current refresh rate).
+-    DXGI_MODE_DESC MatchedMode = { };
+-
+-    hr = DXGIOutput->FindClosestMatchingMode(&TargetMode, &MatchedMode, nullptr);
+-
+-    if (SUCCEEDED(hr))
++    const HMONITOR wantedMonitor = ::MonitorFromWindow(
++        ::GetAncestor(window, GA_ROOT), MONITOR_DEFAULTTONEAREST);
++    DXGI_OUTPUT_DESC wantedDescription = { };
++    bool found = false;
++    for (UINT index = 0; ; ++index)
+     {
+-        refreshRate = static_cast<double>(MatchedMode.RefreshRate.Numerator) / MatchedMode.RefreshRate.Denominator;
+-
+-        return hr;
+-    }
+-
+-    // Fallback: Enumerate all modes and return the refresh rate of the first exact resolution match.
+-
+-    UINT Flags = 0;  // Use 0 for current mode matching
+-    UINT ModeCount = 0;
+-
+-    hr = DXGIOutput->GetDisplayModeList(DXGI_FORMAT_R8G8B8A8_UNORM, Flags, &ModeCount, nullptr);
+-
+-    if (FAILED(hr) || (ModeCount == 0))
+-        return hr;
+-
+-    std::vector<DXGI_MODE_DESC> Modes(ModeCount);
+-
+-    hr = DXGIOutput->GetDisplayModeList(DXGI_FORMAT_R8G8B8A8_UNORM, Flags, &ModeCount, Modes.data());
+-
+-    if (FAILED(hr))
+-        return hr;
+-
+-    for (const auto & Mode : Modes)
+-    {
+-        if (Mode.Width == TargetMode.Width && Mode.Height == TargetMode.Height)
++        CComPtr<IDXGIOutput> output;
++        hr = DXGIAdapter->EnumOutputs(index, &output);
++        if (hr == DXGI_ERROR_NOT_FOUND)
++            break;
++        if (FAILED(hr))
++            return hr;
++        DXGI_OUTPUT_DESC description = { };
++        if (SUCCEEDED(output->GetDesc(&description)) &&
++            description.Monitor == wantedMonitor)
+         {
+-            refreshRate = static_cast<double>(Mode.RefreshRate.Numerator) / Mode.RefreshRate.Denominator;
++            wantedDescription = description;
++            found = true;
+             break;
+         }
+     }
++    if (!found)
++        return DXGI_ERROR_NOT_FOUND;
+ 
+-    return hr;
++    // QueryDisplayConfig preserves fractional modes such as 59.94/119.88 Hz.
++    if (GetActivePathRefreshRate(wantedDescription.DeviceName, refreshRate))
++        return S_OK;
++
++    // Conservative fallback for drivers that do not expose an active path.
++    DEVMODEW mode = { };
++    mode.dmSize = sizeof(mode);
++    if (::EnumDisplaySettingsExW(
++            wantedDescription.DeviceName, ENUM_CURRENT_SETTINGS, &mode, 0) &&
++        mode.dmDisplayFrequency >= 24 && mode.dmDisplayFrequency <= 1000)
++    {
++        refreshRate = static_cast<double>(mode.dmDisplayFrequency);
++        return S_OK;
++    }
++    return DXGI_ERROR_NOT_FOUND;
+ }
+ 
+ /// <summary>
+diff --git a/Windows/Direct2D.h b/Windows/Direct2D.h
+index 494058b..e62f454 100644
+--- a/Windows/Direct2D.h
++++ b/Windows/Direct2D.h
+@@ -23,7 +23,8 @@ public:
+     HRESULT Initialize();
+     void Terminate() noexcept;
+ 
+-    HRESULT GetRefreshRate(_In_ IDXGIDevice1 * dxgiDevice, _Out_ double & refreshRate) const noexcept;
++    HRESULT GetRefreshRate(_In_ IDXGIDevice1 * dxgiDevice, _In_ HWND window,
++        _Out_ double & refreshRate) const noexcept;
+ 
+     HRESULT Load(const WCHAR * resourceName, const WCHAR * resourceType, _Out_ IWICBitmapSource ** source) const noexcept;
+     HRESULT Load(const WCHAR * uri, _Out_ IWICBitmapSource ** source) const noexcept;

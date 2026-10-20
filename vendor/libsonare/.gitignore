@@ -1,0 +1,132 @@
+# Build directories
+build/
+build-*/
+cmake-build-*/
+dist/
+*.o
+*.a
+*.so
+*.dylib
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+CTestTestfile.cmake
+_deps/
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+*.bak
+# macOS
+.DS_Store
+
+# Claude Code configuration
+.claude/
+CLAUDE.md
+
+# Design documents (internal)
+backup/
+
+# Cache
+.cache/
+
+# Generated files
+*.log
+*.out
+*.mid
+*.midi
+*.wave
+*.wav
+*.flac
+*.mp3
+*.ogg
+*.m4a
+*.aac
+*.jams
+
+# Test outputs (CMake CTest output directory)
+/Testing/
+*.gcov
+*.gcda
+*.gcno
+
+output.json
+output.mid
+analysis.json
+
+# Optional external fixture data and local-only fixture workflows
+tests/fixtures/local/
+tests/fixtures/local_eval/
+tests/fixtures/reports/
+tests/fixtures/music_eval/FSL10K/
+tests/fixtures/music_eval/annotation/
+tests/fixtures/music_eval/annotations/
+tests/fixtures/music_eval/audio/
+tests/fixtures/music_eval/audio_*/
+tests/fixtures/music_eval/babyslakh*/
+tests/fixtures/music_eval/slakh/
+tests/fixtures/music_eval/Slakh*/
+tests/fixtures/music_eval/Flakh*/
+tests/fixtures/music_eval/guitarset_annotations/
+tests/fixtures/music_eval/midi_annotations/
+tests/fixtures/music_eval/local_annotations/
+tests/fixtures/**/*.tar.gz
+tests/fixtures/**/*.zip
+tests/fixtures/**/*.pdf
+tests/fixtures/**/*.json
+
+# Binaries (in build directory only)
+/build
+*.exe
+
+# Compiled dictionaries
+*.dic
+
+# Dictionary cleanup artifacts
+data
+
+# Dependencies (keep required libraries)
+!third_party/
+third_party/**/build/
+third_party/**/.git/
+third_party/r8brain/bench/
+third_party/r8brain/DLL/
+third_party/r8brain/other/
+
+# Node.js
+node_modules/
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+
+# Coverage reports
+coverage/
+coverage-report/
+*.info
+
+# Python
+__pycache__/
+*.py[oc]
+*.egg-info
+.venv/
+uv.lock
+
+# Voice-match harness artifacts (downloaded soundfonts, rendered outputs)
+tools/voicematch/assets/
+tools/voicematch/out/
+
+# Local agent notes
+AGENT.md
+
+# Local MCP server config (Serena など、コミットしない)
+.mcp.json
+.serena/

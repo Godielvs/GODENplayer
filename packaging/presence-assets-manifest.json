@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "applicationName": "GODENplayer",
+  "applicationId": "1538647960269627472",
+  "assetNamespacePolicy": "keys apply only to this applicationId; custom application IDs receive no GODENplayer static keys",
+  "verification": {
+    "status": "remote_verified",
+    "verifiedAt": "2026-10-19T19:44:03.587614+00:00",
+    "method": "Owner-authorized portal replacement, save/reload, HTTPS CDN decoding and source byte comparison.",
+    "sourcePixelsVerified": true,
+    "clientCardObserved": false,
+    "scope": "The three listed static assets at the recorded time; existing clients may cache older images. tools/verify-presence-assets.ps1 verifies local files only."
+  },
+  "assets": [
+    {
+      "key": "goden_default",
+      "source": "packaging/brand/goden-presence-1024.png",
+      "sourceSha256": "fd75e89e8b7fbbf3f53f5de0fd8de4f8e55b66d78f36917c7a0bf40c961a0cd4",
+      "purpose": "valid fallback when exact cover delivery is unavailable",
+      "cdnUrl": "https://cdn.discordapp.com/app-assets/1538647960269627472/1561826147308929195.png",
+      "remoteSha256": "fd75e89e8b7fbbf3f53f5de0fd8de4f8e55b66d78f36917c7a0bf40c961a0cd4",
+      "remoteDimensions": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "key": "goden_playing",
+      "source": "packaging/brand/goden-presence-1024.png",
+      "sourceSha256": "fd75e89e8b7fbbf3f53f5de0fd8de4f8e55b66d78f36917c7a0bf40c961a0cd4",
+      "purpose": "playback state",
+      "cdnUrl": "https://cdn.discordapp.com/app-assets/1538647960269627472/1561826456076558456.png",
+      "remoteSha256": "fd75e89e8b7fbbf3f53f5de0fd8de4f8e55b66d78f36917c7a0bf40c961a0cd4",
+      "remoteDimensions": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "key": "goden_daw",
+      "source": "packaging/brand/goden-presence-1024.png",
+      "sourceSha256": "fd75e89e8b7fbbf3f53f5de0fd8de4f8e55b66d78f36917c7a0bf40c961a0cd4",
+      "purpose": "DAW preview state",
+      "cdnUrl": "https://cdn.discordapp.com/app-assets/1538647960269627472/1561826456278016010.png",
+      "remoteSha256": "fd75e89e8b7fbbf3f53f5de0fd8de4f8e55b66d78f36917c7a0bf40c961a0cd4",
+      "remoteDimensions": [
+        1024,
+        1024
+      ]
+    }
+  ],
+  "applicationIcon": {
+    "source": "packaging/brand/goden-presence-1024.png",
+    "sourceSha256": "fd75e89e8b7fbbf3f53f5de0fd8de4f8e55b66d78f36917c7a0bf40c961a0cd4",
+    "cdnUrl": "https://cdn.discordapp.com/app-icons/1538647960269627472/e6450b2bf49a1460a1fd877b877cf482.png",
+    "remoteSha256": "121cd2388da3c777d94d7d64677a86cf2e6216f0928e4925d20df3b848b3db20",
+    "remoteDimensions": [
+      256,
+      256
+    ],
+    "verifiedAt": "2026-10-19T20:11:38.874969+00:00",
+    "portalSavedAndReloaded": true,
+    "visualDesignConfirmed": true,
+    "sourcePixelsIdentical": false,
+    "clientCardObserved": false,
+    "note": "Discord image editor normalized the supplied image to 256 px. Decoded CDN rendition was visually compared to approved B; source byte/pixel equality is not claimed."
+  }
+}

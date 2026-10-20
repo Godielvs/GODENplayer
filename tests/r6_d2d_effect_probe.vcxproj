@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals"><ProjectGuid>{8157435D-425F-47B0-89DB-18529E633D2C}</ProjectGuid><Keyword>Win32Proj</Keyword><RootNamespace>r6_d2d_effect_probe</RootNamespace></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration"><ConfigurationType>Application</ConfigurationType><UseDebugLibraries>true</UseDebugLibraries></PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration"><ConfigurationType>Application</ConfigurationType><UseDebugLibraries>false</UseDebugLibraries><WholeProgramOptimization>true</WholeProgramOptimization></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup>
+    <OutDir>$(RepoRoot)out\$(Configuration)\</OutDir>
+    <IntDir>$(RepoRoot)out\obj\$(ProjectName)\$(Configuration)\</IntDir>
+    <TargetName>r6_d2d_effect_probe</TargetName>
+    <AmbientShaderSource>$(RepoRoot)src\component\shaders\album_ambient_a1.hlsl</AmbientShaderSource>
+    <AmbientShaderCompiler>$(WindowsSdkDir)bin\$(WindowsTargetPlatformVersion)\x64\fxc.exe</AmbientShaderCompiler>
+    <AmbientShaderDirectory>$(IntDir)ambient-shaders</AmbientShaderDirectory>
+    <AmbientShaderOutput>$(AmbientShaderDirectory)\album_ambient_a1_ps.h</AmbientShaderOutput>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile><LanguageStandard>stdcpp20</LanguageStandard><WarningLevel>Level4</WarningLevel><PrecompiledHeader>NotUsing</PrecompiledHeader><PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions><AdditionalIncludeDirectories>$(RepoRoot)src\component;$(RepoRoot)src\core\include;$(AmbientShaderDirectory);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories><MultiProcessorCompilation>true</MultiProcessorCompilation></ClCompile>
+    <Link><SubSystem>Console</SubSystem><AdditionalDependencies>D2d1.lib;D3d11.lib;Dxgi.lib;Ole32.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'"><ClCompile><RuntimeLibrary>MultiThreaded</RuntimeLibrary></ClCompile></ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'"><ClCompile><RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary></ClCompile></ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="r6_d2d_effect_probe.cpp" />
+    <ClCompile Include="$(RepoRoot)src\component\album_ambient_effect.cpp" />
+  </ItemGroup>
+  <Target Name="CompileAmbientShader" BeforeTargets="ClCompile"
+    Inputs="$(AmbientShaderSource);$(AmbientShaderCompiler)"
+    Outputs="$(AmbientShaderOutput)">
+    <MakeDir Directories="$(AmbientShaderDirectory)" />
+    <Exec Command="&quot;$(AmbientShaderCompiler)&quot; /nologo /O3 /Ges /D D2D_FULL_SHADER /D D2D_ENTRY=main /I &quot;$(WindowsSdkDir)Include\$(WindowsTargetPlatformVersion)\um&quot; /E main /T ps_4_0 /Fh &quot;$(AmbientShaderOutput)&quot; /Vn g_albumAmbientA1Ps &quot;$(AmbientShaderSource)&quot;" />
+  </Target>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

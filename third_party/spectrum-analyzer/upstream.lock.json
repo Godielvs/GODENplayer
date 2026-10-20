@@ -1,0 +1,29 @@
+{
+  "schema": "nekorox.spectrum-fork-lock.v1",
+  "forkVersion": "0.10.0.0-goden6",
+  "spectrumAnalyzer": {
+    "url": "https://github.com/stuerp/foo_vis_spectrum_analyzer.git",
+    "tag": "v0.10.0.0",
+    "commit": "3bbc2206591b48ea0bb2c3578bb0db34a37d84d8"
+  },
+  "columnsUiSdk": {
+    "url": "https://github.com/reupen/columns_ui-sdk.git",
+    "tag": "v7.0.0",
+    "commit": "8603030086b118bba84d56a3bb6454cc8cb511bf"
+  },
+  "wtl": {
+    "url": "https://sourceforge.net/projects/wtl/files/WTL%2010/WTL%2010.0.10320%20Release/WTL10_10320_Release.zip/download",
+    "version": "10.0.10320",
+    "sha256": "13de5cd7ed41454b8f287e9bcc4525234c6ac8c85905e4d4fe1a0776709fd78f"
+  },
+  "atl": {
+    "component": "Microsoft.VisualStudio.Component.VC.14.29.16.11.ATL",
+    "payloadVersion": "14.29.30157",
+    "toolsetDirectory": "14.29.30133",
+    "bootstrapperSha256": "c9cc76c0d03cbcb523e18b559a978ce5df11a667ef78e4e4d264331f1227ddd7"
+  },
+  "foobarSdk": "2025-03-07",
+  "platformToolset": "v142",
+  "windowsSdk": "10.0.19041.0",
+  "patch": "patches/0001-nekorox-adaptive-scheduler.patch"
+}

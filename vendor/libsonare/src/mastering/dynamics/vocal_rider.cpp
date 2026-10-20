@@ -1,0 +1,202 @@
+#include "mastering/dynamics/vocal_rider.h"
+
+#include <algorithm>
+#include <cmath>
+#include <memory>
+#include <utility>
+
+#include "rt/scoped_no_denormals.h"
+#include "util/db.h"
+#include "util/dsp_primitives.h"
+#include "util/exception.h"
+
+namespace sonare::mastering::dynamics {
+
+// The configuration lifecycle (validate + seed active_ + publish the initial
+// snapshot) is handled by RtConfigLifecycle's constructor.
+VocalRider::VocalRider(VocalRiderConfig config) : ConfigBase(std::move(config)) {}
+
+void VocalRider::prepare(double sample_rate, int max_block_size) {
+  if (!(sample_rate > 0.0)) {
+    throw SonareException(ErrorCode::InvalidParameter, "sample_rate must be positive");
+  }
+  if (max_block_size < 0) {
+    throw SonareException(ErrorCode::InvalidParameter, "max_block_size must be non-negative");
+  }
+
+  sample_rate_ = sample_rate;
+  prepared_ = true;
+  // Preallocate per-channel state up front so the audio-thread process() path
+  // never resizes (assign() there would malloc and reset follower/gain state,
+  // injecting a click). Blocks wider than this throw in ensure_followers().
+  if (followers_.size() < kRealtimePreparedChannels) {
+    followers_.resize(kRealtimePreparedChannels);
+  }
+  if (unlinked_gain_state_db_.size() < kRealtimePreparedChannels) {
+    unlinked_gain_state_db_.resize(kRealtimePreparedChannels, 0.0f);
+  }
+  active_ = config_;
+  update_coefficients(active_);
+  reset();
+  // Re-publish so the audio thread observes the same snapshot that prepare()
+  // already applied; adopt_snapshot_for_block() skips the redundant
+  // recomputation when current() == applied_snapshot_.
+  republish_after_prepare();
+}
+
+void VocalRider::process(float* const* channels, int num_channels, int num_samples) {
+  sonare::rt::ScopedNoDenormals guard;
+  ensure_prepared(prepared_, "VocalRider");
+  if (num_channels < 0 || num_samples < 0) {
+    throw SonareException(ErrorCode::InvalidParameter,
+                          "num_channels and num_samples must be non-negative");
+  }
+  if (num_channels == 0 || num_samples == 0) {
+    return;
+  }
+  if (channels == nullptr) {
+    throw SonareException(ErrorCode::InvalidParameter, "channels must not be null");
+  }
+
+  ensure_followers(num_channels);
+
+  // Adopt the latest published configuration once per block. The returned
+  // pointer is stable for the entire per-sample loop — RtPublisher only
+  // changes its current() value inside acquire(), and we already called it.
+  const VocalRiderConfig& cfg = *adopt_snapshot_for_block();
+
+  float largest_abs_gain = 0.0f;
+  for (int ch = 0; ch < num_channels; ++ch) {
+    if (channels[ch] == nullptr)
+      throw SonareException(ErrorCode::InvalidParameter, "channel buffer must not be null");
+  }
+  const float smoothing = time_to_coefficient(sample_rate_, cfg.gain_smoothing_ms);
+  if (cfg.linked_detection) {
+    for (int i = 0; i < num_samples; ++i) {
+      float linked_level = 0.0f;
+      for (int ch = 0; ch < num_channels; ++ch) {
+        linked_level =
+            std::max(linked_level, followers_[static_cast<size_t>(ch)].process(channels[ch][i]));
+      }
+      const float level_db = linear_to_db(linked_level);
+      float ride_db = 0.0f;
+      if (level_db >= cfg.noise_floor_db) {
+        const float target_gain_db = cfg.target_db - level_db;
+        ride_db = std::clamp(target_gain_db, -cfg.max_cut_db, cfg.max_boost_db);
+      }
+      linked_gain_state_db_ = smoothing * linked_gain_state_db_ + (1.0f - smoothing) * ride_db;
+      const float gain_db = linked_gain_state_db_ + cfg.output_gain_db;
+      const float gain = db_to_linear(gain_db);
+      for (int ch = 0; ch < num_channels; ++ch) channels[ch][i] *= gain;
+      if (std::abs(linked_gain_state_db_) > std::abs(largest_abs_gain)) {
+        largest_abs_gain = linked_gain_state_db_;
+      }
+    }
+  } else {
+    for (int ch = 0; ch < num_channels; ++ch) {
+      auto& follower = followers_[static_cast<size_t>(ch)];
+      float& gain_state = unlinked_gain_state_db_[static_cast<size_t>(ch)];
+      for (int i = 0; i < num_samples; ++i) {
+        const float level = follower.process(channels[ch][i]);
+        const float level_db = linear_to_db(level);
+        float ride_db = 0.0f;
+        if (level_db >= cfg.noise_floor_db) {
+          const float target_gain_db = cfg.target_db - level_db;
+          ride_db = std::clamp(target_gain_db, -cfg.max_cut_db, cfg.max_boost_db);
+        }
+        gain_state = smoothing * gain_state + (1.0f - smoothing) * ride_db;
+        const float gain_db = gain_state + cfg.output_gain_db;
+        channels[ch][i] *= db_to_linear(gain_db);
+        // Report the smoothed gain state (as the linked branch does), not the
+        // pre-smoothing ride target, so last_gain_db_ means the same thing in
+        // both detection modes.
+        if (std::abs(gain_state) > std::abs(largest_abs_gain)) largest_abs_gain = gain_state;
+      }
+    }
+  }
+
+  last_gain_db_ = largest_abs_gain;
+}
+
+void VocalRider::reset() {
+  for (auto& follower : followers_) {
+    follower.reset();
+  }
+  linked_gain_state_db_ = 0.0f;
+  std::fill(unlinked_gain_state_db_.begin(), unlinked_gain_state_db_.end(), 0.0f);
+  last_gain_db_ = 0.0f;
+}
+
+bool VocalRider::set_parameter(unsigned int param_id, float value) {
+  // RT-safe in-place automation: mutate the audio thread's working config and
+  // re-derive coefficients. No shared_ptr publish, no allocation; the published
+  // snapshot stays untouched and the control-thread mirror (config_) is updated
+  // so config() reads back the automated state. set_parameter and set_config
+  // must not run concurrently (single-producer contract).
+  switch (param_id) {
+    case 0:
+      active_.target_db = value;
+      break;
+    case 1:
+      active_.max_boost_db = std::max(0.0f, value);
+      break;
+    case 2:
+      active_.max_cut_db = std::max(0.0f, value);
+      break;
+    case 3:
+      active_.attack_ms = std::max(0.0f, value);
+      break;
+    case 4:
+      active_.release_ms = std::max(0.0f, value);
+      break;
+    case 5:
+      active_.output_gain_db = value;
+      break;
+    case 6:
+      // The smoothing coefficient is derived per sample from this value, so a
+      // plain update is RT-safe and preserves the running gain state.
+      active_.gain_smoothing_ms = std::max(0.0f, value);
+      break;
+    case 7:
+      active_.noise_floor_db = value;
+      break;
+    default:
+      return false;
+  }
+  update_coefficients(active_);
+  config_ = active_;
+  return true;
+}
+
+std::vector<rt::ParamDescriptor> VocalRider::parameter_descriptors() const {
+  return {{"targetDb", 0},  {"maxBoostDb", 1},   {"maxCutDb", 2},        {"attackMs", 3},
+          {"releaseMs", 4}, {"outputGainDb", 5}, {"gainSmoothingMs", 6}, {"noiseFloorDb", 7}};
+}
+
+void VocalRider::validate_config(const VocalRiderConfig& config) {
+  if (config.max_boost_db < 0.0f || config.max_cut_db < 0.0f || config.attack_ms < 0.0f ||
+      config.release_ms < 0.0f || config.gain_smoothing_ms < 0.0f) {
+    throw SonareException(ErrorCode::InvalidParameter, "invalid vocal rider configuration");
+  }
+}
+
+void VocalRider::ensure_followers(int num_channels) {
+  // Followers and per-channel gain state are preallocated to
+  // kRealtimePreparedChannels in prepare(); never resize on the audio thread
+  // (assign() would malloc and wipe the running envelope/gain state, producing
+  // a click). Reject blocks wider than the prepared state.
+  if (followers_.size() >= static_cast<size_t>(num_channels)) {
+    return;
+  }
+
+  throw SonareException(ErrorCode::InvalidParameter,
+                        "num_channels exceeds prepared VocalRider state");
+}
+
+void VocalRider::update_coefficients(const VocalRiderConfig& config) {
+  for (auto& follower : followers_) {
+    follower.prepare(sample_rate_, config.attack_ms, config.release_ms);
+  }
+}
+
+}  // namespace sonare::mastering::dynamics

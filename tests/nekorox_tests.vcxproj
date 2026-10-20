@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals"><ProjectGuid>{4D708443-7AE4-4CEE-B774-A8758609F374}</ProjectGuid><Keyword>Win32Proj</Keyword><RootNamespace>nekorox_tests</RootNamespace></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration"><ConfigurationType>Application</ConfigurationType><UseDebugLibraries>true</UseDebugLibraries></PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration"><ConfigurationType>Application</ConfigurationType><UseDebugLibraries>false</UseDebugLibraries><WholeProgramOptimization>true</WholeProgramOptimization></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup><OutDir>$(RepoRoot)out\$(Configuration)\</OutDir><IntDir>$(RepoRoot)out\obj\$(ProjectName)\$(Configuration)\</IntDir><TargetName>nekorox_tests</TargetName></PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile><AdditionalIncludeDirectories>$(RepoRoot)src\core\include;$(RepoRoot)src\component;$(RepoRoot)vendor;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories><LanguageStandard>stdcpp20</LanguageStandard><WarningLevel>Level4</WarningLevel><PrecompiledHeader>NotUsing</PrecompiledHeader><PreprocessorDefinitions>GODEN_ENABLE_QA_HOOKS=1;WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions><MultiProcessorCompilation>true</MultiProcessorCompilation><ConformanceMode>true</ConformanceMode></ClCompile>
+    <Link><AdditionalDependencies>Bcrypt.lib;Dwrite.lib;D2d1.lib;Windowscodecs.lib;Ole32.lib;Winhttp.lib;Winmm.lib;%(AdditionalDependencies)</AdditionalDependencies><StackReserveSize>4194304</StackReserveSize></Link>
+  </ItemDefinitionGroup>
+  <ItemGroup><ClCompile Include="main.cpp" /><ClCompile Include="..\src\component\daw_output_backend.cpp" /><ClCompile Include="..\src\component\discord_relay_client.cpp" /><ClCompile Include="..\src\component\interaction_latency_guard.cpp" /><ClCompile Include="..\src\component\latest_worker.cpp" /><ClCompile Include="..\src\component\performance_telemetry.cpp" /><ClCompile Include="..\src\component\rollout_flags.cpp" /></ItemGroup>
+  <ItemGroup><ClCompile Include="workpack_layout_tests.cpp" /><ClCompile Include="workpack_retention_tests.cpp" /><ClCompile Include="workpack_scroll_tests.cpp" /><ClCompile Include="workpack_album_scroll_tests.cpp" /><ClCompile Include="workpack_presentation_tests.cpp" /><ClCompile Include="workpack_pcm_tests.cpp" /><ClCompile Include="workpack_lifetime_tests.cpp" /><ClCompile Include="workpack_dsp_wake_tests.cpp" /><ClCompile Include="workpack_identity_tests.cpp" /><ClCompile Include="workpack_tag_tests.cpp" /><ClCompile Include="workpack_import_tests.cpp" /><ClCompile Include="workpack_shell_tests.cpp" /><ClCompile Include="workpack_album_session_tests.cpp" /><ClCompile Include="workpack_album_view_tests.cpp" /><ClCompile Include="workpack_booklet_tests.cpp" /><ClCompile Include="workpack_scrub_tests.cpp" /><ClCompile Include="..\src\component\media_file_operations.cpp" /><ClCompile Include="..\src\component\media_binding_recovery.cpp" /><ClCompile Include="..\src\component\scrub_coordinator.cpp"><PreprocessorDefinitions>GODEN_ENABLE_QA_HOOKS=1;NEKOROX_SCRUB_QA_STANDALONE;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile><ClCompile Include="..\src\component\album_mode_view.cpp" /><ClCompile Include="..\src\component\album_booklet_model.cpp" /><ClCompile Include="..\src\component\text_layout_cache.cpp" /><ClCompile Include="..\src\component\workspace_retained_scene.cpp" /><ClCompile Include="..\src\component\presentation_revision.cpp" /><ClCompile Include="..\src\component\worker_reaper.cpp" /></ItemGroup>
+    <ItemGroup><ClCompile Include="workpack_audition_tests.cpp" /><ClCompile Include="workpack_scope_tests.cpp" /><ClCompile Include="workpack_spectrum_tests.cpp" /><ClCompile Include="workpack_artwork_tests.cpp" /><ClCompile Include="corrective_r2_pacing_tests.cpp" /><ClCompile Include="corrective_r2_album_session_tests.cpp" /><ClCompile Include="corrective_r2_shell_integration.cpp" /><ClCompile Include="corrective_r2_tag_selection_tests.cpp" /><ClCompile Include="corrective_r2_tag_media_tests.cpp" /><ClCompile Include="corrective_r2_listen_tests.cpp" /><ClCompile Include="corrective_r2_audition_tests.cpp" /><ClCompile Include="r3_probe.cpp" /><ClCompile Include="r3_tag_integrity_tests.cpp" /><ClCompile Include="r3_lifetime_tests.cpp" /><ClCompile Include="r3_audition_tests.cpp" /><ClCompile Include="r3_lyrics_tests.cpp" /><ClCompile Include="c6_history_tests.cpp" /><ClCompile Include="pixel_ui_data_tests.cpp" /><ClCompile Include="r6_ambient_features_tests.cpp" /><ClCompile Include="r7_dynamics_tests.cpp" /><ClCompile Include="c11_core_tests.cpp" /><ClCompile Include="c13_response_tests.cpp" /></ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="efficiency_policy_tests.cpp" />
+    <ClCompile Include="full_review_regression_tests.cpp" />
+    <ClCompile Include="text_layout_residency_tests.cpp" />
+    <ClCompile Include="async_text_view_tests.cpp" />
+    <ClCompile Include="..\src\component\async_text_view.cpp" />
+    <ClCompile Include="..\src\component\prepared_text_runs.cpp" />
+    <ClCompile Include="spectrum_render_cache_tests.cpp" />
+    <ClCompile Include="visual_capture_tests.cpp" />
+    <ClCompile Include="visual_refinement_tests.cpp" />
+    <ClCompile Include="..\src\component\lyrics_http_client.cpp" />
+    <ClCompile Include="..\src\component\lyrics_local_provider.cpp" />
+    <ClCompile Include="..\src\component\lrclib_provider.cpp" />
+  </ItemGroup>
+  <ItemGroup><ProjectReference Include="..\src\core\nekorox_core.vcxproj"><AdditionalProperties>GodenEnableQaHooks=1</AdditionalProperties><Project>{1A9D7960-BC9A-4FAF-847F-147B88D0F921}</Project></ProjectReference></ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

@@ -1,0 +1,123 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "libsonare"
+version = "1.5.2"
+description = "Fast audio analysis library with C++ and Python bindings"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+authors = [
+    { name = "libraz", email = "libraz@libraz.net" },
+]
+readme = "README.md"
+keywords = ["audio", "music", "analysis", "mir", "bpm", "key", "tempo", "dsp"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Sound/Audio :: Analysis",
+    "Topic :: Scientific/Engineering",
+    "Typing :: Typed",
+]
+dependencies = [
+    # NumPy is required at runtime: hot paths (RealtimeVoiceChanger and the
+    # shared `_to_c_float_array` ctypes bridge) rely on numpy buffers for
+    # zero-copy marshalling. Element-wise ctypes conversion was a real-time
+    # blocker (128-sample / 2.9 ms blocks could not meet deadline at 44.1 kHz).
+    "numpy>=1.24",
+]
+
+[project.scripts]
+sonare = "libsonare.cli:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.8",
+    "mypy>=1.13",
+]
+
+[project.urls]
+Homepage = "https://github.com/libraz/libsonare"
+Repository = "https://github.com/libraz/libsonare"
+Issues = "https://github.com/libraz/libsonare/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/libsonare"]
+artifacts = [
+    "src/libsonare/*.dylib",
+    "src/libsonare/*.so",
+    "src/libsonare/*.so.*",
+    "src/libsonare/*.pyi",
+    "src/libsonare/py.typed",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/",
+    "tests/",
+    "README.md",
+    "pyproject.toml",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Heavy cases (>~2 s each: full RIR morph, bass-chroma CQT) are opt-in via
+# `-m slow` (see `make test-python-slow`); the default run excludes them.
+addopts = '-m "not slow"'
+markers = [
+    "slow: heavy test excluded from the default run (run with -m slow)",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+"*.pyi" = ["N802"]
+# Domain facade modules re-export the shared runtime via `from ._runtime import *`.
+# The aggregate `__all__` is resolved at runtime; ruff cannot see through the star
+# import, so F405 is unavoidable here. mypy (strict) still catches genuine undefined names.
+"**/_acoustic.py" = ["F405"]
+"**/_analysis.py" = ["F405"]
+"**/_conversions.py" = ["F405"]
+"**/_effects.py" = ["F405"]
+"**/_features.py" = ["F405"]
+"**/_mastering.py" = ["F405"]
+"**/_mixing.py" = ["F405"]
+# _runtime is the aggregation hub itself (`from ._ffi import *` / `from .types import *`),
+# so its own re-exported references are likewise opaque to ruff.
+"**/_runtime.py" = ["F405"]
+
+[tool.mypy]
+strict = true
+python_version = "3.11"
+mypy_path = "src"
+
+# numpy's published stubs use PEP 695 `type` statements, which mypy rejects as a
+# syntax error when checking against our 3.11 target (requires-python >= 3.11).
+# Our public stubs expose only built-in container types, never numpy types, so
+# skip following numpy rather than dropping 3.11 coverage of our own code.
+[[tool.mypy.overrides]]
+module = "numpy.*"
+follow_imports = "skip"
+follow_imports_for_stubs = true
+
+[tool.rye]
+dev-dependencies = [
+    "mypy>=1.13",
+    "pytest>=9.0.2",
+    "ruff>=0.8",
+]

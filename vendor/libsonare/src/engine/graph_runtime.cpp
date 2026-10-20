@@ -1,0 +1,162 @@
+#include "engine/graph_runtime.h"
+
+#include <algorithm>
+#include <memory>
+#include <unordered_set>
+#include <utility>
+
+namespace sonare::engine {
+
+bool GraphRuntime::bind(graph::Graph* graph, const char* input_node_id, const char* output_node_id,
+                        int num_channels) {
+  if (!graph || !graph->compiled() || !input_node_id || !output_node_id || num_channels <= 0) {
+    return false;
+  }
+  graph::Node* input = graph->node(input_node_id);
+  graph::Node* output = graph->node(output_node_id);
+  if (!input || !output || input->num_ports() < num_channels ||
+      output->num_ports() < num_channels) {
+    return false;
+  }
+  auto alias = std::shared_ptr<graph::Graph>(graph, [](graph::Graph*) {});
+  return swap(std::move(alias), input_node_id, output_node_id, num_channels);
+}
+
+bool GraphRuntime::swap(std::shared_ptr<graph::Graph> graph, const char* input_node_id,
+                        const char* output_node_id, int num_channels,
+                        std::vector<ParameterBinding> parameter_bindings) {
+  // Refuse a non-compiled graph here so an uncompiled topology can never be
+  // published to the audio thread. Graph::process_block() is a no-op on an
+  // uncompiled graph (it is noexcept and cannot throw), but rejecting at the
+  // swap boundary keeps the audio thread from ever rendering silence from a
+  // half-built graph.
+  if (!graph || !graph->compiled() || !input_node_id || !output_node_id || num_channels <= 0) {
+    return false;
+  }
+  graph::Node* input = graph->node(input_node_id);
+  graph::Node* output = graph->node(output_node_id);
+  if (!input || !output || input->num_ports() < num_channels ||
+      output->num_ports() < num_channels) {
+    return false;
+  }
+  if (parameter_bindings.size() > kMaxParameterBindings) {
+    return false;
+  }
+
+  std::vector<Binding::Target> targets;
+  targets.reserve(parameter_bindings.size());
+  std::unordered_set<uint32_t> seen_ids;
+  seen_ids.reserve(parameter_bindings.size());
+  for (const ParameterBinding& parameter_binding : parameter_bindings) {
+    if (parameter_binding.param_id == 0 || !seen_ids.insert(parameter_binding.param_id).second) {
+      return false;
+    }
+    graph::Node* node = graph->node(parameter_binding.node_id);
+    if (!node) {
+      return false;
+    }
+    targets.push_back({parameter_binding.param_id, &node->processor()});
+  }
+  // Control thread: the allocation may throw bad_alloc and that propagates
+  // (this function is intentionally NOT noexcept). publish() hands the new
+  // binding to the audio thread lock-free; the old binding is later freed off
+  // the audio thread when publish() reclaims retired snapshots.
+  auto binding = std::make_shared<Binding>();
+  binding->graph = std::move(graph);
+  binding->input = input;
+  binding->output = output;
+  binding->num_channels = num_channels;
+  binding->parameter_targets = std::move(targets);
+  return binding_.publish(std::shared_ptr<const Binding>(std::move(binding)));
+}
+
+bool GraphRuntime::bind_parameter(uint32_t param_id, const char* node_id) {
+  if (param_id == 0 || !node_id) return false;
+  const std::shared_ptr<const Binding>& current = binding_.control_current();
+  if (!current || !current->graph) return false;
+  graph::Node* node = current->graph->node(node_id);
+  if (!node) return false;
+
+  auto replacement = std::make_shared<Binding>(*current);
+  for (Binding::Target& target : replacement->parameter_targets) {
+    if (target.param_id == param_id) {
+      target.processor = &node->processor();
+      return binding_.publish(std::shared_ptr<const Binding>(std::move(replacement)));
+    }
+  }
+  if (replacement->parameter_targets.size() >= kMaxParameterBindings) return false;
+  replacement->parameter_targets.push_back({param_id, &node->processor()});
+  return binding_.publish(std::shared_ptr<const Binding>(std::move(replacement)));
+}
+
+rt::ProcessorBase* GraphRuntime::parameter_target(uint32_t param_id) const noexcept {
+  const Binding* binding = binding_.current();
+  if (!binding || param_id == 0) return nullptr;
+  for (const Binding::Target& target : binding->parameter_targets) {
+    if (target.param_id == param_id) return target.processor;
+  }
+  return nullptr;
+}
+
+graph::Graph* GraphRuntime::swap(graph::Graph* graph, const char* input_node_id,
+                                 const char* output_node_id, int num_channels) {
+  graph::Graph* old = active_graph();
+  auto alias = std::shared_ptr<graph::Graph>(graph, [](graph::Graph*) {});
+  if (!swap(std::move(alias), input_node_id, output_node_id, num_channels)) {
+    return nullptr;
+  }
+  return old;
+}
+
+void GraphRuntime::process(float* const* io, int num_channels, int offset,
+                           int num_frames) noexcept {
+  // Audio thread: this runs once per sub-block. Adopt the latest published
+  // binding exactly ONCE per block, at the block's first sub-block (offset 0),
+  // then freeze it for the remaining sub-blocks by reading current(). This
+  // matches the block-freeze invariant the clip / automation / MIDI-clip
+  // snapshots use (all acquired once at block start): a control-thread publish
+  // can never swap the graph mid-block. current() keeps the graph alive for the
+  // whole block, so there is no per-block refcount churn, no lock, and no free
+  // on this thread. The `!current()` clause adopts the first-ever published
+  // binding when the initial sub-block is not at offset 0 (a standalone caller
+  // that renders a mid-block segment before any block head), so nothing is
+  // silently rendered from an unadopted (null) binding.
+  if ((offset == 0 && !acquired_for_block_) || binding_.current() == nullptr) {
+    binding_.acquire();
+  }
+  if (offset == 0) acquired_for_block_ = false;
+  const Binding* binding = binding_.current();
+  if (!binding || !binding->graph || !binding->input || !binding->output || !io ||
+      num_channels <= 0 || num_frames <= 0 || offset < 0) {
+    return;
+  }
+  const int channels = std::min(num_channels, binding->num_channels);
+  binding->graph->clear_inputs(num_frames);
+  for (int ch = 0; ch < channels; ++ch) {
+    if (!io[ch]) continue;
+    float* dest = binding->input->input_port(ch);
+    std::copy(io[ch] + offset, io[ch] + offset + num_frames, dest);
+  }
+
+  binding->graph->process_block(num_frames);
+
+  for (int ch = 0; ch < channels; ++ch) {
+    if (!io[ch]) continue;
+    const float* source = binding->output->output_port(ch);
+    std::copy(source, source + num_frames, io[ch] + offset);
+  }
+}
+
+graph::Graph* GraphRuntime::active_graph() const noexcept {
+  // Control-thread view: must not call acquire() (that is the audio thread's
+  // single-consumer role). Reports the most recently published binding.
+  const Binding* binding = binding_.control_current().get();
+  return binding ? binding->graph.get() : nullptr;
+}
+
+int GraphRuntime::num_channels() const noexcept {
+  const Binding* binding = binding_.control_current().get();
+  return binding ? binding->num_channels : 0;
+}
+
+}  // namespace sonare::engine

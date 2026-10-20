@@ -1,0 +1,1394 @@
+#include "engine/realtime_engine.h"
+
+#include <algorithm>
+#include <array>
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <cmath>
+#include <memory>
+#include <vector>
+
+#include "engine/clip_player.h"
+#include "engine/engine_controller.h"
+#include "transport/tempo_map.h"
+
+namespace {
+
+#if defined(SONARE_WITH_MIXING)
+constexpr uint32_t engine_lane_param_target(uint32_t lane_index, uint32_t param_kind) {
+  return 0x4D580000u | (lane_index << 8u) | param_kind;
+}
+
+constexpr uint32_t engine_master_param_target(uint32_t param_kind) {
+  return 0x4D580000u | (0xFFu << 8u) | param_kind;
+}
+#endif
+
+template <size_t N>
+void fill_signal(std::array<float, N>& left, std::array<float, N>& right) {
+  for (size_t i = 0; i < N; ++i) {
+    left[i] = static_cast<float>(i) * 0.01f;
+    right[i] = -static_cast<float>(i) * 0.02f;
+  }
+}
+
+class CaptureProcessor final : public sonare::rt::ProcessorBase {
+ public:
+  void prepare(double, int) override {}
+  void process(float* const*, int, int) override {}
+  void reset() override {}
+  bool set_parameter(unsigned int param_id, float value) override {
+    params[static_cast<size_t>(count)] = param_id;
+    values[static_cast<size_t>(count)] = value;
+    ++count;
+    return true;
+  }
+
+  std::array<unsigned int, 8> params{};
+  std::array<float, 8> values{};
+  int count = 0;
+};
+
+}  // namespace
+
+TEST_CASE("RealtimeEngine pass-through output is deterministic", "[engine][realtime]") {
+  constexpr int kFrames = 128;
+  sonare::engine::RealtimeEngine a;
+  sonare::engine::RealtimeEngine b;
+  a.prepare(48000.0, kFrames);
+  b.prepare(48000.0, kFrames);
+
+  std::array<float, kFrames> a_l{};
+  std::array<float, kFrames> a_r{};
+  std::array<float, kFrames> b_l{};
+  std::array<float, kFrames> b_r{};
+  fill_signal(a_l, a_r);
+  fill_signal(b_l, b_r);
+
+  sonare::rt::Command play{};
+  play.type = sonare::rt::CommandType::kTransportPlay;
+  play.sample_time = -1;
+  REQUIRE(a.push_command(play));
+  REQUIRE(b.push_command(play));
+
+  float* a_io[] = {a_l.data(), a_r.data()};
+  float* b_io[] = {b_l.data(), b_r.data()};
+  a.process(a_io, 2, kFrames);
+  b.process(b_io, 2, kFrames);
+
+  REQUIRE(a_l == b_l);
+  REQUIRE(a_r == b_r);
+  REQUIRE(a.transport().render_frame() == kFrames);
+  REQUIRE(a.transport().sample_position() == kFrames);
+}
+
+TEST_CASE("RealtimeEngine rejects registering one strip in mixing and monitor runtimes",
+          "[engine][realtime]") {
+  sonare::engine::RealtimeEngine engine;
+  engine.prepare(48000.0, 64);
+  sonare::mixing::ChannelStrip strip;
+
+  REQUIRE(engine.bind_mixing_strip(&strip));
+  REQUIRE_FALSE(engine.add_monitor_strip(&strip));
+
+  sonare::engine::RealtimeEngine monitor_first;
+  monitor_first.prepare(48000.0, 64);
+  sonare::mixing::ChannelStrip other;
+  REQUIRE(monitor_first.add_monitor_strip(&other));
+  REQUIRE_FALSE(monitor_first.bind_mixing_strip(&other));
+}
+
+TEST_CASE("RealtimeEngine reports track and master strip latency", "[engine][realtime]") {
+  sonare::engine::RealtimeEngine engine;
+  engine.prepare(48000.0, 16);
+  REQUIRE(engine.set_track_lanes({{10}, {20}}));
+
+  sonare::mixing::ChannelStrip track_strip({0.0f, 0.0f, sonare::mixing::PanLaw::Linear0dB, 0.0f});
+  track_strip.set_channel_delay_samples(4);
+  REQUIRE(engine.bind_track_strip(10, &track_strip));
+  REQUIRE(engine.graph_latency_samples_q8() == (4 << 8));
+
+  sonare::mixing::ChannelStrip master_strip({0.0f, 0.0f, sonare::mixing::PanLaw::Linear0dB, 0.0f});
+  master_strip.set_channel_delay_samples(3);
+  REQUIRE(engine.bind_mixing_strip(&master_strip));
+  engine.set_mixing_enabled(true);
+  REQUIRE(engine.graph_latency_samples_q8() == (7 << 8));
+
+  engine.set_mixing_enabled(false);
+  REQUIRE(engine.graph_latency_samples_q8() == (4 << 8));
+}
+
+TEST_CASE("RealtimeEngine publishes lane bus input and master meter targets",
+          "[engine][realtime]") {
+#if defined(SONARE_WITH_MIXING)
+  constexpr int kBlock = 128;
+  sonare::engine::RealtimeEngine engine;
+  engine.prepare(48000.0, kBlock, 64, 16);
+
+  std::array<float, kBlock> track_a{};
+  std::array<float, kBlock> track_b{};
+  track_a.fill(0.5f);
+  track_b.fill(0.25f);
+  const float* a_channels[] = {track_a.data()};
+  const float* b_channels[] = {track_b.data()};
+  sonare::engine::ClipSchedule clips[2]{};
+  clips[0].id = 1;
+  clips[0].track_id = 10;
+  clips[0].buffer = {a_channels, 1, kBlock};
+  clips[0].length_samples = kBlock;
+  clips[0].gain = 1.0f;
+  clips[1].id = 2;
+  clips[1].track_id = 20;
+  clips[1].buffer = {b_channels, 1, kBlock};
+  clips[1].length_samples = kBlock;
+  clips[1].gain = 1.0f;
+  engine.set_clips({clips[0], clips[1]});
+
+  REQUIRE(engine.set_track_buses({{1, 0.0f}}));
+  sonare::engine::TrackLaneConfig lane_a{10};
+  lane_a.sends.push_back({1, 0.0f, true});
+  sonare::engine::TrackLaneConfig lane_b{20};
+  REQUIRE(engine.set_track_lanes({lane_a, lane_b}));
+  engine.set_capture_source(sonare::engine::CaptureSource::kInput);
+
+  sonare::rt::Command play{};
+  play.type = sonare::rt::CommandType::kTransportPlay;
+  play.sample_time = -1;
+  REQUIRE(engine.push_command(play));
+
+  std::array<float, kBlock> left{};
+  left.fill(0.125f);
+  float* io[] = {left.data()};
+  engine.process(io, 1, kBlock);
+
+  bool found_input = false;
+  bool found_lane_1 = false;
+  bool found_lane_2 = false;
+  bool found_bus = false;
+  bool found_master = false;
+  sonare::engine::MeterTelemetryRecord record{};
+  while (engine.pop_meter_telemetry(record)) {
+    if (record.target_id == 0xFFFFu) {
+      found_input = true;
+      REQUIRE(record.peak_db[0] == Catch::Approx(-18.0618f).margin(0.05f));
+      // Lightweight targets do not measure loudness: the field stays at the dB
+      // floor (finite, JSON-safe), never NaN.
+      REQUIRE(std::isfinite(record.integrated_lufs));
+      REQUIRE(record.integrated_lufs == Catch::Approx(sonare::constants::kFloorDb));
+    } else if (record.target_id == 1) {
+      found_lane_1 = true;
+      REQUIRE(record.peak_db[0] == Catch::Approx(-3.0103f).margin(0.05f));
+      REQUIRE(std::isfinite(record.integrated_lufs));
+      REQUIRE(record.integrated_lufs == Catch::Approx(sonare::constants::kFloorDb));
+    } else if (record.target_id == 2) {
+      found_lane_2 = true;
+      REQUIRE(record.peak_db[0] == Catch::Approx(-12.0412f).margin(0.05f));
+    } else if (record.target_id == 33) {
+      found_bus = true;
+      REQUIRE(record.peak_db[0] == Catch::Approx(-3.0103f).margin(0.05f));
+    } else if (record.target_id == 0) {
+      found_master = true;
+      REQUIRE(record.peak_db[0] > -1.0f);
+    }
+  }
+
+  REQUIRE(found_input);
+  REQUIRE(found_lane_1);
+  REQUIRE(found_lane_2);
+  REQUIRE(found_bus);
+  REQUIRE(found_master);
+#endif
+}
+
+TEST_CASE("RealtimeEngine routes monitor PFL bus into output", "[engine][realtime]") {
+  constexpr int kFrames = 16;
+  sonare::engine::RealtimeEngine engine;
+  engine.prepare(48000.0, kFrames);
+  sonare::mixing::ChannelStrip strip({-6.0206f, 0.0f, sonare::mixing::PanLaw::Linear0dB, 0.0f});
+  strip.prepare(48000.0, kFrames);
+  REQUIRE(engine.add_monitor_strip(&strip));
+  engine.set_monitoring_enabled(true);
+  engine.monitor().set_monitor_mode(0, sonare::engine::MonitorMode::kPfl);
+
+  std::array<float, kFrames> left{};
+  left.fill(1.0f);
+  float* io[] = {left.data()};
+  engine.process(io, 1, kFrames);
+
+  REQUIRE(left.back() > 1.70f);
+  REQUIRE(left.back() < 1.72f);
+}
+
+TEST_CASE("RealtimeEngine can route monitor PFL bus separately from output", "[engine][realtime]") {
+  constexpr int kFrames = 16;
+  sonare::engine::RealtimeEngine engine;
+  engine.prepare(48000.0, kFrames);
+  sonare::mixing::ChannelStrip strip({-6.0206f, 0.0f, sonare::mixing::PanLaw::Linear0dB, 0.0f});
+  strip.prepare(48000.0, kFrames);
+  REQUIRE(engine.add_monitor_strip(&strip));
+  engine.set_monitoring_enabled(true);
+  engine.monitor().set_monitor_mode(0, sonare::engine::MonitorMode::kPfl);
+
+  std::array<float, kFrames> left{};
+  std::array<float, kFrames> cue{};
+  left.fill(1.0f);
+  float* io[] = {left.data()};
+  float* monitor[] = {cue.data()};
+  engine.process_with_monitor(io, monitor, 1, kFrames);
+
+  REQUIRE(cue.front() == Catch::Approx(1.0f).margin(1.0e-6f));
+  REQUIRE(cue.back() == Catch::Approx(1.0f).margin(1.0e-6f));
+  REQUIRE(left.back() > 0.70f);
+  REQUIRE(left.back() < 0.72f);
+}
+
+TEST_CASE("RealtimeEngine applies scheduled transport commands inside a block",
+          "[engine][realtime]") {
+  constexpr int kFrames = 128;
+  sonare::engine::RealtimeEngine engine;
+  engine.prepare(48000.0, kFrames);
+
+  sonare::rt::Command play{};
+  play.type = sonare::rt::CommandType::kTransportPlay;
+  play.sample_time = 32;
+  REQUIRE(engine.push_command(play));
+
+  std::array<float, kFrames> left{};
+  float* io[] = {left.data()};
+  engine.process(io, 1, kFrames);
+
+  REQUIRE(engine.transport().render_frame() == 128);
+  REQUIRE(engine.transport().sample_position() == 96);
+}
+
+TEST_CASE("RealtimeEngine defers commands scheduled at block end to the next block",
+          "[engine][realtime]") {
+  constexpr int kFrames = 128;
+  sonare::engine::RealtimeEngine engine;
+  engine.prepare(48000.0, kFrames);
+
+  sonare::rt::Command play{};
+  play.type = sonare::rt::CommandType::kTransportPlay;
+  play.sample_time = kFrames;
+  REQUIRE(engine.push_command(play));
+
+  std::array<float, kFrames> left{};
+  float* io[] = {left.data()};
+  engine.process(io, 1, kFrames);
+
+  REQUIRE_FALSE(engine.transport().snapshot().playing);
+  REQUIRE(engine.transport().render_frame() == kFrames);
+  REQUIRE(engine.transport().sample_position() == 0);
+
+  engine.process(io, 1, kFrames);
+  REQUIRE(engine.transport().snapshot().playing);
+  REQUIRE(engine.transport().sample_position() == kFrames);
+}
+
+TEST_CASE("RealtimeEngine silences oversized blocks and emits telemetry", "[engine][realtime]") {
+  sonare::engine::RealtimeEngine engine;
+  engine.prepare(48000.0, 64);
+
+  std::array<float, 128> left{};
+  std::array<float, 128> right{};
+  left.fill(1.0f);
+  right.fill(-1.0f);
+  float* io[] = {left.data(), right.data()};
+  engine.process(io, 2, 128);
+
+  for (float sample : left) {
+    REQUIRE(sample == 0.0f);
+  }
+  for (float sample : right) {
+    REQUIRE(sample == 0.0f);
+  }
+
+  sonare::engine::Telemetry telemetry{};
+  REQUIRE(engine.pop_telemetry(telemetry));
+  REQUIRE(telemetry.type == sonare::engine::TelemetryType::kError);
+  REQUIRE(telemetry.error == sonare::engine::TelemetryErrorCode::kMaxBlockExceeded);
+  REQUIRE(telemetry.render_frame == 0);
+  REQUIRE(telemetry.value == 128);
+}
+
+TEST_CASE("EngineController queues commands and drains telemetry", "[engine][realtime]") {
+  sonare::engine::EngineController controller;
+  controller.prepare(48000.0, 128);
+  REQUIRE(controller.play());
+
+  std::array<float, 128> left{};
+  float* io[] = {left.data()};
+  controller.engine().process(io, 1, 128);
+
+  std::array<sonare::engine::Telemetry, 4> telemetry{};
+  size_t written = 0;
+  REQUIRE(controller.drain_telemetry(telemetry.data(), telemetry.size(), &written));
+  REQUIRE(written == 1);
+  REQUIRE(telemetry[0].type == sonare::engine::TelemetryType::kProcessBlock);
+  REQUIRE(telemetry[0].render_frame == 0);
+  REQUIRE(telemetry[0].timeline_sample == 128);
+}
+
+TEST_CASE("RealtimeEngine applies automation at sub-block boundaries", "[engine][realtime]") {
+  constexpr int kFrames = 128;
+  sonare::engine::RealtimeEngine engine;
+  engine.prepare(48000.0, kFrames);
+
+  CaptureProcessor processor;
+  sonare::automation::AutomationLane lane(7);
+  lane.set_points({{0.0, 0.0f, sonare::automation::CurveType::Linear},
+                   {64.0 / 24000.0, 0.5f, sonare::automation::CurveType::Linear},
+                   {128.0 / 24000.0, 1.0f, sonare::automation::CurveType::Linear}});
+  engine.automation().set_lanes({lane});
+  engine.automation().bind_target(7, &processor);
+
+  sonare::rt::Command play{};
+  play.type = sonare::rt::CommandType::kTransportPlay;
+  play.sample_time = -1;
+  REQUIRE(engine.push_command(play));
+
+  std::array<float, kFrames> left{};
+  float* io[] = {left.data()};
+  engine.process(io, 1, kFrames);
+
+  REQUIRE(processor.count >= 2);
+  REQUIRE(processor.params[0] == 7);
+  REQUIRE(processor.values[0] == 0.0f);
+  REQUIRE(processor.params[1] == 7);
+  REQUIRE(processor.values[1] == 0.5f);
+}
+
+TEST_CASE("RealtimeEngine re-prepare at a new sample rate stays consistent",
+          "[engine][realtime][reinit]") {
+  static constexpr int kFrames = 128;
+  sonare::engine::RealtimeEngine engine;
+
+  // Stable clip backing storage that outlives both prepare cycles.
+  std::array<float, kFrames> clip_l{};
+  std::array<float, kFrames> clip_r{};
+  clip_l.fill(0.25f);
+  clip_r.fill(-0.25f);
+  const float* clip_channels[] = {clip_l.data(), clip_r.data()};
+
+  auto play_and_check = [&](double sample_rate) {
+    engine.prepare(sample_rate, kFrames);
+    REQUIRE(engine.max_block_size() == kFrames);
+
+    engine.set_tempo(120.0);
+    engine.set_time_signature(4, 4);
+    std::vector<sonare::engine::ClipSchedule> clips;
+    clips.emplace_back(1u, sonare::engine::ClipAudioBuffer{clip_channels, 2, kFrames}, 0.0, 0, 0,
+                       kFrames, false, 1.0f, 0, 0);
+    engine.set_clips(std::move(clips));
+
+    sonare::rt::Command play{};
+    play.type = sonare::rt::CommandType::kTransportPlay;
+    play.sample_time = -1;
+    REQUIRE(engine.push_command(play));
+
+    std::array<float, kFrames> left{};
+    std::array<float, kFrames> right{};
+    float* io[] = {left.data(), right.data()};
+    engine.process(io, 2, kFrames);
+
+    for (int i = 0; i < kFrames; ++i) {
+      REQUIRE(std::isfinite(left[static_cast<size_t>(i)]));
+      REQUIRE(std::isfinite(right[static_cast<size_t>(i)]));
+    }
+    // Timeline advanced by exactly one block (sample-rate independent in
+    // samples) and the render clock matches.
+    REQUIRE(engine.transport().render_frame() == kFrames);
+    REQUIRE(engine.transport().sample_position() == kFrames);
+    REQUIRE(engine.clip_count() == 1);
+  };
+
+  play_and_check(48000.0);
+  // Re-prepare at a different rate; state must reset cleanly and stay sane.
+  play_and_check(44100.0);
+  // And back again, to cover both transition directions.
+  play_and_check(48000.0);
+}
+
+TEST_CASE("TempoMap re-prepare adopts the new sample rate", "[engine][realtime][reinit]") {
+  sonare::transport::TempoMap map;
+  map.prepare(48000.0);
+  map.set_segments({{0.0, 120.0, 0.0}});
+  // 120 BPM at 48 kHz -> one quarter note is 24000 samples.
+  REQUIRE(map.ppq_to_sample(1.0) == 24000);
+
+  // Re-prepare at 44.1 kHz: the same musical position now maps to fewer
+  // samples (44100 * 60 / 120 = 22050).
+  map.prepare(44100.0);
+  REQUIRE(map.sample_rate() == 44100.0);
+  REQUIRE(map.ppq_to_sample(1.0) == 22050);
+  REQUIRE(map.ppq_to_sample(0.0) == 0);
+}
+
+TEST_CASE("RealtimeEngine schedules clips from the latest tempo snapshot", "[engine][realtime]") {
+  constexpr double kSr = 48000.0;
+  constexpr int kBlock = 16;
+  constexpr int kClipFrames = 4;
+  sonare::engine::RealtimeEngine engine;
+  engine.prepare(kSr, kBlock);
+
+  std::array<float, kClipFrames> clip_l{1.0f, 0.5f, 0.25f, 0.125f};
+  std::array<float, kClipFrames> clip_r{};
+  const float* clip_channels[] = {clip_l.data(), clip_r.data()};
+
+  engine.set_tempo(60.0);
+  std::vector<sonare::engine::ClipSchedule> clips;
+  clips.emplace_back(1u, sonare::engine::ClipAudioBuffer{clip_channels, 2, kClipFrames}, 1.0, 0, 0,
+                     kClipFrames, false, 1.0f, 0, 0);
+  engine.set_clips(std::move(clips));
+
+  sonare::rt::Command play{};
+  play.type = sonare::rt::CommandType::kTransportPlay;
+  play.sample_time = -1;
+  REQUIRE(engine.push_command(play));
+
+  sonare::rt::Command seek{};
+  seek.type = sonare::rt::CommandType::kTransportSeekSample;
+  seek.sample_time = -1;
+  seek.arg.i = 24000;
+  REQUIRE(engine.push_command(seek));
+
+  std::array<float, kBlock> left{};
+  std::array<float, kBlock> right{};
+  float* io[] = {left.data(), right.data()};
+  engine.process(io, 2, kBlock);
+
+  for (float sample : left) {
+    REQUIRE(sample == 0.0f);
+  }
+
+  seek.arg.i = 48000;
+  REQUIRE(engine.push_command(seek));
+  left.fill(0.0f);
+  right.fill(0.0f);
+  engine.process(io, 2, kBlock);
+
+  REQUIRE(left[0] == 1.0f);
+  REQUIRE(left[1] == 0.5f);
+  REQUIRE(left[2] == 0.25f);
+  REQUIRE(left[3] == 0.125f);
+}
+
+#if defined(SONARE_WITH_MIXING)
+TEST_CASE("RealtimeEngine track lanes are opt-in for clip routing", "[engine][realtime]") {
+  constexpr int kBlock = 64;
+  sonare::engine::RealtimeEngine legacy;
+  sonare::engine::RealtimeEngine tagged;
+  legacy.prepare(48000.0, kBlock);
+  tagged.prepare(48000.0, kBlock);
+
+  std::array<float, kBlock> clip_l{};
+  std::array<float, kBlock> clip_r{};
+  clip_l.fill(0.25f);
+  clip_r.fill(-0.5f);
+  const float* clip_channels[] = {clip_l.data(), clip_r.data()};
+
+  sonare::engine::ClipSchedule legacy_clip{
+      1, {clip_channels, 2, kBlock}, 0.0, 0, 0, kBlock, false, 1.0f, 0, 0};
+  sonare::engine::ClipSchedule tagged_clip = legacy_clip;
+  tagged_clip.track_id = 42;
+  legacy.set_clips({legacy_clip});
+  tagged.set_clips({tagged_clip});
+
+  sonare::rt::Command play{};
+  play.type = sonare::rt::CommandType::kTransportPlay;
+  play.sample_time = -1;
+  REQUIRE(legacy.push_command(play));
+  REQUIRE(tagged.push_command(play));
+
+  std::array<float, kBlock> legacy_l{};
+  std::array<float, kBlock> legacy_r{};
+  std::array<float, kBlock> tagged_l{};
+  std::array<float, kBlock> tagged_r{};
+  float* legacy_io[] = {legacy_l.data(), legacy_r.data()};
+  float* tagged_io[] = {tagged_l.data(), tagged_r.data()};
+  legacy.process(legacy_io, 2, kBlock);
+  tagged.process(tagged_io, 2, kBlock);
+
+  REQUIRE(tagged_l == legacy_l);
+  REQUIRE(tagged_r == legacy_r);
+}
+
+TEST_CASE("RealtimeEngine track lanes route clip audio through lane state", "[engine][realtime]") {
+  constexpr int kBlock = 256;
+  constexpr int kFrames = kBlock * 24;
+  sonare::engine::RealtimeEngine engine;
+  engine.prepare(48000.0, kBlock);
+
+  std::array<float, kFrames> clip_a_l{};
+  std::array<float, kFrames> clip_a_r{};
+  std::array<float, kFrames> clip_b_l{};
+  std::array<float, kFrames> clip_b_r{};
+  clip_a_l.fill(1.0f);
+  clip_a_r.fill(1.0f);
+  clip_b_l.fill(1.0f);
+  clip_b_r.fill(1.0f);
+  const float* a[] = {clip_a_l.data(), clip_a_r.data()};
+  const float* b[] = {clip_b_l.data(), clip_b_r.data()};
+
+  sonare::engine::ClipSchedule clip_a{1, {a, 2, kFrames}, 0.0, 0, 0, kFrames, false, 1.0f, 0, 0};
+  clip_a.track_id = 10;
+  sonare::engine::ClipSchedule clip_b{2, {b, 2, kFrames}, 0.0, 0, 0, kFrames, false, 1.0f, 0, 0};
+  clip_b.track_id = 20;
+  engine.set_clips({clip_a, clip_b});
+  REQUIRE(engine.set_track_lanes({{10}, {20}}));
+
+  sonare::rt::Command play{};
+  play.type = sonare::rt::CommandType::kTransportPlay;
+  play.sample_time = -1;
+  REQUIRE(engine.push_command(play));
+
+  std::array<float, kBlock> left{};
+  std::array<float, kBlock> right{};
+  float* io[] = {left.data(), right.data()};
+  engine.process(io, 2, kBlock);
+  REQUIRE(left.back() == 2.0f);
+  REQUIRE(right.back() == 2.0f);
+
+  REQUIRE(engine.track_mixer().set_lane_solo_mute(0, true, false));
+  for (int block = 0; block < 4; ++block) {
+    left.fill(0.0f);
+    right.fill(0.0f);
+    engine.process(io, 2, kBlock);
+  }
+  REQUIRE(left.back() < 1.25f);
+  REQUIRE(right.back() < 1.25f);
+  REQUIRE(left.back() > 0.75f);
+  REQUIRE(right.back() > 0.75f);
+
+  REQUIRE(engine.track_mixer().set_lane_parameter(0, sonare::engine::TrackMixerRuntime::kFaderDb,
+                                                  -12.0f));
+  for (int block = 0; block < 20; ++block) {
+    left.fill(0.0f);
+    right.fill(0.0f);
+    engine.process(io, 2, kBlock);
+  }
+  REQUIRE(left.back() < 0.4f);
+  REQUIRE(right.back() < 0.4f);
+}
+
+TEST_CASE("RealtimeEngine automation lanes drive reserved track mixer faders",
+          "[engine][realtime]") {
+  // An automation lane targeting the reserved engine namespace (lane 0 fader)
+  // must reach the track mixer runtime without any ProcessorBase binding: held
+  // at 0 dB before the breakpoint, dropping to -60 dB after it.
+  constexpr int kBlock = 256;
+  constexpr int kFrames = kBlock * 48;
+  sonare::engine::RealtimeEngine engine;
+  engine.prepare(48000.0, kBlock);
+
+  std::array<float, kFrames> clip_l{};
+  std::array<float, kFrames> clip_r{};
+  clip_l.fill(1.0f);
+  clip_r.fill(1.0f);
+  const float* clip_channels[] = {clip_l.data(), clip_r.data()};
+  sonare::engine::ClipSchedule clip{
+      1, {clip_channels, 2, kFrames}, 0.0, 0, 0, kFrames, false, 1.0f, 0, 0};
+  clip.track_id = 10;
+  engine.set_clips({clip});
+  REQUIRE(engine.set_track_lanes({{10}}));
+
+  // Breakpoint at sample 1024 (= 4 blocks). 1 ppq = 24000 samples at 120 bpm.
+  constexpr double kBreakpointPpq = 1024.0 / 24000.0;
+  const uint32_t fader_target =
+      engine_lane_param_target(0, sonare::engine::TrackMixerRuntime::kFaderDb);
+  sonare::automation::AutomationLane lane(fader_target);
+  lane.set_points({{0.0, 0.0f, sonare::automation::CurveType::Hold},
+                   {kBreakpointPpq, -60.0f, sonare::automation::CurveType::Hold}});
+  engine.automation().set_lanes({lane});
+
+  sonare::rt::Command play{};
+  play.type = sonare::rt::CommandType::kTransportPlay;
+  play.sample_time = -1;
+  REQUIRE(engine.push_command(play));
+
+  std::array<float, kBlock> left{};
+  std::array<float, kBlock> right{};
+  float* io[] = {left.data(), right.data()};
+
+  // Before the breakpoint the lane holds 0 dB: unity clip level passes through.
+  for (int block = 0; block < 4; ++block) {
+    left.fill(0.0f);
+    right.fill(0.0f);
+    engine.process(io, 2, kBlock);
+  }
+  REQUIRE(left.back() > 0.9f);
+  REQUIRE(right.back() > 0.9f);
+  REQUIRE(engine.automation().unknown_target_count() == 0);
+
+  // After the breakpoint the routed -60 dB fader (smoothed) collapses the lane.
+  for (int block = 0; block < 40; ++block) {
+    left.fill(0.0f);
+    right.fill(0.0f);
+    engine.process(io, 2, kBlock);
+  }
+  REQUIRE(left.back() < 0.2f);
+  REQUIRE(right.back() < 0.2f);
+  REQUIRE(engine.automation().unknown_target_count() == 0);
+}
+
+TEST_CASE("RealtimeEngine settle_parameters snaps lane faders for offline rendering",
+          "[engine][realtime]") {
+  // Lane fader smoothers only advance while lanes render, so an offline render
+  // that seeks and plays a freshly configured engine would capture the first
+  // milliseconds with faders still ramping in from 0 dB. After one priming
+  // block (which applies automation at the stopped position and drains queued
+  // commands), settle_parameters must snap the smoothers so the very first
+  // audible frame renders at the automated value.
+  constexpr int kBlock = 256;
+  constexpr int kFrames = kBlock * 8;
+  sonare::engine::RealtimeEngine engine;
+  engine.prepare(48000.0, kBlock);
+
+  std::array<float, kFrames> clip_l{};
+  std::array<float, kFrames> clip_r{};
+  clip_l.fill(1.0f);
+  clip_r.fill(1.0f);
+  const float* clip_channels[] = {clip_l.data(), clip_r.data()};
+  sonare::engine::ClipSchedule clip{
+      1, {clip_channels, 2, kFrames}, 0.0, 0, 0, kFrames, false, 1.0f, 0, 0};
+  clip.track_id = 10;
+  engine.set_clips({clip});
+  REQUIRE(engine.set_track_lanes({{10}}));
+
+  const uint32_t fader_target =
+      engine_lane_param_target(0, sonare::engine::TrackMixerRuntime::kFaderDb);
+  sonare::automation::AutomationLane lane(fader_target);
+  lane.set_points({{0.0, -60.0f, sonare::automation::CurveType::Hold}});
+  engine.automation().set_lanes({lane});
+
+  std::array<float, kBlock> left{};
+  std::array<float, kBlock> right{};
+  float* io[] = {left.data(), right.data()};
+
+  // Priming block with the transport stopped: automation applies at the seek
+  // position and pushes -60 dB as the lane fader target, but the smoother's
+  // current value has not advanced (nothing rendered through the lane).
+  engine.process(io, 2, kBlock);
+  engine.settle_parameters();
+
+  sonare::rt::Command play{};
+  play.type = sonare::rt::CommandType::kTransportPlay;
+  play.sample_time = -1;
+  REQUIRE(engine.push_command(play));
+
+  left.fill(0.0f);
+  right.fill(0.0f);
+  engine.process(io, 2, kBlock);
+  // The first audible frame must already sit at -60 dB (1e-3 linear), not at
+  // the 0 dB reset value the smoother would otherwise ramp down from.
+  REQUIRE(left.front() < 0.01f);
+  REQUIRE(right.front() < 0.01f);
+  REQUIRE(left.back() < 0.01f);
+  REQUIRE(engine.automation().unknown_target_count() == 0);
+}
+
+TEST_CASE("RealtimeEngine routes a lane's output through its group bus", "[engine][realtime]") {
+  // A lane with output_bus_id sums into that bus (here at -6 dB) instead of
+  // the master mix, so the master receives the bus-attenuated signal only.
+  constexpr int kBlock = 256;
+  constexpr int kFrames = kBlock * 8;
+  sonare::engine::RealtimeEngine engine;
+  engine.prepare(48000.0, kBlock);
+
+  std::array<float, kFrames> clip_l{};
+  std::array<float, kFrames> clip_r{};
+  clip_l.fill(1.0f);
+  clip_r.fill(1.0f);
+  const float* clip_channels[] = {clip_l.data(), clip_r.data()};
+  sonare::engine::ClipSchedule clip{
+      1, {clip_channels, 2, kFrames}, 0.0, 0, 0, kFrames, false, 1.0f, 0, 0};
+  clip.track_id = 10;
+  engine.set_clips({clip});
+
+  // Routing to an undeclared bus is rejected; declare the bus first.
+  sonare::engine::TrackLaneConfig grouped{10};
+  grouped.output_bus_id = 5;
+  REQUIRE_FALSE(engine.set_track_lanes({grouped}));
+  REQUIRE(engine.set_track_buses({{5, -6.0206f}}));
+  REQUIRE(engine.set_track_lanes({grouped}));
+  engine.settle_parameters();
+
+  sonare::rt::Command play{};
+  play.type = sonare::rt::CommandType::kTransportPlay;
+  play.sample_time = -1;
+  REQUIRE(engine.push_command(play));
+
+  std::array<float, kBlock> left{};
+  std::array<float, kBlock> right{};
+  float* io[] = {left.data(), right.data()};
+  for (int block = 0; block < 4; ++block) {
+    left.fill(0.0f);
+    right.fill(0.0f);
+    engine.process(io, 2, kBlock);
+  }
+  // Unity clip through the -6 dB group bus: master sits at ~0.5, not 1.0.
+  REQUIRE(left.back() > 0.45f);
+  REQUIRE(left.back() < 0.55f);
+  REQUIRE(right.back() > 0.45f);
+  REQUIRE(right.back() < 0.55f);
+}
+
+TEST_CASE("RealtimeEngine lane sidechain ducks one lane from another's audio",
+          "[engine][realtime]") {
+  // A ducking insert on lane 10 keyed from lane 20 must attenuate lane 10
+  // while the key lane carries signal, and pass it (near) unity when the key
+  // lane is silent.
+  constexpr int kBlock = 256;
+  constexpr int kFrames = kBlock * 48;
+  sonare::engine::RealtimeEngine engine;
+  engine.prepare(48000.0, kBlock);
+
+  const auto run = [&](bool key_audible) {
+    std::array<float, kFrames> pad{};
+    std::array<float, kFrames> key{};
+    pad.fill(0.5f);
+    key.fill(key_audible ? 1.0f : 0.0f);
+    const float* pad_channels[] = {pad.data(), pad.data()};
+    const float* key_channels[] = {key.data(), key.data()};
+    sonare::engine::ClipSchedule pad_clip{
+        1, {pad_channels, 2, kFrames}, 0.0, 0, 0, kFrames, false, 1.0f, 0, 0};
+    pad_clip.track_id = 10;
+    sonare::engine::ClipSchedule key_clip{
+        2, {key_channels, 2, kFrames}, 0.0, 0, 0, kFrames, false, 1.0f, 0, 0};
+    key_clip.track_id = 20;
+    engine.set_clips({pad_clip, key_clip});
+    REQUIRE(engine.set_track_lanes({{10}, {20}}));
+
+    sonare::mixing::api::Strip strip_spec;
+    strip_spec.pan_law = 3;
+    strip_spec.inserts.push_back(sonare::mixing::api::Insert{
+        sonare::mixing::api::InsertSlot::PostFader, "dynamics.duckingProcessor",
+        R"({"thresholdDb":-30,"ratio":20,"attackMs":1,"releaseMs":50,"rangeDb":24})"});
+    REQUIRE(engine.set_track_strip(10, strip_spec));
+    REQUIRE(engine.set_lane_sidechain(10, 0, 20));
+
+    // Mute the key lane's own master contribution so the measurement sees the
+    // pad lane only (the sidechain taps the key pre-fader, post-strip).
+    REQUIRE(engine.track_mixer().set_lane_parameter(1, sonare::engine::TrackMixerRuntime::kFaderDb,
+                                                    -120.0f));
+    engine.settle_parameters();
+
+    sonare::rt::Command seek{};
+    seek.type = sonare::rt::CommandType::kTransportSeekSample;
+    seek.sample_time = -1;
+    seek.arg.i = 0;
+    REQUIRE(engine.push_command(seek));
+    sonare::rt::Command play{};
+    play.type = sonare::rt::CommandType::kTransportPlay;
+    play.sample_time = -1;
+    REQUIRE(engine.push_command(play));
+
+    std::array<float, kBlock> left{};
+    std::array<float, kBlock> right{};
+    float* io[] = {left.data(), right.data()};
+    float level = 0.0f;
+    for (int block = 0; block < 40; ++block) {
+      left.fill(0.0f);
+      right.fill(0.0f);
+      engine.process(io, 2, kBlock);
+      level = std::abs(left.back());
+    }
+    sonare::rt::Command stop{};
+    stop.type = sonare::rt::CommandType::kTransportStop;
+    stop.sample_time = -1;
+    REQUIRE(engine.push_command(stop));
+    left.fill(0.0f);
+    right.fill(0.0f);
+    engine.process(io, 2, kBlock);
+    REQUIRE(engine.set_lane_sidechain(10, 0, 0));
+    return level;
+  };
+
+  const float ducked = run(true);
+  const float open = run(false);
+  REQUIRE(open > 0.4f);
+  // 24 dB of range at 20:1 on a key far over threshold: at least ~12 dB down.
+  REQUIRE(ducked < open * 0.25f);
+}
+
+TEST_CASE("RealtimeEngine commands drive track lane params and solo mute", "[engine][realtime]") {
+  constexpr int kBlock = 256;
+  constexpr int kFrames = kBlock * 8;
+  sonare::engine::RealtimeEngine engine;
+  engine.prepare(48000.0, kBlock);
+
+  std::array<float, kFrames> clip_a_l{};
+  std::array<float, kFrames> clip_a_r{};
+  std::array<float, kFrames> clip_b_l{};
+  std::array<float, kFrames> clip_b_r{};
+  clip_a_l.fill(1.0f);
+  clip_a_r.fill(1.0f);
+  clip_b_l.fill(1.0f);
+  clip_b_r.fill(1.0f);
+  const float* a[] = {clip_a_l.data(), clip_a_r.data()};
+  const float* b[] = {clip_b_l.data(), clip_b_r.data()};
+
+  sonare::engine::ClipSchedule clip_a{1, {a, 2, kFrames}, 0.0, 0, 0, kFrames, false, 1.0f, 0, 0};
+  clip_a.track_id = 10;
+  sonare::engine::ClipSchedule clip_b{2, {b, 2, kFrames}, 0.0, 0, 0, kFrames, false, 1.0f, 0, 0};
+  clip_b.track_id = 20;
+  engine.set_clips({clip_a, clip_b});
+  REQUIRE(engine.set_track_lanes({{10}, {20}}));
+
+  sonare::rt::Command play{};
+  play.type = sonare::rt::CommandType::kTransportPlay;
+  play.sample_time = -1;
+  REQUIRE(engine.push_command(play));
+
+  std::array<float, kBlock> left{};
+  std::array<float, kBlock> right{};
+  float* io[] = {left.data(), right.data()};
+  engine.process(io, 2, kBlock);
+  REQUIRE(left.back() == 2.0f);
+
+  sonare::rt::Command solo{};
+  solo.type = sonare::rt::CommandType::kSetSoloMute;
+  solo.target_id = 0;
+  solo.sample_time = -1;
+  solo.arg.i = 0x2;
+  REQUIRE(engine.push_command(solo));
+
+  for (int block = 0; block < 4; ++block) {
+    left.fill(0.0f);
+    right.fill(0.0f);
+    engine.process(io, 2, kBlock);
+  }
+  REQUIRE(left.back() < 1.25f);
+  REQUIRE(left.back() > 0.75f);
+
+  sonare::rt::Command fader{};
+  fader.type = sonare::rt::CommandType::kSetParamSmoothed;
+  fader.target_id = engine_lane_param_target(0, sonare::engine::TrackMixerRuntime::kFaderDb);
+  fader.sample_time = -1;
+  fader.arg.f = -12.0f;
+  REQUIRE(engine.push_command(fader));
+
+  for (int block = 0; block < 6; ++block) {
+    left.fill(0.0f);
+    right.fill(0.0f);
+    engine.process(io, 2, kBlock);
+  }
+  REQUIRE(left.back() < 0.45f);
+  REQUIRE(right.back() < 0.45f);
+
+  sonare::engine::Telemetry telemetry{};
+  while (engine.pop_telemetry(telemetry)) {
+    REQUIRE(telemetry.error != sonare::engine::TelemetryErrorCode::kNonQueueableCommand);
+  }
+}
+
+TEST_CASE("RealtimeEngine lane state follows track id across track lane republish",
+          "[engine][realtime]") {
+  constexpr int kBlock = 256;
+  constexpr int kFrames = kBlock * 24;
+  sonare::engine::RealtimeEngine engine;
+  engine.prepare(48000.0, kBlock);
+
+  std::array<float, kFrames> clip_a{};
+  std::array<float, kFrames> clip_b{};
+  clip_a.fill(1.0f);
+  clip_b.fill(1.0f);
+  const float* a[] = {clip_a.data()};
+  const float* b[] = {clip_b.data()};
+
+  sonare::engine::ClipSchedule clip_a_schedule{1,       {a, 1, kFrames}, 0.0,  0, 0,
+                                               kFrames, false,           1.0f, 0, 0};
+  clip_a_schedule.track_id = 10;
+  sonare::engine::ClipSchedule clip_b_schedule{2,       {b, 1, kFrames}, 0.0,  0, 0,
+                                               kFrames, false,           1.0f, 0, 0};
+  clip_b_schedule.track_id = 20;
+  engine.set_clips({clip_a_schedule, clip_b_schedule});
+  REQUIRE(engine.set_track_lanes({{10}, {20}}));
+
+  sonare::rt::Command play{};
+  play.type = sonare::rt::CommandType::kTransportPlay;
+  play.sample_time = -1;
+  REQUIRE(engine.push_command(play));
+
+  std::array<float, kBlock> left{};
+  float* io[] = {left.data()};
+  engine.process(io, 1, kBlock);
+  REQUIRE(left.back() == 2.0f);
+
+  sonare::rt::Command fader{};
+  fader.type = sonare::rt::CommandType::kSetParamSmoothed;
+  fader.target_id = engine_lane_param_target(0, sonare::engine::TrackMixerRuntime::kFaderDb);
+  fader.sample_time = -1;
+  fader.arg.f = -12.0f;
+  REQUIRE(engine.push_command(fader));
+
+  sonare::rt::Command solo{};
+  solo.type = sonare::rt::CommandType::kSetSoloMute;
+  solo.target_id = 0;
+  solo.sample_time = -1;
+  solo.arg.i = 0x2;
+  REQUIRE(engine.push_command(solo));
+
+  for (int block = 0; block < 2; ++block) {
+    left.fill(0.0f);
+    engine.process(io, 1, kBlock);
+  }
+
+  REQUIRE(engine.set_track_lanes({{20}, {10}}));
+  for (int block = 0; block < 16; ++block) {
+    left.fill(0.0f);
+    engine.process(io, 1, kBlock);
+  }
+
+  REQUIRE(left.back() > 0.20f);
+  REQUIRE(left.back() < 0.70f);
+}
+
+TEST_CASE("RealtimeEngine track lane smoother survives transport seek", "[engine][realtime]") {
+  constexpr int kBlock = 256;
+  constexpr int kFrames = kBlock * 16;
+  sonare::engine::RealtimeEngine engine;
+  engine.prepare(48000.0, kBlock);
+
+  std::array<float, kFrames> clip{};
+  clip.fill(1.0f);
+  const float* clip_channels[] = {clip.data()};
+  sonare::engine::ClipSchedule clip_schedule{
+      1, {clip_channels, 1, kFrames}, 0.0, 0, 0, kFrames, false, 1.0f, 0, 0};
+  clip_schedule.track_id = 10;
+  engine.set_clips({clip_schedule});
+  REQUIRE(engine.set_track_lanes({{10}}));
+
+  sonare::rt::Command play{};
+  play.type = sonare::rt::CommandType::kTransportPlay;
+  play.sample_time = -1;
+  REQUIRE(engine.push_command(play));
+
+  std::array<float, kBlock> left{};
+  float* io[] = {left.data()};
+  engine.process(io, 1, kBlock);
+  REQUIRE(left.back() == 1.0f);
+
+  REQUIRE(engine.track_mixer().set_lane_parameter(0, sonare::engine::TrackMixerRuntime::kFaderDb,
+                                                  -12.0f));
+  for (int block = 0; block < 8; ++block) {
+    left.fill(0.0f);
+    engine.process(io, 1, kBlock);
+  }
+  REQUIRE(left.back() > 0.20f);
+  REQUIRE(left.back() < 0.35f);
+
+  sonare::rt::Command seek{};
+  seek.type = sonare::rt::CommandType::kTransportSeekSample;
+  seek.sample_time = -1;
+  seek.arg.i = kBlock;
+  REQUIRE(engine.push_command(seek));
+  left.fill(0.0f);
+  engine.process(io, 1, kBlock);
+
+  REQUIRE(left.front() > 0.20f);
+  REQUIRE(left.front() < 0.35f);
+  REQUIRE(left.back() > 0.20f);
+  REQUIRE(left.back() < 0.35f);
+}
+
+TEST_CASE("RealtimeEngine track lane smoother survives loop wrap", "[engine][realtime]") {
+  constexpr int kBlock = 256;
+  constexpr int kFrames = kBlock * 16;
+  sonare::engine::RealtimeEngine engine;
+  engine.prepare(48000.0, kBlock);
+
+  std::array<float, kFrames> clip{};
+  clip.fill(1.0f);
+  const float* clip_channels[] = {clip.data()};
+  sonare::engine::ClipSchedule clip_schedule{
+      1, {clip_channels, 1, kFrames}, 0.0, 0, 0, kFrames, false, 1.0f, 0, 0};
+  clip_schedule.track_id = 10;
+  engine.set_clips({clip_schedule});
+  REQUIRE(engine.set_track_lanes({{10}}));
+  engine.set_tempo(60.0);
+  engine.set_loop(0.0, 0.004, true);
+
+  sonare::rt::Command play{};
+  play.type = sonare::rt::CommandType::kTransportPlay;
+  play.sample_time = -1;
+  REQUIRE(engine.push_command(play));
+
+  std::array<float, kBlock> left{};
+  float* io[] = {left.data()};
+  engine.process(io, 1, kBlock);
+  REQUIRE(left.back() == 1.0f);
+
+  REQUIRE(engine.track_mixer().set_lane_parameter(0, sonare::engine::TrackMixerRuntime::kFaderDb,
+                                                  -12.0f));
+  for (int block = 0; block < 8; ++block) {
+    left.fill(0.0f);
+    engine.process(io, 1, kBlock);
+  }
+  REQUIRE(left.back() > 0.20f);
+  REQUIRE(left.back() < 0.35f);
+
+  left.fill(0.0f);
+  engine.process(io, 1, kBlock);
+  REQUIRE(left.front() > 0.20f);
+  REQUIRE(left.front() < 0.35f);
+  REQUIRE(left.back() > 0.20f);
+  REQUIRE(left.back() < 0.35f);
+}
+
+TEST_CASE("RealtimeEngine processes owned track strip specs before lane mix",
+          "[engine][realtime]") {
+  constexpr int kBlock = 256;
+  constexpr int kFrames = kBlock * 4;
+  sonare::engine::RealtimeEngine engine;
+  engine.prepare(48000.0, kBlock);
+
+  std::array<float, kFrames> clip_a{};
+  std::array<float, kFrames> clip_b{};
+  clip_a.fill(1.0f);
+  clip_b.fill(1.0f);
+  const float* a[] = {clip_a.data()};
+  const float* b[] = {clip_b.data()};
+
+  sonare::engine::ClipSchedule clip_a_schedule{1,       {a, 1, kFrames}, 0.0,  0, 0,
+                                               kFrames, false,           1.0f, 0, 0};
+  clip_a_schedule.track_id = 10;
+  sonare::engine::ClipSchedule clip_b_schedule{2,       {b, 1, kFrames}, 0.0,  0, 0,
+                                               kFrames, false,           1.0f, 0, 0};
+  clip_b_schedule.track_id = 20;
+  engine.set_clips({clip_a_schedule, clip_b_schedule});
+  REQUIRE(engine.set_track_lanes({{10}, {20}}));
+
+  sonare::mixing::api::Strip strip_spec;
+  strip_spec.fader_db = -12.0f;
+  strip_spec.pan_law = 3;
+  REQUIRE(engine.set_track_strip(10, strip_spec));
+
+  sonare::rt::Command play{};
+  play.type = sonare::rt::CommandType::kTransportPlay;
+  play.sample_time = -1;
+  REQUIRE(engine.push_command(play));
+
+  std::array<float, kBlock> left{};
+  float* io[] = {left.data()};
+  engine.process(io, 1, kBlock);
+
+  REQUIRE(left.back() > 1.20f);
+  REQUIRE(left.back() < 1.40f);
+}
+
+TEST_CASE("RealtimeEngine processes owned master strip specs after lane mix",
+          "[engine][realtime]") {
+  constexpr int kBlock = 256;
+  constexpr int kFrames = kBlock * 24;
+  sonare::engine::RealtimeEngine engine;
+  engine.prepare(48000.0, kBlock);
+
+  std::array<float, kFrames> clip_a{};
+  std::array<float, kFrames> clip_b{};
+  clip_a.fill(1.0f);
+  clip_b.fill(1.0f);
+  const float* a[] = {clip_a.data()};
+  const float* b[] = {clip_b.data()};
+
+  sonare::engine::ClipSchedule clip_a_schedule{1,       {a, 1, kFrames}, 0.0,  0, 0,
+                                               kFrames, false,           1.0f, 0, 0};
+  clip_a_schedule.track_id = 10;
+  sonare::engine::ClipSchedule clip_b_schedule{2,       {b, 1, kFrames}, 0.0,  0, 0,
+                                               kFrames, false,           1.0f, 0, 0};
+  clip_b_schedule.track_id = 20;
+  engine.set_clips({clip_a_schedule, clip_b_schedule});
+  REQUIRE(engine.set_track_lanes({{10}, {20}}));
+
+  sonare::mixing::api::Strip master_spec;
+  master_spec.fader_db = -12.0f;
+  master_spec.pan_law = 3;
+  REQUIRE(engine.set_master_strip(master_spec));
+
+  sonare::rt::Command play{};
+  play.type = sonare::rt::CommandType::kTransportPlay;
+  play.sample_time = -1;
+  REQUIRE(engine.push_command(play));
+
+  std::array<float, kBlock> left{};
+  float* io[] = {left.data()};
+  for (int block = 0; block < 20; ++block) {
+    left.fill(0.0f);
+    engine.process(io, 1, kBlock);
+  }
+
+  REQUIRE(left.back() > 0.65f);
+  REQUIRE(left.back() < 0.80f);
+}
+
+TEST_CASE("RealtimeEngine routes reserved master mixer parameters", "[engine][realtime]") {
+  constexpr int kBlock = 256;
+  constexpr int kFrames = kBlock * 24;
+  sonare::engine::RealtimeEngine engine;
+  engine.prepare(48000.0, kBlock);
+
+  std::array<float, kFrames> source{};
+  source.fill(1.0f);
+  const float* channels[] = {source.data()};
+  sonare::engine::ClipSchedule clip{1, {channels, 1, kFrames}, 0.0, 0, 0, kFrames, false, 1.0f, 0,
+                                    0};
+  engine.set_clips({clip});
+
+  sonare::mixing::api::Strip master_spec;
+  master_spec.fader_db = 0.0f;
+  master_spec.pan = 0.0f;
+  master_spec.pan_law = 3;
+  REQUIRE(engine.set_master_strip(master_spec));
+
+  sonare::rt::Command play{};
+  play.type = sonare::rt::CommandType::kTransportPlay;
+  play.sample_time = -1;
+  REQUIRE(engine.push_command(play));
+
+  std::array<float, kBlock> left{};
+  float* io[] = {left.data()};
+  engine.process(io, 1, kBlock);
+  REQUIRE(left.back() > 0.95f);
+
+  sonare::rt::Command fader{};
+  fader.type = sonare::rt::CommandType::kSetParamSmoothed;
+  fader.target_id = engine_master_param_target(sonare::engine::MixingRuntime::kFaderDb);
+  fader.sample_time = -1;
+  fader.arg.f = -12.0f;
+  REQUIRE(engine.push_command(fader));
+
+  for (int block = 0; block < 12; ++block) {
+    left.fill(0.0f);
+    engine.process(io, 1, kBlock);
+  }
+  REQUIRE(left.back() > 0.20f);
+  REQUIRE(left.back() < 0.40f);
+
+  sonare::rt::Command pan{};
+  pan.type = sonare::rt::CommandType::kSetParam;
+  pan.target_id = engine_master_param_target(sonare::engine::MixingRuntime::kPan);
+  pan.sample_time = -1;
+  pan.arg.f = 0.25f;
+  REQUIRE(engine.push_command(pan));
+  left.fill(0.0f);
+  engine.process(io, 1, kBlock);
+
+  sonare::engine::Telemetry telemetry{};
+  while (engine.pop_telemetry(telemetry)) {
+    REQUIRE(telemetry.error != sonare::engine::TelemetryErrorCode::kUnknownTarget);
+  }
+}
+
+TEST_CASE("RealtimeEngine toggles owned master strip insert bypass", "[engine][realtime]") {
+  constexpr int kBlock = 256;
+  constexpr int kFrames = kBlock * 16;
+  sonare::engine::RealtimeEngine engine;
+  engine.prepare(48000.0, kBlock);
+
+  std::array<float, kFrames> source{};
+  for (int i = 0; i < kFrames; ++i) {
+    source[static_cast<size_t>(i)] =
+        std::sin(2.0f * 3.14159265358979323846f * 1000.0f * static_cast<float>(i) / 48000.0f);
+  }
+  const float* channels[] = {source.data()};
+  sonare::engine::ClipSchedule clip{1, {channels, 1, kFrames}, 0.0, 0, 0, kFrames, false, 1.0f, 0,
+                                    0};
+  engine.set_clips({clip});
+
+  sonare::mixing::api::Strip master_spec;
+  master_spec.inserts.push_back(
+      {sonare::mixing::api::InsertSlot::PreFader, "eq.parametric",
+       R"({"band0.type":1,"band0.frequencyHz":1000,"band0.gainDb":12,"band0.enabled":1})"});
+  REQUIRE(engine.set_master_strip(master_spec));
+  REQUIRE_FALSE(engine.set_master_insert_bypassed(7, true));
+
+  sonare::rt::Command play{};
+  play.type = sonare::rt::CommandType::kTransportPlay;
+  play.sample_time = -1;
+  REQUIRE(engine.push_command(play));
+
+  std::array<float, kBlock> eq_out{};
+  float* io[] = {eq_out.data()};
+  for (int block = 0; block < 6; ++block) {
+    eq_out.fill(0.0f);
+    engine.process(io, 1, kBlock);
+  }
+
+  REQUIRE(engine.set_master_insert_bypassed(0, true, true));
+  sonare::rt::Command seek{};
+  seek.type = sonare::rt::CommandType::kTransportSeekSample;
+  seek.arg.i = 0;
+  seek.sample_time = -1;
+  REQUIRE(engine.push_command(seek));
+  std::array<float, kBlock> bypassed_out{};
+  io[0] = bypassed_out.data();
+  engine.process(io, 1, kBlock);
+
+  auto rms = [](const std::array<float, kBlock>& samples) {
+    double sum = 0.0;
+    for (float sample : samples) {
+      sum += static_cast<double>(sample) * static_cast<double>(sample);
+    }
+    return std::sqrt(sum / static_cast<double>(samples.size()));
+  };
+  REQUIRE(rms(eq_out) > rms(bypassed_out) * 1.5);
+}
+
+TEST_CASE("RealtimeEngine track lane solo does not mute metronome or output capture",
+          "[engine][realtime]") {
+  constexpr int kBlock = 128;
+  sonare::engine::RealtimeEngine engine;
+  engine.prepare(48000.0, kBlock);
+  REQUIRE(engine.set_track_lanes({{10}}));
+  REQUIRE(engine.track_mixer().set_lane_solo_mute(0, true, false));
+  engine.set_metronome_config(sonare::engine::MetronomeConfig{true, 0.25f, 0.75f, 32, 0.0});
+
+  std::array<float, kBlock> captured_l{};
+  std::array<float, kBlock> captured_r{};
+  float* capture_channels[] = {captured_l.data(), captured_r.data()};
+  engine.set_capture_segment({capture_channels, 2, kBlock});
+  engine.set_capture_punch(0, kBlock, true);
+  engine.set_capture_armed(true);
+
+  sonare::rt::Command play{};
+  play.type = sonare::rt::CommandType::kTransportPlay;
+  play.sample_time = -1;
+  REQUIRE(engine.push_command(play));
+
+  std::array<float, kBlock> left{};
+  std::array<float, kBlock> right{};
+  float* io[] = {left.data(), right.data()};
+  engine.process(io, 2, kBlock);
+
+  float output_peak = 0.0f;
+  float capture_peak = 0.0f;
+  for (int i = 0; i < kBlock; ++i) {
+    output_peak = std::max(output_peak, std::abs(left[static_cast<size_t>(i)]));
+    capture_peak = std::max(capture_peak, std::abs(captured_l[static_cast<size_t>(i)]));
+  }
+  REQUIRE(output_peak > 0.0f);
+  REQUIRE(capture_peak == Catch::Approx(output_peak).margin(0.0001f));
+  REQUIRE(engine.captured_frames() == kBlock);
+}
+#endif
+
+TEST_CASE("RealtimeEngine drains paged clip requests and underrun telemetry",
+          "[engine][realtime][clip_pages]") {
+  class MissingPagedProvider final : public sonare::engine::ClipPagedAudioProvider {
+   public:
+    int num_channels() const noexcept override { return 1; }
+    int64_t num_samples() const noexcept override { return static_cast<int64_t>(samples.size()); }
+    int64_t page_frames() const noexcept override { return 4; }
+
+    bool sample_at(int channel, int64_t sample, float* out) const noexcept override {
+      if (channel != 0 || !out || sample < 0 || sample >= num_samples() || sample >= 2) {
+        return false;
+      }
+      *out = samples[static_cast<size_t>(sample)];
+      return true;
+    }
+
+    std::array<float, 4> samples{1.0f, 2.0f, 3.0f, 4.0f};
+  };
+
+  sonare::engine::RealtimeEngine engine;
+  engine.prepare(48000.0, 4, 16, 16);
+
+  auto provider = std::make_shared<MissingPagedProvider>();
+  sonare::engine::ClipSchedule clip{44, {}, 0.0, 0, 0, 4, false, 1.0f, 0, 0};
+  clip.page_provider = provider;
+  engine.set_clips({clip});
+
+  sonare::rt::Command play{};
+  play.type = sonare::rt::CommandType::kTransportPlay;
+  play.sample_time = -1;
+  REQUIRE(engine.push_command(play));
+
+  std::array<float, 4> left{};
+  float* io[] = {left.data()};
+  engine.process(io, 1, 4);
+
+  sonare::engine::ClipPageRequest request{};
+  REQUIRE(engine.pop_clip_page_request(request));
+  REQUIRE(request.clip_id == 44);
+  REQUIRE(request.channel == 0);
+  REQUIRE(request.sample == 2);
+  REQUIRE_FALSE(engine.pop_clip_page_request(request));
+
+  int underrun_count = 0;
+  bool found_underrun = false;
+  sonare::engine::Telemetry telemetry{};
+  while (engine.pop_telemetry(telemetry)) {
+    if (telemetry.type == sonare::engine::TelemetryType::kError &&
+        telemetry.error == sonare::engine::TelemetryErrorCode::kClipPageUnderrun &&
+        telemetry.value == 44) {
+      found_underrun = true;
+      ++underrun_count;
+    }
+  }
+  REQUIRE(found_underrun);
+  REQUIRE(underrun_count == 1);
+  REQUIRE(left[2] == 0.0f);
+  REQUIRE(left[3] == 0.0f);
+}
+
+TEST_CASE("RealtimeEngine offline render matches block process", "[engine][realtime][offline]") {
+  constexpr int kFrames = 512;
+  constexpr int kBlock = 128;
+
+  sonare::engine::RealtimeEngine realtime;
+  sonare::engine::RealtimeEngine offline;
+  realtime.prepare(48000.0, kBlock);
+  offline.prepare(48000.0, kBlock);
+
+  sonare::rt::Command play{};
+  play.type = sonare::rt::CommandType::kTransportPlay;
+  play.sample_time = -1;
+  REQUIRE(realtime.push_command(play));
+  REQUIRE(offline.push_command(play));
+
+  std::array<float, kFrames> rt_left{};
+  std::array<float, kFrames> rt_right{};
+  std::array<float, kFrames> off_left{};
+  std::array<float, kFrames> off_right{};
+  for (int i = 0; i < kFrames; ++i) {
+    const float value = static_cast<float>(i) / static_cast<float>(kFrames);
+    rt_left[static_cast<size_t>(i)] = value;
+    rt_right[static_cast<size_t>(i)] = -value;
+    off_left[static_cast<size_t>(i)] = value;
+    off_right[static_cast<size_t>(i)] = -value;
+  }
+
+  for (int offset = 0; offset < kFrames; offset += kBlock) {
+    float* channels[] = {rt_left.data() + offset, rt_right.data() + offset};
+    realtime.process(channels, 2, kBlock);
+  }
+
+  float* offline_channels[] = {off_left.data(), off_right.data()};
+  offline.render_offline(offline_channels, 2, kFrames, kBlock);
+
+  REQUIRE(rt_left == off_left);
+  REQUIRE(rt_right == off_right);
+  REQUIRE(realtime.transport().render_frame() == offline.transport().render_frame());
+  REQUIRE(realtime.transport().sample_position() == offline.transport().sample_position());
+}
+
+TEST_CASE("RealtimeEngine::bind_mixing_strip is not noexcept and binds successfully",
+          "[engine][realtime]") {
+  sonare::engine::RealtimeEngine engine;
+  engine.prepare(48000.0, 64);
+  sonare::mixing::ChannelStrip strip;
+
+  // bind_mixing_strip re-prepares the strip on a successful bind, which
+  // allocates on the control thread. That allocation may throw under OOM, so
+  // the function must NOT be declared noexcept; otherwise a propagating
+  // std::bad_alloc would call std::terminate. Document the contract here so a
+  // re-added noexcept fails the build.
+  static_assert(!noexcept(engine.bind_mixing_strip(&strip)),
+                "bind_mixing_strip allocates on the control thread and must not be noexcept");
+
+  // Functional regression: a successful bind still works and the strip is
+  // bound into the mixing runtime.
+  REQUIRE(engine.bind_mixing_strip(&strip));
+  REQUIRE(engine.mixing().strip() == &strip);
+}

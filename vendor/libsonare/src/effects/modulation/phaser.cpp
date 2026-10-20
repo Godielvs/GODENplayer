@@ -1,0 +1,133 @@
+#include "effects/modulation/phaser.h"
+
+#include <algorithm>
+#include <cmath>
+
+#include "rt/scoped_no_denormals.h"
+#include "util/constants.h"
+
+namespace sonare::effects::modulation {
+
+using sonare::constants::kPi;
+
+namespace {
+
+double effective_sample_rate(double sample_rate) noexcept {
+  return sample_rate > 0.0 && std::isfinite(sample_rate) ? sample_rate : 48000.0;
+}
+
+float max_sweep_hz(double sample_rate) noexcept {
+  return static_cast<float>(effective_sample_rate(sample_rate) * 0.49);
+}
+
+}  // namespace
+
+Phaser::Phaser(PhaserConfig config) : config_(config) {}
+
+void Phaser::prepare(double sample_rate, int) {
+  sample_rate_ = effective_sample_rate(sample_rate);
+  // Clamp/order the sweep range here so construction-time config honors the same
+  // invariant the automation path (set_parameter) enforces, keeping
+  // tan(pi*freq/sr) well-defined (freq in [1, sr*0.49], min_hz <= max_hz).
+  const float nyquist = max_sweep_hz(sample_rate_);
+  config_.min_hz = std::clamp(config_.min_hz, 1.0f, nyquist);
+  config_.max_hz = std::clamp(config_.max_hz, 1.0f, nyquist);
+  config_.min_hz = std::min(config_.min_hz, config_.max_hz);
+  const int stages = std::clamp(config_.stages, 1, 12);
+  for (int ch = 0; ch < 2; ++ch) {
+    x1_[static_cast<size_t>(ch)].assign(static_cast<size_t>(stages), 0.0f);
+    y1_[static_cast<size_t>(ch)].assign(static_cast<size_t>(stages), 0.0f);
+  }
+  lfo_.prepare(sample_rate_);
+  lfo_.set_rate_hz(config_.rate_hz);
+  reset();
+}
+
+void Phaser::process(float* const* channels, int num_channels, int num_samples) {
+  if (channels == nullptr || num_channels <= 0 || num_samples <= 0 || channels[0] == nullptr) {
+    return;
+  }
+  rt::ScopedNoDenormals no_denormals;
+  float* left = channels[0];
+  float* right = num_channels > 1 && channels[1] != nullptr ? channels[1] : channels[0];
+  const bool stereo = right != left;
+  // Block-rate dry/wet + modulation depth: smoothed across blocks by the engine
+  // parameter slot smoother, not per-sample (see Chorus::process for the rationale).
+  const float wet = std::clamp(config_.dry_wet, 0.0f, 1.0f);
+  const float dry = 1.0f - wet;
+  for (int i = 0; i < num_samples; ++i) {
+    const float sweep = 0.5f + 0.5f * lfo_.process();
+    const float freq = config_.min_hz + (config_.max_hz - config_.min_hz) * sweep;
+    const float t = std::tan(::sonare::constants::kPi * freq / static_cast<float>(sample_rate_));
+    const float coeff = (1.0f - t) / (1.0f + t);
+    const float in_l = left[i];
+    left[i] = dry * in_l + wet * process_channel(in_l, 0, coeff);
+    if (stereo) {
+      // Only advance the channel-1 allpass state for genuine stereo input so a
+      // mono buffer is not written twice and channel-1 state is left untouched.
+      const float in_r = right[i];
+      right[i] = dry * in_r + wet * process_channel(in_r, 1, coeff);
+    }
+  }
+}
+
+bool Phaser::set_parameter(unsigned int param_id, float value) {
+  switch (param_id) {
+    case 0:
+      config_.rate_hz = std::max(0.0f, value);
+      // Updates the LFO increment in place; preserves oscillator phase.
+      lfo_.set_rate_hz(config_.rate_hz);
+      return true;
+    case 1:
+      config_.min_hz = std::clamp(value, 1.0f, max_sweep_hz(sample_rate_));
+      // Keep the sweep range ordered (min <= max) to avoid inverted/NaN coeffs.
+      config_.min_hz = std::min(config_.min_hz, config_.max_hz);
+      return true;
+    case 2:
+      config_.max_hz = std::clamp(value, 1.0f, max_sweep_hz(sample_rate_));
+      // Keep the sweep range ordered (min <= max) to avoid inverted/NaN coeffs.
+      config_.max_hz = std::max(config_.max_hz, config_.min_hz);
+      return true;
+    case 3:
+      config_.dry_wet = value;
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool Phaser::parameter_is_realtime_safe(unsigned int param_id) const noexcept {
+  // Every automatable id performs an in-place scalar/coefficient update (LFO
+  // rate, sweep bounds, dry/wet); none allocates or resets audio state. Unknown
+  // ids are rejected by set_parameter.
+  return param_id <= 3;
+}
+
+std::vector<rt::ParamDescriptor> Phaser::parameter_descriptors() const {
+  return {{"rateHz", 0}, {"minHz", 1}, {"maxHz", 2}, {"dryWet", 3}};
+}
+
+void Phaser::reset() {
+  for (auto& state : x1_) {
+    std::fill(state.begin(), state.end(), 0.0f);
+  }
+  for (auto& state : y1_) {
+    std::fill(state.begin(), state.end(), 0.0f);
+  }
+  lfo_.reset();
+}
+
+float Phaser::process_channel(float input, int channel, float coeff) {
+  float y = input;
+  auto& x = x1_[static_cast<size_t>(channel)];
+  auto& z = y1_[static_cast<size_t>(channel)];
+  for (size_t stage = 0; stage < x.size(); ++stage) {
+    const float out = -coeff * y + x[stage] + coeff * z[stage];
+    x[stage] = y;
+    z[stage] = out;
+    y = out;
+  }
+  return y;
+}
+
+}  // namespace sonare::effects::modulation

@@ -1,0 +1,20 @@
+{
+  "applicationName": "GODENplayer",
+  "assets": [
+    {
+      "key": "goden_default",
+      "source": "brand/goden-presence-1024.png",
+      "purpose": "valid fallback when exact cover delivery is unavailable"
+    },
+    {
+      "key": "goden_playing",
+      "source": "brand/goden-presence-1024.png",
+      "purpose": "playback state"
+    },
+    {
+      "key": "goden_daw",
+      "source": "brand/goden-presence-1024.png",
+      "purpose": "DAW preview state"
+    }
+  ]
+}

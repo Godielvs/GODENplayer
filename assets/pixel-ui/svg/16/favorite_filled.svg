@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" shape-rendering="crispEdges" role="img" aria-labelledby="title">
+  <title id="title">Favorited</title>
+  <path fill="currentColor" data-role="primary" d="M4 3h2v1h-2z M10 3h2v1h-2z M3 4h4v1h-4z M9 4h4v1h-4z M2 5h12v3h-12z M3 8h10v1h-10z M4 9h8v1h-8z M5 10h6v1h-6z M6 11h4v1h-4z M7 12h2v1h-2z"/>
+</svg>

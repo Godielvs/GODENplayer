@@ -1,0 +1,91 @@
+{
+  "schema": "goden.release-manifest.v2",
+  "component": "foo_nekorox",
+  "buildIdentity": {
+    "version": "5.1.0-beta.18-public.12",
+    "source": "src/component/build_identity.h",
+    "releaseState": "local-candidate-not-published",
+    "sourceContentSha256": "294c4eacaaedd827f86e26ec7277b651b51bbaa3b8796a4676a4b2b655ed73c2",
+    "toolchain": "MSVC v142 / SDK 19041; Columns UI v143 / SDK 26100"
+  },
+  "architecture": "x86_64",
+  "minimumWindows": "10.0.19041",
+  "minimumFoobar2000": "2.25.10",
+  "columnsUi": "3.6.0",
+  "hostDisplayContract": {
+    "hostExecutablePatched": false,
+    "provider": "Columns UI bounded PMv2 window context"
+  },
+  "qaMutationHooks": false,
+  "nativeBuildSource": {
+    "schema": "goden.native-build-source.v1",
+    "sourceContentSha256": "294c4eacaaedd827f86e26ec7277b651b51bbaa3b8796a4676a4b2b655ed73c2",
+    "qaMutationHooks": false,
+    "binaries": {
+      "coreBinary": {
+        "path": "foo_nekorox.dll",
+        "bytes": 7203328,
+        "sha256": "a9d3ea68f91ae2984a03de3a303dc78cb33b79eedde6a3ab76064c69e943fe95"
+      },
+      "analysisWorkerBinary": {
+        "path": "nekorox-analysis.exe",
+        "bytes": 3059712,
+        "sha256": "23318052816b56428a0b44a69faaf2ec5bdc8fd0cefa28e934089555cef4544a"
+      },
+      "crtRendererBinary": {
+        "path": "goden-crt-render.exe",
+        "bytes": 1058304,
+        "sha256": "e8487508676e5b3c81b186181eacc0d5c9a83fbf12dc19c97f0cf9020db52036"
+      },
+      "shaderRendererBinary": {
+        "path": "goden-shader-render.exe",
+        "bytes": 2111488,
+        "sha256": "f3cb8cc7032e6d99ddbbc1fdbe790d3f5da76e40047c9e485ed381b3b80a2dc5"
+      }
+    }
+  },
+  "rightsStatus": "third-party shader permissions and approved B icon similarity/rights remain pending; see LICENSE-SCOPE.md",
+  "dependencyLockSha256": "2789316d67eac1497da46b7cc533118d1063f0bc4a22d026f6f44177aa91f1bc",
+  "coreBinary": {
+    "path": "foo_nekorox.dll",
+    "bytes": 7203328,
+    "sha256": "a9d3ea68f91ae2984a03de3a303dc78cb33b79eedde6a3ab76064c69e943fe95"
+  },
+  "analysisWorkerBinary": {
+    "path": "nekorox-analysis.exe",
+    "bytes": 3059712,
+    "sha256": "23318052816b56428a0b44a69faaf2ec5bdc8fd0cefa28e934089555cef4544a"
+  },
+  "crtRendererBinary": {
+    "path": "goden-crt-render.exe",
+    "bytes": 1058304,
+    "sha256": "e8487508676e5b3c81b186181eacc0d5c9a83fbf12dc19c97f0cf9020db52036"
+  },
+  "shaderRendererBinary": {
+    "path": "goden-shader-render.exe",
+    "bytes": 2111488,
+    "sha256": "f3cb8cc7032e6d99ddbbc1fdbe790d3f5da76e40047c9e485ed381b3b80a2dc5"
+  },
+  "spectrumAnalyzerBinary": {
+    "path": "foo_vis_spectrum_analyzer.dll",
+    "bytes": 612864,
+    "sha256": "71d99f8caf0be8410fc1cebb5251b243464219f06a78a5ae78dba700657b0168"
+  },
+  "columnsUiBinary": {
+    "path": "foo_ui_columns.dll",
+    "bytes": 9076224,
+    "sha256": "5ae78fcb5afa3a8f3c7f8d92fde84034368dbecf6a2a3bd3edcfd4d73d2090c9"
+  },
+  "spectrumBuild": {
+    "path": "spectrum-analyzer-build.json",
+    "sha256": "9cc5efa799563eecedb295a32651ba533e1af3220209aaa1f178fdc2503dc66f"
+  },
+  "columnsUiBuild": {
+    "path": "columns-ui-build.json",
+    "sha256": "cc9298668ee1b315896a1efc44bc2c50880a073b7d0dae286ace40d543c68068"
+  },
+  "dependencySourceTrees": {
+    "columns-ui": "4df09b8210bc2a4d422f6b23df10fa49e0173625511e62af0b8e5917850b3dda",
+    "spectrum": "4e9053490b45ea76c933babb3c46c80ceec3045afd74827baeaf7ce52d0c72d0"
+  }
+}

@@ -1,0 +1,577 @@
+/// @file chord_analyzer_test.cpp
+/// @brief Tests for chord analyzer.
+
+#include "analysis/chord_analyzer.h"
+
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_floating_point.hpp>
+#include <cmath>
+#include <vector>
+
+#include "util/constants.h"
+
+using namespace sonare;
+using Catch::Matchers::WithinAbs;
+
+namespace {
+
+/// @brief Generates a chord audio signal.
+Audio create_chord(const std::vector<float>& midi_notes, int sr = 22050, float duration = 1.0f) {
+  int n_samples = static_cast<int>(sr * duration);
+  std::vector<float> samples(n_samples, 0.0f);
+
+  for (float midi : midi_notes) {
+    float freq = 440.0f * std::pow(2.0f, (midi - 69.0f) / 12.0f);
+
+    for (int i = 0; i < n_samples; ++i) {
+      float t = static_cast<float>(i) / static_cast<float>(sr);
+      // Add harmonics for richer sound
+      samples[i] += 0.5f * std::sin(2.0f * sonare::constants::kPiD * freq * t);
+      samples[i] += 0.25f * std::sin(2.0f * sonare::constants::kPiD * freq * 2.0f * t);
+      samples[i] += 0.125f * std::sin(2.0f * sonare::constants::kPiD * freq * 3.0f * t);
+    }
+  }
+
+  // Normalize
+  float max_val = 0.0f;
+  for (float s : samples) {
+    max_val = std::max(max_val, std::abs(s));
+  }
+  if (max_val > 0.0f) {
+    for (float& s : samples) {
+      s /= max_val;
+    }
+  }
+
+  return Audio::from_vector(std::move(samples), sr);
+}
+
+/// @brief Creates C major chord (C-E-G).
+Audio create_c_major(int sr = 22050, float duration = 1.0f) {
+  return create_chord({60.0f, 64.0f, 67.0f}, sr, duration);  // C4, E4, G4
+}
+
+/// @brief Creates C major over E bass.
+Audio create_c_major_over_e(int sr = 22050, float duration = 1.0f) {
+  return create_chord({40.0f, 60.0f, 64.0f, 67.0f}, sr, duration);  // E2, C4, E4, G4
+}
+
+/// @brief Creates A minor chord (A-C-E).
+Audio create_a_minor(int sr = 22050, float duration = 1.0f) {
+  return create_chord({57.0f, 60.0f, 64.0f}, sr, duration);  // A3, C4, E4
+}
+
+/// @brief Creates G major chord (G-B-D).
+Audio create_g_major(int sr = 22050, float duration = 1.0f) {
+  return create_chord({55.0f, 59.0f, 62.0f}, sr, duration);  // G3, B3, D4
+}
+
+/// @brief Creates F major chord (F-A-C).
+Audio create_f_major(int sr = 22050, float duration = 1.0f) {
+  return create_chord({53.0f, 57.0f, 60.0f}, sr, duration);  // F3, A3, C4
+}
+
+/// @brief Concatenates multiple audio signals.
+Audio concat_audio(const std::vector<Audio>& audios) {
+  if (audios.empty()) {
+    return Audio::from_vector({}, 22050);
+  }
+
+  std::vector<float> samples;
+  int sr = audios[0].sample_rate();
+
+  for (const auto& audio : audios) {
+    for (size_t i = 0; i < audio.size(); ++i) {
+      samples.push_back(audio.data()[i]);
+    }
+  }
+
+  return Audio::from_vector(std::move(samples), sr);
+}
+
+/// @brief Creates D minor chord (D-F-A).
+Audio create_d_minor(int sr = 22050, float duration = 1.0f) {
+  return create_chord({62.0f, 65.0f, 69.0f}, sr, duration);  // D4, F4, A4
+}
+
+/// @brief Creates E major chord (E-G#-B).
+Audio create_e_major(int sr = 22050, float duration = 1.0f) {
+  return create_chord({64.0f, 68.0f, 71.0f}, sr, duration);  // E4, G#4, B4
+}
+
+/// @brief Creates Bb major chord (Bb-D-F).
+Audio create_bb_major(int sr = 22050, float duration = 1.0f) {
+  return create_chord({58.0f, 62.0f, 65.0f}, sr, duration);  // Bb3, D4, F4
+}
+
+}  // namespace
+
+TEST_CASE("ChordAnalyzer basic", "[chord_analyzer]") {
+  Audio audio = create_c_major();
+
+  ChordConfig config;
+  ChordAnalyzer analyzer(audio, config);
+
+  REQUIRE(analyzer.count() >= 1);
+
+  const auto& chords = analyzer.chords();
+  REQUIRE(!chords.empty());
+}
+
+TEST_CASE("ChordAnalyzer frame-path HMM confidence is consistent and sane", "[chord_analyzer]") {
+  // With HMM smoothing on the (non-beat-sync) frame path, the post-Viterbi
+  // confidence must be recomputed against the same smoothed chroma the decision
+  // used (mirroring the beat-sync path), not the raw per-frame chroma. The
+  // resulting per-segment confidences must stay in [0, 1] and be non-trivially
+  // positive for a clean sustained chord.
+  Audio audio = create_c_major(22050, 2.0f);
+
+  ChordConfig config;
+  config.use_triads_only = true;
+  config.use_beat_sync = false;  // exercise the frame path
+  config.use_hmm = true;         // exercise the post-Viterbi confidence recompute
+
+  ChordAnalyzer analyzer(audio, config);
+
+  const auto& chords = analyzer.chords();
+  REQUIRE(!chords.empty());
+
+  float max_confidence = 0.0f;
+  for (const auto& chord : chords) {
+    REQUIRE(chord.confidence >= 0.0f);
+    REQUIRE(chord.confidence <= 1.0f);
+    max_confidence = std::max(max_confidence, chord.confidence);
+  }
+  // A sustained C major correlated against the smoothed chroma should yield a
+  // clearly positive confidence; raw-chroma confidences on the noisy first/last
+  // frames would have dragged this lower.
+  REQUIRE(max_confidence > 0.3f);
+}
+
+TEST_CASE("ChordAnalyzer C major detection", "[chord_analyzer]") {
+  Audio audio = create_c_major(22050, 2.0f);
+
+  ChordConfig config;
+  config.use_triads_only = true;
+
+  ChordAnalyzer analyzer(audio, config);
+
+  // Should detect C major
+  const auto& chords = analyzer.chords();
+  REQUIRE(!chords.empty());
+
+  // The most common chord should be C major
+  Chord most_common = analyzer.most_common_chord();
+  REQUIRE(most_common.root == PitchClass::C);
+  REQUIRE(most_common.quality == ChordQuality::Major);
+}
+
+TEST_CASE("ChordAnalyzer supports opt-in NNLS chroma front-end", "[.][slow][chord_analyzer]") {
+  Audio audio = create_c_major(22050, 1.0f);
+
+  ChordConfig config;
+  config.use_triads_only = true;
+  config.chroma_method = ChromaMethod::NNLS;
+  config.use_beat_sync = false;
+  config.smoothing_window = 0.5f;
+
+  ChordAnalyzer analyzer(audio, config);
+
+  REQUIRE(analyzer.count() >= 1);
+  Chord most_common = analyzer.most_common_chord();
+  REQUIRE(most_common.quality == ChordQuality::Major);
+}
+
+TEST_CASE("ChordAnalyzer uses low-frequency bass chroma for inversion detection",
+          "[.][slow][chord_analyzer]") {
+  Audio audio = create_c_major_over_e(22050, 1.0f);
+
+  ChordConfig config;
+  config.use_triads_only = true;
+  config.chroma_method = ChromaMethod::NNLS;
+  config.use_beat_sync = false;
+  config.detect_inversions = true;
+  config.smoothing_window = 0.5f;
+  config.min_duration = 0.0f;
+
+  ChordAnalyzer analyzer(audio, config);
+  REQUIRE(analyzer.count() >= 1);
+
+  const auto& chords = analyzer.chords();
+  REQUIRE(!chords.empty());
+  const Chord most_common = analyzer.most_common_chord();
+  REQUIRE(most_common.root == PitchClass::C);
+  REQUIRE(most_common.quality == ChordQuality::Major);
+  REQUIRE(most_common.bass == PitchClass::E);
+}
+
+TEST_CASE("ChordAnalyzer inversion bass is not C-biased for a high pitch-class bass",
+          "[.][slow][chord_analyzer]") {
+  // G major over a low B bass (first inversion, G/B). B is pitch class 11, the
+  // index most heavily penalized by the old energy[c]*(1-0.025*c) weighting,
+  // which biased the bass estimate toward low indices (C). With that bogus
+  // per-index bias removed, the raw bass-band energy must recover B as the bass.
+  Audio audio = create_chord({47.0f, 55.0f, 59.0f, 62.0f}, 22050, 1.0f);  // B2, G3, B3, D4
+
+  ChordConfig config;
+  config.use_triads_only = true;
+  config.chroma_method = ChromaMethod::NNLS;
+  config.use_beat_sync = false;
+  config.detect_inversions = true;
+  config.smoothing_window = 0.5f;
+  config.min_duration = 0.0f;
+
+  ChordAnalyzer analyzer(audio, config);
+  REQUIRE(analyzer.count() >= 1);
+
+  const Chord most_common = analyzer.most_common_chord();
+  REQUIRE(most_common.root == PitchClass::G);
+  REQUIRE(most_common.quality == ChordQuality::Major);
+  // The bass must not collapse to C purely from the removed index bias.
+  REQUIRE(most_common.bass != PitchClass::C);
+  REQUIRE(most_common.bass == PitchClass::B);
+}
+
+TEST_CASE("ChordAnalyzer A minor detection", "[chord_analyzer]") {
+  Audio audio = create_a_minor(22050, 2.0f);
+
+  ChordConfig config;
+  config.use_triads_only = true;
+
+  ChordAnalyzer analyzer(audio, config);
+
+  Chord most_common = analyzer.most_common_chord();
+  REQUIRE(most_common.root == PitchClass::A);
+  REQUIRE(most_common.quality == ChordQuality::Minor);
+}
+
+TEST_CASE("ChordAnalyzer chord progression", "[chord_analyzer]") {
+  // Create C - G - Am - F progression
+  std::vector<Audio> parts = {create_c_major(22050, 1.0f), create_g_major(22050, 1.0f),
+                              create_a_minor(22050, 1.0f), create_f_major(22050, 1.0f)};
+
+  Audio audio = concat_audio(parts);
+
+  ChordConfig config;
+  config.use_triads_only = true;
+  config.min_duration = 0.5f;
+
+  ChordAnalyzer analyzer(audio, config);
+
+  // Should detect multiple chords
+  REQUIRE(analyzer.count() >= 2);
+
+  // Check progression pattern
+  std::string pattern = analyzer.progression_pattern();
+  REQUIRE(!pattern.empty());
+}
+
+TEST_CASE("ChordAnalyzer functional analysis", "[chord_analyzer]") {
+  Audio audio = create_c_major(22050, 2.0f);
+
+  ChordConfig config;
+  config.use_triads_only = true;
+
+  ChordAnalyzer analyzer(audio, config);
+
+  // Analyze in C major
+  auto roman = analyzer.functional_analysis(PitchClass::C, Mode::Major);
+
+  REQUIRE(!roman.empty());
+  // C major in key of C should be "I"
+  REQUIRE(roman[0] == "I");
+}
+
+TEST_CASE("ChordAnalyzer functional analysis minor mode", "[chord_analyzer]") {
+  SECTION("chord in relative minor key") {
+    Audio audio = create_a_minor(22050, 2.0f);
+
+    ChordConfig config;
+    config.use_triads_only = true;
+
+    ChordAnalyzer analyzer(audio, config);
+
+    // Analyze A minor chord in key of A minor
+    auto roman = analyzer.functional_analysis(PitchClass::A, Mode::Minor);
+
+    REQUIRE(!roman.empty());
+    // A minor in key of A minor should be "i"
+    REQUIRE(roman[0] == "i");
+  }
+
+  SECTION("major chord in minor key") {
+    Audio audio = create_c_major(22050, 2.0f);
+
+    ChordConfig config;
+    config.use_triads_only = true;
+
+    ChordAnalyzer analyzer(audio, config);
+
+    // Analyze C major chord in key of A minor
+    auto roman = analyzer.functional_analysis(PitchClass::A, Mode::Minor);
+
+    REQUIRE(!roman.empty());
+    // C major in key of A minor should be "III" (bIII in major, but III in minor)
+    REQUIRE(roman[0] == "III");
+  }
+
+  SECTION("G major in A minor key") {
+    Audio audio = create_g_major(22050, 2.0f);
+
+    ChordConfig config;
+    config.use_triads_only = true;
+
+    ChordAnalyzer analyzer(audio, config);
+
+    // Analyze G major chord in key of A minor
+    auto roman = analyzer.functional_analysis(PitchClass::A, Mode::Minor);
+
+    REQUIRE(!roman.empty());
+    // G major in key of A minor should be "VII" (bVII in minor scale)
+    REQUIRE(roman[0] == "VII");
+  }
+}
+
+TEST_CASE("ChordAnalyzer chord_at", "[chord_analyzer]") {
+  Audio audio = create_c_major(22050, 2.0f);
+
+  ChordAnalyzer analyzer(audio);
+
+  // Get chord at middle of audio
+  Chord chord = analyzer.chord_at(1.0f);
+
+  REQUIRE(chord.duration() > 0.0f);
+  REQUIRE(chord.confidence >= 0.0f);
+  REQUIRE(chord.confidence <= 1.0f);
+}
+
+TEST_CASE("ChordAnalyzer from chroma", "[chord_analyzer]") {
+  Audio audio = create_c_major(22050, 2.0f);
+
+  ChromaConfig chroma_config;
+  Chroma chroma = Chroma::compute(audio, chroma_config);
+
+  ChordConfig config;
+  ChordAnalyzer analyzer(chroma, config);
+
+  REQUIRE(analyzer.count() >= 1);
+}
+
+TEST_CASE("ChordAnalyzer Chord::to_string", "[chord_analyzer]") {
+  Chord chord;
+  chord.root = PitchClass::C;
+  chord.quality = ChordQuality::Major;
+  chord.start = 0.0f;
+  chord.end = 1.0f;
+  chord.confidence = 0.9f;
+
+  REQUIRE(chord.to_string() == "C");
+
+  chord.quality = ChordQuality::Minor;
+  REQUIRE(chord.to_string() == "Cm");
+
+  chord.quality = ChordQuality::Dominant7;
+  REQUIRE(chord.to_string() == "C7");
+
+  chord.quality = ChordQuality::Major7;
+  REQUIRE(chord.to_string() == "Cmaj7");
+
+  chord.quality = ChordQuality::Minor7;
+  REQUIRE(chord.to_string() == "Cm7");
+
+  chord.quality = ChordQuality::Diminished;
+  REQUIRE(chord.to_string() == "Cdim");
+
+  chord.quality = ChordQuality::Augmented;
+  REQUIRE(chord.to_string() == "Caug");
+
+  chord.quality = ChordQuality::Add9;
+  REQUIRE(chord.to_string() == "Cadd9");
+
+  chord.quality = ChordQuality::HalfDim7;
+  REQUIRE(chord.to_string() == "Cm7b5");
+
+  chord.quality = ChordQuality::Dominant9;
+  REQUIRE(chord.to_string() == "C9");
+
+  chord.root = PitchClass::C;
+  chord.quality = ChordQuality::Major;
+  chord.bass = PitchClass::E;
+  REQUIRE(chord.to_string() == "C/E");
+
+  chord.quality = ChordQuality::Unknown;
+  REQUIRE(chord.to_string() == "N.C.");
+}
+
+TEST_CASE("ChordAnalyzer frame chords", "[chord_analyzer]") {
+  Audio audio = create_c_major(22050, 1.0f);
+
+  ChordAnalyzer analyzer(audio);
+
+  const auto& frame_chords = analyzer.frame_chords();
+
+  REQUIRE(!frame_chords.empty());
+
+  // A tonal fixture at the default threshold should have valid template ids;
+  // ambiguous/rejected frames use the documented -1 N.C. sentinel.
+  for (int idx : frame_chords) {
+    REQUIRE(idx >= 0);
+    REQUIRE(idx < static_cast<int>(analyzer.templates().size()));
+  }
+}
+
+TEST_CASE("ChordAnalyzer templates", "[chord_analyzer]") {
+  Audio audio = create_c_major();
+
+  ChordConfig config;
+  config.use_triads_only = false;
+  ChordAnalyzer analyzer1(audio, config);
+
+  // Full templates: 192 (12 roots × 16 qualities)
+  REQUIRE(analyzer1.templates().size() == 192);
+
+  config.use_triads_only = true;
+  ChordAnalyzer analyzer2(audio, config);
+
+  // Triads only: 48 (12 roots × 4 qualities)
+  REQUIRE(analyzer2.templates().size() == 48);
+}
+
+TEST_CASE("detect_chords quick function", "[chord_analyzer]") {
+  Audio audio = create_c_major(22050, 2.0f);
+
+  auto chords = detect_chords(audio);
+
+  REQUIRE(!chords.empty());
+}
+
+TEST_CASE("ChordAnalyzer chord timing", "[chord_analyzer]") {
+  Audio audio = create_c_major(22050, 2.0f);
+
+  ChordAnalyzer analyzer(audio);
+
+  const auto& chords = analyzer.chords();
+
+  for (size_t i = 0; i < chords.size(); ++i) {
+    REQUIRE(chords[i].start >= 0.0f);
+    REQUIRE(chords[i].end > chords[i].start);
+
+    // Check sequential ordering
+    if (i > 0) {
+      REQUIRE_THAT(chords[i].start, WithinAbs(chords[i - 1].end, 0.01f));
+    }
+  }
+}
+
+TEST_CASE("ChordAnalyzer empty chord_at", "[chord_analyzer]") {
+  Audio audio = create_c_major(22050, 1.0f);
+
+  ChordAnalyzer analyzer(audio);
+
+  // Time way beyond audio duration
+  Chord chord = analyzer.chord_at(100.0f);
+
+  REQUIRE(chord.duration() == 0.0f);
+  REQUIRE(chord.confidence == 0.0f);
+}
+
+TEST_CASE("ChordAnalyzer Roman numeral case by quality", "[chord_analyzer]") {
+  SECTION("F major in C major key returns uppercase IV") {
+    Audio audio = create_f_major(22050, 2.0f);
+
+    ChordConfig config;
+    config.use_triads_only = true;
+
+    ChordAnalyzer analyzer(audio, config);
+
+    auto roman = analyzer.functional_analysis(PitchClass::C, Mode::Major);
+
+    REQUIRE(!roman.empty());
+    // F major chord is scale degree IV in C major → uppercase "IV"
+    REQUIRE(roman[0] == "IV");
+  }
+
+  SECTION("D minor in A minor key returns lowercase iv") {
+    Audio audio = create_d_minor(22050, 2.0f);
+
+    ChordConfig config;
+    config.use_triads_only = true;
+
+    ChordAnalyzer analyzer(audio, config);
+
+    auto roman = analyzer.functional_analysis(PitchClass::A, Mode::Minor);
+
+    REQUIRE(!roman.empty());
+    // D minor chord is scale degree iv in A minor → lowercase "iv"
+    REQUIRE(roman[0] == "iv");
+  }
+
+  SECTION("A minor in C major key returns lowercase vi") {
+    Audio audio = create_a_minor(22050, 2.0f);
+
+    ChordConfig config;
+    config.use_triads_only = true;
+
+    ChordAnalyzer analyzer(audio, config);
+
+    auto roman = analyzer.functional_analysis(PitchClass::C, Mode::Major);
+
+    REQUIRE(!roman.empty());
+    // A minor in C major is vi (minor quality → lowercase)
+    REQUIRE(roman[0] == "vi");
+  }
+
+  SECTION("G major in C major key returns uppercase V") {
+    Audio audio = create_g_major(22050, 2.0f);
+
+    ChordConfig config;
+    config.use_triads_only = true;
+
+    ChordAnalyzer analyzer(audio, config);
+
+    auto roman = analyzer.functional_analysis(PitchClass::C, Mode::Major);
+
+    REQUIRE(!roman.empty());
+    // G major in C major → "V"
+    REQUIRE(roman[0] == "V");
+  }
+
+  SECTION("E major in A minor key returns uppercase V") {
+    // E major is not diatonic to natural A minor (which has Em at degree v),
+    // but E natural minor 7th → interval 7 from A = E, which is degree V.
+    // However E major has a raised G# making it the harmonic minor V.
+    // The function only looks at root interval, so E in A minor = degree V.
+    Audio audio = create_e_major(22050, 2.0f);
+
+    ChordConfig config;
+    config.use_triads_only = true;
+
+    ChordAnalyzer analyzer(audio, config);
+
+    auto roman = analyzer.functional_analysis(PitchClass::A, Mode::Minor);
+
+    REQUIRE(!roman.empty());
+    // E major chord, root E is degree V in A minor → uppercase "V"
+    REQUIRE(roman[0] == "V");
+  }
+}
+
+TEST_CASE("ChordAnalyzer borrowed chord Roman numerals", "[chord_analyzer]") {
+  SECTION("Bb major in C major key is chromatic") {
+    // Bb is interval 10 from C. In C major, this is not a diatonic degree.
+    // The algorithm finds it as a raised VI (9+1=10) → "#VI".
+    // Since Bb major is a major chord, the numeral stays uppercase → "#VI".
+    Audio audio = create_bb_major(22050, 2.0f);
+
+    ChordConfig config;
+    config.use_triads_only = true;
+
+    ChordAnalyzer analyzer(audio, config);
+
+    auto roman = analyzer.functional_analysis(PitchClass::C, Mode::Major);
+
+    REQUIRE(!roman.empty());
+    // Bb major in C major → chromatic "#VI" (raised sixth scale degree)
+    REQUIRE(roman[0] == "#VI");
+  }
+}

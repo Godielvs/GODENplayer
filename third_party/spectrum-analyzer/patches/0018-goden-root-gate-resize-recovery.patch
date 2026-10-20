@@ -1,0 +1,186 @@
+--- a/UIElement.h
++++ b/UIElement.h
+@@ -76,6 +76,8 @@
+     void OnLButtonDblClk(UINT nFlags, CPoint point);
+     LRESULT OnDPIChanged(UINT dpiX, UINT dpiY, PRECT newRect);
+     LRESULT OnWindowPositionChanged(UINT uMsg, WPARAM wParam, LPARAM lParam);
++    void RefreshRootPresentationVisibility() noexcept;
++    HWND _PresentationRoot = nullptr;
+     static UINT RootPresentationVisibilityMessage() noexcept;
+     static UINT SpectrumRenderQaMessage() noexcept;
+     LRESULT OnSpectrumRenderQa(UINT uMsg, WPARAM wParam, LPARAM lParam);
+@@ -196,6 +198,8 @@
+ 
+     RECT _OldRect;
+     bool _IsFullScreen;
++    ULONGLONG _ResourceRetryTick = 0; // Protected by _CriticalSection.
++    std::atomic_bool _RootPresentationVisible{true};
+     std::atomic_bool _IsVisible;    // True if the component is visible.
+     bool _IsInitializing;
+ 
+--- a/UIElement.cpp
++++ b/UIElement.cpp
+@@ -4,6 +4,8 @@
+ #include "pch.h"
+ 
+ #include "UIElement.h"
++#include <dwmapi.h>
++#pragma comment(lib, "dwmapi.lib")
+ 
+ #include "StyleManager.h"
+ #include "Color.h"
+@@ -128,6 +130,7 @@
+         return -1;
+     }
+ 
++    RefreshRootPresentationVisibility();
+     StartRenderer();
+ 
+     return 0;
+@@ -196,29 +199,24 @@
+ /// </summary>
+ void uielement_t::OnSize(UINT type, CSize size)
+ {
+-    if ((_DeviceContext == nullptr) || (size.cx == 0) || (size.cy == 0))
+-        return;
+-
++    if (size.cx == 0 || size.cy == 0) return;
+     _CriticalSection.Enter();
+-
+-    // Remove the bitmap from the device context.
+-    _DeviceContext->SetTarget(nullptr);
+-
+-    // Release the bitmap so that the swap chain can be resized.
+-    _BackBuffer.Release();
+-
+-    // Resize the swap chain.
+-    HRESULT hr = _SwapChain->ResizeBuffers(0, (UINT) size.cx, (UINT) size.cy, DXGI_FORMAT_B8G8R8A8_UNORM, 0);
+-
+-    // Recreate the back buffer.
+-    if (SUCCEEDED(hr))
+-        hr = CreateBackBuffer();
+-
+-    // Initialize the target buffer of the device context.
+-    if (SUCCEEDED(hr))
+-        _DeviceContext->SetTarget(_BackBuffer);
+-
+-    Resize();
++    if (_DeviceContext != nullptr && _SwapChain != nullptr) {
++        _DeviceContext->SetTarget(nullptr);
++        _BackBuffer.Release();
++        HRESULT hr = _SwapChain->ResizeBuffers(0, (UINT)size.cx, (UINT)size.cy,
++            DXGI_FORMAT_B8G8R8A8_UNORM, 0);
++        if (SUCCEEDED(hr)) hr = CreateBackBuffer();
++        if (SUCCEEDED(hr)) {
++            _DeviceContext->SetTarget(_BackBuffer);
++            Resize();
++        } else {
++            // Never retain a context with no target after a failed resize.
++            DeleteDeviceSpecificResources();
++        }
++    } else {
++        DeleteDeviceSpecificResources();
++    }
+ 
+     _CriticalSection.Leave();
+ 
+@@ -654,6 +652,7 @@
+ LRESULT uielement_t::OnWindowPositionChanged(UINT uMsg, WPARAM wParam, LPARAM lParam)
+ {
+     const auto root = ::GetAncestor(m_hWnd, GA_ROOT);
++    if (root != _PresentationRoot) RefreshRootPresentationVisibility();
+     const auto monitor = ::MonitorFromWindow(
+         root != nullptr ? root : m_hWnd, MONITOR_DEFAULTTONEAREST);
+     if (_DisplayMonitor.exchange(monitor, std::memory_order_acq_rel) != monitor)
+@@ -669,6 +668,16 @@
+ /// their ancestor changes iconic state, so the root chrome broadcasts this
+ /// registered message to every descendant.
+ /// </summary>
++void uielement_t::RefreshRootPresentationVisibility() noexcept
++{
++    _PresentationRoot = ::GetAncestor(m_hWnd, GA_ROOT);
++    const auto root = _PresentationRoot != nullptr ? _PresentationRoot : m_hWnd;
++    DWORD cloaked = 0;
++    (void)::DwmGetWindowAttribute(root, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
++    _RootPresentationVisible.store(::IsWindowVisible(root) && !::IsIconic(root) && cloaked == 0,
++        std::memory_order_release);
++}
++
+ UINT uielement_t::RootPresentationVisibilityMessage() noexcept
+ {
+     static const auto message = ::RegisterWindowMessageW(
+@@ -676,8 +685,9 @@
+     return message;
+ }
+ 
+-LRESULT uielement_t::OnRootPresentationVisibility(UINT, WPARAM, LPARAM)
+-{
++LRESULT uielement_t::OnRootPresentationVisibility(UINT, WPARAM wParam, LPARAM)
++{
++    _RootPresentationVisible.store(wParam != 0, std::memory_order_release);
+     _DisplayEnvironmentDirty.store(true, std::memory_order_release);
+     WakeRenderer();
+     Invalidate();
+--- a/UIElementRendering.cpp
++++ b/UIElementRendering.cpp
+@@ -42,8 +42,18 @@
+     const auto IsRenderable = [&]() noexcept
+     {
+         return !_IsFrozen.load(std::memory_order_acquire)
++            && _RootPresentationVisible.load(std::memory_order_acquire)
+             && _IsVisible.load(std::memory_order_acquire)
+             && !::IsIconic(::GetAncestor(m_hWnd, GA_ROOT));
++    };
++
++    const auto GetIdleWaitTimeout = [&]() noexcept
++    {
++        if (!IsRenderable() || _ResourceRetryTick == 0) return (DWORD) INFINITE;
++        const auto Tick = ::GetTickCount64();
++        const auto Remaining = _ResourceRetryTick > Tick
++            ? _ResourceRetryTick - Tick : 1ULL;
++        return (DWORD) (std::min)(Remaining, 1000ULL);
+     };
+ 
+     const auto IsActive = [&]() noexcept
+@@ -91,7 +101,7 @@
+             const HANDLE DawWake = _GodenDawSource.WakeHandle();
+             const HANDLE Handles[] = { _hStopRendering, _hRenderWake, DawWake };
+             const DWORD HandleCount = (DawWake != nullptr) ? 3U : 2U;
+-            const DWORD WaitResult = ::WaitForMultipleObjects(HandleCount, Handles, FALSE, INFINITE);
++            const DWORD WaitResult = ::WaitForMultipleObjects(HandleCount, Handles, FALSE, GetIdleWaitTimeout());
+ 
+             if (WaitResult == WAIT_OBJECT_0 || WaitResult == WAIT_FAILED)
+                 break;
+@@ -386,10 +396,16 @@
+ /// </summary>
+ void uielement_t::Render() noexcept
+ {
++    const auto Now = ::GetTickCount64();
++    if (Now < _ResourceRetryTick) return;
+     HRESULT hr = CreateDeviceSpecificResources();
+ 
+-    if (!SUCCEEDED(hr))
+-        return;
++    if (FAILED(hr)) {
++        DeleteDeviceSpecificResources();
++        _ResourceRetryTick = Now + 250ULL;
++        return;
++    }
++    _ResourceRetryTick = 0;
+ 
+     _DeviceContext->BeginDraw();
+ 
+@@ -407,8 +423,12 @@
+     if (SUCCEEDED(hr))
+         hr = _SwapChain->Present(0, 0);
+ 
+-    if (hr == D2DERR_RECREATE_TARGET || hr == DXGI_ERROR_DEVICE_REMOVED)
++    if (hr == D2DERR_RECREATE_TARGET || hr == DXGI_ERROR_DEVICE_REMOVED ||
++        hr == DXGI_ERROR_DEVICE_RESET || hr == DXGI_ERROR_DEVICE_HUNG ||
++        hr == DXGI_ERROR_DRIVER_INTERNAL_ERROR) {
+         DeleteDeviceSpecificResources();
++        _ResourceRetryTick = Now + 250ULL;
++    }
+ }
+ 
+ /// <summary>

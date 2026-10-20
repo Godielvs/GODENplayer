@@ -1,0 +1,67 @@
+diff --git a/Analyzers/Analysis.cpp b/Analyzers/Analysis.cpp
+--- a/Analyzers/Analysis.cpp
++++ b/Analyzers/Analysis.cpp
+@@ -126,6 +126,27 @@
+ 
+     _NyquistFrequency = (double) _SampleRate / 2.;
+     _ChannelMask      = _ChannelConfig & _GraphDescription->_SelectedChannels;
++
++    // The default stereo mix also represents a single front-center channel
++    // for spectral displays. Keep custom selections and other meter modes
++    // exact; do not rewrite the saved graph configuration or audio samples.
++    if ((_ChannelMask == 0) && (_ChannelCount == 1) &&
++        (_ChannelConfig == (uint32_t) Channels::ConfigMono) &&
++        (_GraphDescription->_SelectedChannels == (uint32_t) Channels::ConfigStereo))
++    {
++        switch (_State->_VisualizationType)
++        {
++            case VisualizationType::Bars:
++            case VisualizationType::Curve:
++            case VisualizationType::Spectrogram:
++            case VisualizationType::RadialBars:
++            case VisualizationType::RadialCurve:
++                _ChannelMask = _ChannelConfig;
++                break;
++            default:
++                break;
++        }
++    }
+ 
+     if (_ChannelMask == 0)
+         return; // None of the selected channels are present in this chunk.
+@@ -471,7 +492,7 @@
+                 _FFTAnalyzer = new fft_analyzer_t(_State, _SampleRate, _ChannelCount, _ChannelConfig, *_WindowFunction, *_BrownPucketteKernel, _State->_BinCount);
+             }
+ 
+-            _FFTAnalyzer->AnalyzeSamples(Frames, FrameCount, _GraphDescription->_SelectedChannels, _FrequencyBands);
++            _FFTAnalyzer->AnalyzeSamples(Frames, FrameCount, _ChannelMask, _FrequencyBands);
+             break;
+         }
+ 
+@@ -480,7 +501,7 @@
+             if (_CQTAnalyzer == nullptr)
+                 _CQTAnalyzer = new cqt_analyzer_t(_State, _SampleRate, _ChannelCount, _ChannelConfig, *_WindowFunction);
+ 
+-            _CQTAnalyzer->AnalyzeSamples(Frames, FrameCount, _GraphDescription->_SelectedChannels, _FrequencyBands);
++            _CQTAnalyzer->AnalyzeSamples(Frames, FrameCount, _ChannelMask, _FrequencyBands);
+             break;
+         }
+ 
+@@ -493,7 +514,7 @@
+                 _SWIFTAnalyzer->Initialize(_FrequencyBands);
+             }
+ 
+-            _SWIFTAnalyzer->AnalyzeSamples(Frames, FrameCount, _GraphDescription->_SelectedChannels, _FrequencyBands);
++            _SWIFTAnalyzer->AnalyzeSamples(Frames, FrameCount, _ChannelMask, _FrequencyBands);
+             break;
+         }
+ 
+@@ -506,7 +527,7 @@
+                 _AnalogStyleAnalyzer->Initialize(_FrequencyBands);
+             }
+ 
+-            _AnalogStyleAnalyzer->AnalyzeSamples(Frames, FrameCount, _GraphDescription->_SelectedChannels, _FrequencyBands);
++            _AnalogStyleAnalyzer->AnalyzeSamples(Frames, FrameCount, _ChannelMask, _FrequencyBands);
+             break;
+         }
+     }

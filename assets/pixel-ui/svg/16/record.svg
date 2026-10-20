@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" shape-rendering="crispEdges" role="img" aria-labelledby="title">
+  <title id="title">Record</title>
+  <path fill="currentColor" data-role="primary" d="M6 4h4v1h-4z M5 5h6v1h-6z M4 6h8v4h-8z M5 10h6v1h-6z M6 11h4v1h-4z"/>
+</svg>

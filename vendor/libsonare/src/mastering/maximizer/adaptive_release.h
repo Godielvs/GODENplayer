@@ -1,0 +1,76 @@
+#pragma once
+
+#include <vector>
+
+#include "mastering/maximizer/true_peak_limiter.h"
+
+namespace sonare::mastering::maximizer {
+
+/// @brief Limiter with crest-factor based adaptive release, per design Appendix C.3.
+///
+/// release_ms is recomputed each block from the short-term crest factor of the
+/// input (peak / RMS). High crest (transient material) -> short release, low crest
+/// (sustained material) -> long release. This avoids product-specific limiter
+/// behavior while keeping the mapping deterministic.
+struct AdaptiveReleaseConfig {
+  float ceiling_db = -1.0f;
+  float lookahead_ms = 1.0f;
+  float min_release_ms = 20.0f;
+  float max_release_ms = 250.0f;
+  float crest_window_ms = 30.0f;
+  float crest_low = 2.0f;    // crest factor at/below which release is at minimum
+  float crest_high = 10.0f;  // crest factor at/above which release is at maximum
+  float release_smoothing_ms = 20.0f;
+};
+
+class AdaptiveRelease : public rt::ProcessorBase {
+ public:
+  explicit AdaptiveRelease(AdaptiveReleaseConfig config = {});
+  void prepare(double sample_rate, int max_block_size) override;
+  void process(float* const* channels, int num_channels, int num_samples) override;
+  void reset() override;
+  void set_config(const AdaptiveReleaseConfig& config);
+  const AdaptiveReleaseConfig& config() const { return config_; }
+  float current_release_ms() const { return current_release_ms_; }
+  float current_crest_factor() const { return current_crest_factor_; }
+  float last_gain_reduction_db() const override { return limiter_.last_gain_reduction_db(); }
+
+  // Control-thread parameters. All but ceiling are read directly each block,
+  // but the composed true-peak limiter does not yet guarantee an entirely
+  // allocation-free setter path for every published field:
+  //   0 = ceiling_db (clamped <= 0; forwarded in-place to the inner limiter)
+  //   1 = min_release_ms (clamped to >= 0)
+  //   2 = max_release_ms (clamped to >= min_release_ms)
+  //   3 = crest_window_ms (clamped to a small positive minimum)
+  //   4 = crest_low (clamped to a small positive minimum)
+  //   5 = crest_high (clamped to > crest_low)
+  //   6 = release_smoothing_ms (clamped to >= 0)
+  // lookahead_ms is NOT automatable (it resizes the inner lookahead buffers).
+  bool set_parameter(unsigned int param_id, float value) override;
+  // The composed true-peak limiter can refresh internal oversampling state for
+  // a parameter update. Keep the public setter for control-thread use, but do
+  // not advertise it to realtime hosts until that path is fully in-place.
+  bool parameter_is_realtime_safe(unsigned int) const noexcept override {
+    return false;
+  }
+  // Automatable parameters: 0=ceilingDb, 1=minReleaseMs, 2=maxReleaseMs,
+  // 3=crestWindowMs, 4=crestLow, 5=crestHigh, 6=releaseSmoothingMs.
+  std::vector<rt::ParamDescriptor> parameter_descriptors() const override;
+
+ private:
+  static void validate_config(const AdaptiveReleaseConfig& config);
+  void configure_limiter();
+  float compute_crest_factor(float* const* channels, int num_channels, int num_samples);
+
+  AdaptiveReleaseConfig config_{};
+  TruePeakLimiter limiter_;
+  double sample_rate_ = 48000.0;
+  int max_block_size_ = 0;
+  bool prepared_ = false;
+  float current_release_ms_ = 20.0f;
+  float current_crest_factor_ = 0.0f;
+  float peak_envelope_ = 0.0f;
+  float rms_square_envelope_ = 0.0f;
+};
+
+}  // namespace sonare::mastering::maximizer

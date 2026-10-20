@@ -1,0 +1,842 @@
+"""Audio wrapper for libsonare."""
+
+from __future__ import annotations
+
+import ctypes
+from collections.abc import Callable, Sequence
+from typing import TYPE_CHECKING
+
+import numpy as np
+
+from ._ffi import SONARE_OK, load_library
+from ._runtime import SonareError, _out_float_array, _to_c_float_array
+from .analyzer import (
+    analyze_bpm as _analyze_bpm,
+)
+from .analyzer import (
+    analyze_dynamics as _analyze_dynamics,
+)
+from .analyzer import (
+    analyze_impulse_response as _analyze_impulse_response,
+)
+from .analyzer import (
+    analyze_rhythm as _analyze_rhythm,
+)
+from .analyzer import (
+    analyze_timbre as _analyze_timbre,
+)
+from .analyzer import (
+    chroma as _chroma,
+)
+from .analyzer import (
+    detect_acoustic as _detect_acoustic,
+)
+from .analyzer import (
+    detect_chords as _detect_chords,
+)
+from .analyzer import (
+    detect_key_candidates as _detect_key_candidates,
+)
+from .analyzer import (
+    harmonic as _harmonic,
+)
+from .analyzer import (
+    hpss as _hpss,
+)
+from .analyzer import (
+    lufs as _lufs,
+)
+from .analyzer import (
+    master_audio as _master_audio,
+)
+from .analyzer import (
+    mastering as _mastering,
+)
+from .analyzer import (
+    mastering_chain as _mastering_chain,
+)
+from .analyzer import (
+    mastering_process as _mastering_process,
+)
+from .analyzer import (
+    mel_spectrogram as _mel_spectrogram,
+)
+from .analyzer import (
+    mfcc as _mfcc,
+)
+from .analyzer import (
+    momentary_lufs as _momentary_lufs,
+)
+from .analyzer import (
+    nnls_chroma as _nnls_chroma,
+)
+from .analyzer import (
+    normalize as _normalize,
+)
+from .analyzer import (
+    note_stretch as _note_stretch,
+)
+from .analyzer import (
+    onset_envelope as _onset_envelope,
+)
+from .analyzer import (
+    percussive as _percussive,
+)
+from .analyzer import (
+    pitch_correct_to_midi as _pitch_correct_to_midi,
+)
+from .analyzer import (
+    pitch_pyin as _pitch_pyin,
+)
+from .analyzer import (
+    pitch_shift as _pitch_shift,
+)
+from .analyzer import (
+    pitch_yin as _pitch_yin,
+)
+from .analyzer import (
+    resample as _resample,
+)
+from .analyzer import (
+    rms_energy as _rms_energy,
+)
+from .analyzer import (
+    short_term_lufs as _short_term_lufs,
+)
+from .analyzer import (
+    spectral_bandwidth as _spectral_bandwidth,
+)
+from .analyzer import (
+    spectral_centroid as _spectral_centroid,
+)
+from .analyzer import (
+    spectral_flatness as _spectral_flatness,
+)
+from .analyzer import (
+    spectral_rolloff as _spectral_rolloff,
+)
+from .analyzer import (
+    stft as _stft,
+)
+from .analyzer import (
+    stft_db as _stft_db,
+)
+from .analyzer import (
+    time_stretch as _time_stretch,
+)
+from .analyzer import (
+    trim as _trim,
+)
+from .analyzer import (
+    voice_change as _voice_change,
+)
+from .analyzer import (
+    voice_change_realtime as _voice_change_realtime,
+)
+from .analyzer import (
+    zero_crossing_rate as _zero_crossing_rate,
+)
+from .types import (
+    AcousticResult,
+    AnalysisResult,
+    BpmAnalysisResult,
+    ChordAnalysisResult,
+    ChromaResult,
+    DynamicsResult,
+    HpssResult,
+    Key,
+    KeyCandidate,
+    KeyProfile,
+    LufsResult,
+    MasteringChainResult,
+    MasteringResult,
+    MelSpectrogramResult,
+    MfccResult,
+    Mode,
+    PitchClass,
+    PitchResult,
+    RhythmResult,
+    StftResult,
+    TimbreResult,
+)
+
+if TYPE_CHECKING:
+    pass
+
+_lib: ctypes.CDLL | None = None
+
+
+def _get_lib() -> ctypes.CDLL:
+    global _lib
+    if _lib is None:
+        _lib = load_library()
+    return _lib
+
+
+def _check(rc: int) -> None:
+    """Check a SonareError return code and raise on failure.
+
+    When the C layer recorded a detailed thread-local message
+    (``sonare_last_error_message``), it is preferred over the generic
+    ``sonare_error_message(rc)`` fallback so users see the underlying cause.
+    """
+    if rc != SONARE_OK:
+        lib = _get_lib()
+        detail = lib.sonare_last_error_message()
+        detail_str = detail.decode("utf-8") if detail else ""
+        if detail_str:
+            raise SonareError(rc, detail_str)
+        msg = lib.sonare_error_message(rc)
+        raise SonareError(rc, msg.decode("utf-8") if msg else f"sonare error {rc}")
+
+
+class Audio:
+    """Wrapper around the SonareAudio opaque pointer.
+
+    Supports context manager protocol for deterministic resource cleanup.
+    """
+
+    def __init__(self, handle: ctypes.c_void_p, lib: ctypes.CDLL) -> None:
+        self._handle = handle
+        self._lib = lib
+
+    @classmethod
+    def from_file(cls, path: str) -> Audio:
+        """Load audio from a file path.
+
+        Supported formats in default builds: WAV, MP3.
+        With FFmpeg enabled (``-DSONARE_WITH_FFMPEG=ON``): M4A/AAC/FLAC/OGG/Opus
+        and any other container/codec supported by the linked FFmpeg.
+
+        Raises:
+            RuntimeError: If the file does not exist, is too large, or has an
+                unsupported format. The error message includes the offending
+                extension and a copy-pasteable ``ffmpeg`` conversion hint.
+        """
+        lib = _get_lib()
+        handle = ctypes.c_void_p()
+        rc = lib.sonare_audio_from_file(
+            path.encode("utf-8"),
+            ctypes.byref(handle),
+        )
+        _check(rc)
+        return cls(handle, lib)
+
+    @classmethod
+    def from_buffer(
+        cls,
+        data: Sequence[float] | list[float],
+        sample_rate: int = 48000,
+    ) -> Audio:
+        """Create audio from a float sample buffer.
+
+        Args:
+            data: Mono audio samples. Accepts ``list[float]``, ``tuple[float, ...]``,
+                ``array.array``, or a numpy 1D array of dtype ``float32`` (or
+                anything castable to ``float``). Stereo input must be downmixed
+                first (e.g. ``samples.mean(axis=1, dtype=np.float32)``).
+                Values are nominally in ``[-1.0, 1.0]``.
+            sample_rate: Sample rate in Hz (default 48000).
+        """
+        lib = _get_lib()
+        # Use the shared numpy fast path (zero-copy for contiguous float32
+        # ndarrays, one bulk C-level copy otherwise) instead of the slow
+        # per-element `(c_float * N)(*data)` marshalling.
+        c_array, length = _to_c_float_array(data)
+        handle = ctypes.c_void_p()
+        rc = lib.sonare_audio_from_buffer(
+            c_array,
+            ctypes.c_size_t(length),
+            ctypes.c_int(sample_rate),
+            ctypes.byref(handle),
+        )
+        _check(rc)
+        return cls(handle, lib)
+
+    @classmethod
+    def from_memory(cls, data: bytes) -> Audio:
+        """Create audio from in-memory encoded audio bytes.
+
+        Args:
+            data: Raw file bytes (WAV / MP3 in default builds; also
+                M4A/AAC/FLAC/OGG/Opus when libsonare is built with
+                ``-DSONARE_WITH_FFMPEG=ON``).
+        """
+        lib = _get_lib()
+        length = len(data)
+        c_array = (ctypes.c_uint8 * length).from_buffer_copy(data)
+        handle = ctypes.c_void_p()
+        rc = lib.sonare_audio_from_memory(
+            c_array,
+            ctypes.c_size_t(length),
+            ctypes.byref(handle),
+        )
+        _check(rc)
+        return cls(handle, lib)
+
+    @property
+    def data(self) -> np.ndarray:
+        """Return audio samples as a ``float32`` numpy array.
+
+        The returned array owns its memory (a copy of the native buffer), so it
+        stays valid after the :class:`Audio` handle is closed.
+        """
+        ptr = self._lib.sonare_audio_data(self._handle)
+        length = int(self._lib.sonare_audio_length(self._handle))
+        if length == 0:
+            return np.empty(0, dtype=np.float32)
+        view = np.ctypeslib.as_array(ptr, shape=(length,))
+        return np.array(view, dtype=np.float32, copy=True)
+
+    @property
+    def length(self) -> int:
+        """Return the number of audio samples."""
+        return int(self._lib.sonare_audio_length(self._handle))
+
+    @property
+    def sample_rate(self) -> int:
+        """Return the sample rate in Hz."""
+        return int(self._lib.sonare_audio_sample_rate(self._handle))
+
+    @property
+    def duration(self) -> float:
+        """Return the audio duration in seconds."""
+        return float(self._lib.sonare_audio_duration(self._handle))
+
+    def detect_bpm(self) -> float:
+        """Detect BPM (tempo).
+
+        Returns:
+            Estimated tempo in beats per minute. For confidence and time
+            signature, use :meth:`analyze` instead.
+        """
+        out_bpm = ctypes.c_float()
+        rc = self._lib.sonare_audio_detect_bpm(self._handle, ctypes.byref(out_bpm))
+        _check(rc)
+        return float(out_bpm.value)
+
+    def detect_key(
+        self,
+        n_fft: int = 4096,
+        hop_length: int = 512,
+        use_hpss: bool = False,
+        loudness_weighted: bool = False,
+        high_pass_hz: float = 0.0,
+        modes: Sequence[Mode | str] | str | None = None,
+        profile: KeyProfile | str | None = None,
+        genre_hint: str | None = None,
+    ) -> Key:
+        """Detect musical key."""
+        from .analyzer import detect_key
+
+        return detect_key(
+            self.data,
+            self.sample_rate,
+            n_fft=n_fft,
+            hop_length=hop_length,
+            use_hpss=use_hpss,
+            loudness_weighted=loudness_weighted,
+            high_pass_hz=high_pass_hz,
+            modes=modes,
+            profile=profile,
+            genre_hint=genre_hint,
+        )
+
+    def detect_key_candidates(
+        self,
+        n_fft: int = 4096,
+        hop_length: int = 512,
+        use_hpss: bool = False,
+        loudness_weighted: bool = False,
+        high_pass_hz: float = 0.0,
+        modes: Sequence[Mode | str] | str | None = None,
+        profile: KeyProfile | str | None = None,
+        genre_hint: str | None = None,
+    ) -> list[KeyCandidate]:
+        """Return ranked musical key candidates."""
+        return _detect_key_candidates(
+            self.data,
+            self.sample_rate,
+            n_fft=n_fft,
+            hop_length=hop_length,
+            use_hpss=use_hpss,
+            loudness_weighted=loudness_weighted,
+            high_pass_hz=high_pass_hz,
+            modes=modes,
+            profile=profile,
+            genre_hint=genre_hint,
+        )
+
+    def detect_beats(self) -> list[float]:
+        """Detect beat times in seconds."""
+        with _out_float_array(self._lib) as (out_times, out_count):
+            rc = self._lib.sonare_audio_detect_beats(
+                self._handle, ctypes.byref(out_times), ctypes.byref(out_count)
+            )
+            _check(rc)
+            return [float(out_times[i]) for i in range(out_count.value)]
+
+    def detect_downbeats(self) -> list[float]:
+        """Detect downbeat times in seconds."""
+        with _out_float_array(self._lib) as (out_times, out_count):
+            rc = self._lib.sonare_audio_detect_downbeats(
+                self._handle, ctypes.byref(out_times), ctypes.byref(out_count)
+            )
+            _check(rc)
+            return [float(out_times[i]) for i in range(out_count.value)]
+
+    def detect_onsets(self) -> list[float]:
+        """Detect onset times in seconds."""
+        out_times = ctypes.POINTER(ctypes.c_float)()
+        out_count = ctypes.c_size_t()
+        rc = self._lib.sonare_audio_detect_onsets(
+            self._handle, ctypes.byref(out_times), ctypes.byref(out_count)
+        )
+        _check(rc)
+        try:
+            return [float(out_times[i]) for i in range(out_count.value)]
+        finally:
+            if out_times and out_count.value > 0:
+                self._lib.sonare_free_floats(out_times)
+
+    def analyze(self) -> AnalysisResult:
+        """Run full music analysis."""
+        from ._ffi import SonareAnalysisResult
+        from .types import Mode, PitchClass, TimeSignature
+
+        out = SonareAnalysisResult()
+        rc = self._lib.sonare_audio_analyze(self._handle, ctypes.byref(out))
+        _check(rc)
+        try:
+            beat_times = [float(out.beat_times[i]) for i in range(out.beat_count)]
+            return AnalysisResult(
+                bpm=float(out.bpm),
+                bpm_confidence=float(out.bpm_confidence),
+                key=Key(
+                    root=PitchClass(out.key.root),
+                    mode=Mode(out.key.mode),
+                    confidence=float(out.key.confidence),
+                ),
+                time_signature=TimeSignature(
+                    numerator=int(out.time_signature.numerator),
+                    denominator=int(out.time_signature.denominator),
+                    confidence=float(out.time_signature.confidence),
+                ),
+                beat_times=beat_times,
+            )
+        finally:
+            self._lib.sonare_free_result(ctypes.byref(out))
+
+    def analyze_bpm(
+        self,
+        bpm_min: float = 30.0,
+        bpm_max: float = 300.0,
+        start_bpm: float = 120.0,
+        n_fft: int = 2048,
+        hop_length: int = 512,
+        max_candidates: int = 5,
+    ) -> BpmAnalysisResult:
+        """Analyze BPM with candidates and intermediate curves."""
+        return _analyze_bpm(
+            self.data,
+            self.sample_rate,
+            bpm_min,
+            bpm_max,
+            start_bpm,
+            n_fft,
+            hop_length,
+            max_candidates,
+        )
+
+    def analyze_impulse_response(self, n_octave_bands: int = 6) -> AcousticResult:
+        """Analyze RT60, EDT, and clarity metrics treating this audio as an impulse response."""
+        return _analyze_impulse_response(self.data, self.sample_rate, n_octave_bands)
+
+    def detect_acoustic(
+        self,
+        n_octave_bands: int = 6,
+        n_third_octave_subbands: int = 24,
+        min_decay_db: float = 30.0,
+        noise_floor_margin_db: float = 10.0,
+    ) -> AcousticResult:
+        """Estimate blind RT60/EDT acoustic parameters from this audio."""
+        return _detect_acoustic(
+            self.data,
+            self.sample_rate,
+            n_octave_bands,
+            n_third_octave_subbands,
+            min_decay_db,
+            noise_floor_margin_db,
+        )
+
+    def analyze_rhythm(
+        self,
+        bpm_min: float = 60.0,
+        bpm_max: float = 200.0,
+        start_bpm: float = 120.0,
+        n_fft: int = 2048,
+        hop_length: int = 512,
+    ) -> RhythmResult:
+        """Analyze rhythm primitives."""
+        return _analyze_rhythm(
+            self.data,
+            self.sample_rate,
+            bpm_min,
+            bpm_max,
+            start_bpm,
+            n_fft,
+            hop_length,
+        )
+
+    def analyze_dynamics(
+        self,
+        window_sec: float = 0.4,
+        hop_length: int = 512,
+        compression_threshold: float = 6.0,
+    ) -> DynamicsResult:
+        """Analyze dynamics and loudness primitives."""
+        return _analyze_dynamics(
+            self.data,
+            self.sample_rate,
+            window_sec,
+            hop_length,
+            compression_threshold,
+        )
+
+    def analyze_timbre(
+        self,
+        n_fft: int = 2048,
+        hop_length: int = 512,
+        n_mels: int = 128,
+        n_mfcc: int = 13,
+        window_sec: float = 0.5,
+    ) -> TimbreResult:
+        """Analyze timbre and spectral-shape primitives."""
+        return _analyze_timbre(
+            self.data,
+            self.sample_rate,
+            n_fft,
+            hop_length,
+            n_mels,
+            n_mfcc,
+            window_sec,
+        )
+
+    def detect_chords(
+        self,
+        min_duration: float = 0.3,
+        smoothing_window: float = 2.0,
+        threshold: float = 0.5,
+        use_triads_only: bool = False,
+        n_fft: int = 2048,
+        hop_length: int = 512,
+        use_beat_sync: bool = True,
+        use_hmm: bool = False,
+        hmm_beam_width: int = 24,
+        use_key_context: bool = False,
+        key_root: PitchClass = PitchClass.C,
+        key_mode: Mode = Mode.MAJOR,
+        detect_inversions: bool = False,
+        chroma_method: str = "stft",
+    ) -> ChordAnalysisResult:
+        """Detect chord segments."""
+        return _detect_chords(
+            self.data,
+            self.sample_rate,
+            min_duration,
+            smoothing_window,
+            threshold,
+            use_triads_only,
+            n_fft,
+            hop_length,
+            use_beat_sync,
+            use_hmm,
+            hmm_beam_width,
+            use_key_context,
+            key_root,
+            key_mode,
+            detect_inversions,
+            chroma_method,
+        )
+
+    # --- Effects ---
+
+    def hpss(
+        self,
+        kernel_harmonic: int = 31,
+        kernel_percussive: int = 31,
+    ) -> HpssResult:
+        """Perform harmonic-percussive source separation."""
+        return _hpss(self.data, self.sample_rate, kernel_harmonic, kernel_percussive)
+
+    def harmonic(self) -> list[float]:
+        """Extract the harmonic component."""
+        return _harmonic(self.data, self.sample_rate)
+
+    def percussive(self) -> list[float]:
+        """Extract the percussive component."""
+        return _percussive(self.data, self.sample_rate)
+
+    def time_stretch(self, rate: float = 1.0) -> list[float]:
+        """Time-stretch audio without changing pitch."""
+        return _time_stretch(self.data, self.sample_rate, rate)
+
+    def pitch_shift(self, semitones: float = 0.0) -> list[float]:
+        """Shift the pitch of audio."""
+        return _pitch_shift(self.data, self.sample_rate, semitones)
+
+    def pitch_correct_to_midi(
+        self, current_midi: float = 69.0, target_midi: float = 69.0
+    ) -> list[float]:
+        """Pitch-correct audio from a current MIDI note to a target MIDI note."""
+        return _pitch_correct_to_midi(self.data, self.sample_rate, current_midi, target_midi)
+
+    def note_stretch(
+        self, onset_sample: int = 0, offset_sample: int = 0, stretch_ratio: float = 1.0
+    ) -> list[float]:
+        """Time-stretch a single note region without changing pitch."""
+        return _note_stretch(
+            self.data, self.sample_rate, onset_sample, offset_sample, stretch_ratio
+        )
+
+    def voice_change(
+        self, pitch_semitones: float = 0.0, formant_factor: float = 1.0
+    ) -> list[float]:
+        """Apply a voice-change effect with independent pitch and formant control."""
+        return _voice_change(self.data, self.sample_rate, pitch_semitones, formant_factor)
+
+    def voice_change_realtime(self, preset: str = "bright-idol") -> list[float]:
+        """Apply the integrated realtime voice changer chain offline."""
+        return _voice_change_realtime(self.data, self.sample_rate, preset)
+
+    def normalize(self, target_db: float = -3.0) -> list[float]:
+        """Normalize audio to a target dB level."""
+        return _normalize(self.data, self.sample_rate, target_db)
+
+    def mastering(
+        self,
+        target_lufs: float = -14.0,
+        ceiling_db: float = -1.0,
+        true_peak_oversample: int = 4,
+        release_ms: float = 0.0,
+        apply_gain_at_input_rate: bool = False,
+    ) -> MasteringResult:
+        """Apply mastering loudness normalization with a true-peak ceiling."""
+        return _mastering(
+            self.data,
+            self.sample_rate,
+            target_lufs,
+            ceiling_db,
+            true_peak_oversample,
+            release_ms,
+            apply_gain_at_input_rate,
+        )
+
+    def mastering_process(
+        self, processor_name: str, params: dict[str, float | int | bool] | None = None
+    ) -> MasteringResult:
+        """Apply a named mastering processor."""
+        return _mastering_process(processor_name, self.data, self.sample_rate, params)
+
+    def mastering_chain(
+        self,
+        config: dict | None = None,
+        on_progress: Callable[[float, str], None] | None = None,
+    ) -> MasteringChainResult:
+        """Apply a configurable mastering chain (EQ, dynamics, saturation, etc.).
+
+        See :func:`libsonare.mastering_chain` for the ``config`` schema and
+        ``on_progress`` semantics.
+        """
+        return _mastering_chain(self.data, self.sample_rate, config, on_progress=on_progress)
+
+    def master_audio(
+        self,
+        preset: str = "pop",
+        overrides: dict | None = None,
+        on_progress: Callable[[float, str], None] | None = None,
+    ) -> MasteringChainResult:
+        """Apply a named mastering preset chain to this audio.
+
+        See :func:`libsonare.master_audio` for the ``preset``, ``overrides``,
+        and ``on_progress`` semantics.
+        """
+        return _master_audio(
+            self.data, self.sample_rate, preset, overrides, on_progress=on_progress
+        )
+
+    def trim(self, threshold_db: float = -60.0) -> list[float]:
+        """Trim silence from the beginning and end."""
+        return _trim(self.data, self.sample_rate, threshold_db)
+
+    # --- Features - Spectrogram ---
+
+    def stft(self, n_fft: int = 2048, hop_length: int = 512) -> StftResult:
+        """Compute the short-time Fourier transform."""
+        return _stft(self.data, self.sample_rate, n_fft, hop_length)
+
+    def stft_db(
+        self,
+        n_fft: int = 2048,
+        hop_length: int = 512,
+    ) -> tuple[int, int, list[float]]:
+        """Compute the STFT in decibels."""
+        return _stft_db(self.data, self.sample_rate, n_fft, hop_length)
+
+    # --- Features - Mel ---
+
+    def mel_spectrogram(
+        self,
+        n_fft: int = 2048,
+        hop_length: int = 512,
+        n_mels: int = 128,
+    ) -> MelSpectrogramResult:
+        """Compute a Mel spectrogram."""
+        return _mel_spectrogram(self.data, self.sample_rate, n_fft, hop_length, n_mels)
+
+    def mfcc(
+        self,
+        n_fft: int = 2048,
+        hop_length: int = 512,
+        n_mels: int = 128,
+        n_mfcc: int = 20,
+    ) -> MfccResult:
+        """Compute Mel-frequency cepstral coefficients."""
+        return _mfcc(self.data, self.sample_rate, n_fft, hop_length, n_mels, n_mfcc)
+
+    # --- Features - Chroma ---
+
+    def chroma(self, n_fft: int = 2048, hop_length: int = 512) -> ChromaResult:
+        """Compute chroma features."""
+        return _chroma(self.data, self.sample_rate, n_fft, hop_length)
+
+    def nnls_chroma(self) -> tuple[int, list[float]]:
+        """Compute NNLS chroma. Returns (n_frames, row-major 12 x n_frames matrix)."""
+        return _nnls_chroma(self.data, self.sample_rate)
+
+    # --- Features - Onset ---
+
+    def onset_envelope(
+        self,
+        n_fft: int = 2048,
+        hop_length: int = 512,
+        n_mels: int = 128,
+    ) -> list[float]:
+        """Compute the onset strength envelope (one value per frame)."""
+        return _onset_envelope(self.data, self.sample_rate, n_fft, hop_length, n_mels)
+
+    # --- Loudness (LUFS) ---
+
+    def lufs(self) -> LufsResult:
+        """Compute integrated/momentary/short-term LUFS and loudness range."""
+        return _lufs(self.data, self.sample_rate)
+
+    def momentary_lufs(self) -> list[float]:
+        """Compute the per-block momentary LUFS time series."""
+        return _momentary_lufs(self.data, self.sample_rate)
+
+    def short_term_lufs(self) -> list[float]:
+        """Compute the per-block short-term LUFS time series."""
+        return _short_term_lufs(self.data, self.sample_rate)
+
+    # --- Features - Spectral ---
+
+    def spectral_centroid(
+        self,
+        n_fft: int = 2048,
+        hop_length: int = 512,
+    ) -> list[float]:
+        """Compute the spectral centroid per frame."""
+        return _spectral_centroid(self.data, self.sample_rate, n_fft, hop_length)
+
+    def spectral_bandwidth(
+        self,
+        n_fft: int = 2048,
+        hop_length: int = 512,
+    ) -> list[float]:
+        """Compute the spectral bandwidth per frame."""
+        return _spectral_bandwidth(self.data, self.sample_rate, n_fft, hop_length)
+
+    def spectral_rolloff(
+        self,
+        n_fft: int = 2048,
+        hop_length: int = 512,
+        roll_percent: float = 0.85,
+    ) -> list[float]:
+        """Compute the spectral rolloff per frame."""
+        return _spectral_rolloff(self.data, self.sample_rate, n_fft, hop_length, roll_percent)
+
+    def spectral_flatness(
+        self,
+        n_fft: int = 2048,
+        hop_length: int = 512,
+    ) -> list[float]:
+        """Compute the spectral flatness per frame."""
+        return _spectral_flatness(self.data, self.sample_rate, n_fft, hop_length)
+
+    def zero_crossing_rate(
+        self,
+        frame_length: int = 2048,
+        hop_length: int = 512,
+    ) -> list[float]:
+        """Compute the zero-crossing rate per frame."""
+        return _zero_crossing_rate(self.data, self.sample_rate, frame_length, hop_length)
+
+    def rms_energy(
+        self,
+        frame_length: int = 2048,
+        hop_length: int = 512,
+    ) -> list[float]:
+        """Compute the RMS energy per frame."""
+        return _rms_energy(self.data, self.sample_rate, frame_length, hop_length)
+
+    # --- Features - Pitch ---
+
+    def pitch_yin(
+        self,
+        frame_length: int = 2048,
+        hop_length: int = 512,
+        fmin: float = 65.0,
+        fmax: float = 2093.0,
+        threshold: float = 0.3,
+        fill_na: bool = False,
+    ) -> PitchResult:
+        """Estimate fundamental frequency using the YIN algorithm."""
+        return _pitch_yin(
+            self.data, self.sample_rate, frame_length, hop_length, fmin, fmax, threshold, fill_na
+        )
+
+    def pitch_pyin(
+        self,
+        frame_length: int = 2048,
+        hop_length: int = 512,
+        fmin: float = 65.0,
+        fmax: float = 2093.0,
+        threshold: float = 0.3,
+        fill_na: bool = False,
+    ) -> PitchResult:
+        """Estimate fundamental frequency using the pYIN algorithm."""
+        return _pitch_pyin(
+            self.data, self.sample_rate, frame_length, hop_length, fmin, fmax, threshold, fill_na
+        )
+
+    # --- Core - Resample ---
+
+    def resample(self, target_sr: int) -> list[float]:
+        """Resample audio to a different sample rate."""
+        return _resample(self.data, self.sample_rate, target_sr)
+
+    def close(self) -> None:
+        """Free the underlying audio resource."""
+        if self._handle:
+            self._lib.sonare_audio_free(self._handle)
+            self._handle = ctypes.c_void_p()
+
+    def __enter__(self) -> Audio:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self.close()
+
+    def __del__(self) -> None:
+        self.close()

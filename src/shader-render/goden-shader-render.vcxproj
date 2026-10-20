@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+ <ItemGroup Label="ProjectConfigurations">
+  <ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
+  <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+ </ItemGroup>
+ <PropertyGroup Label="Globals"><ProjectGuid>{972CB2A3-C4CA-4E23-A3C8-D125FA44AB63}</ProjectGuid><Keyword>Win32Proj</Keyword><RootNamespace>goden_shader_render</RootNamespace></PropertyGroup>
+ <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+ <PropertyGroup Label="Configuration"><ConfigurationType>Application</ConfigurationType><UseDebugLibraries Condition="'$(Configuration)'=='Debug'">true</UseDebugLibraries><UseDebugLibraries Condition="'$(Configuration)'!='Debug'">false</UseDebugLibraries></PropertyGroup>
+ <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+ <PropertyGroup>
+  <OutDir>$(RepoRoot)out\$(Configuration)\</OutDir><IntDir>$(RepoRoot)out\obj\$(ProjectName)\$(Configuration)\</IntDir>
+  <TargetName>goden-shader-render</TargetName><C4Generated>$(IntDir)c4-shaders\</C4Generated>
+  <C4Python Condition="'$(C4Python)'==''">python</C4Python>
+ </PropertyGroup>
+ <ItemDefinitionGroup>
+  <ClCompile><AdditionalIncludeDirectories>$(RepoRoot)src\core\include;$(C4Generated);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories><LanguageStandard>stdcpp20</LanguageStandard><PrecompiledHeader>NotUsing</PrecompiledHeader><WarningLevel>Level4</WarningLevel><PreprocessorDefinitions>GODEN_SHADER_RENDER_PROCESS=1;WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode></ClCompile>
+  <Link><AdditionalDependencies>D3d11.lib;Dxgi.lib;D2d1.lib;Ole32.lib</AdditionalDependencies></Link>
+ </ItemDefinitionGroup>
+ <ItemGroup><ClCompile Include="main.cpp" /><ClCompile Include="..\component\collection\collection_renderer.cpp" /><ClCompile Include="..\component\collection\collection_registry.cpp" /><ClCompile Include="..\component\collection\remote_frame_client.cpp" /></ItemGroup>
+ <Target Name="CompileIndependentScene" BeforeTargets="ClCompile">
+  <MakeDir Directories="$(C4Generated)" />
+  <Exec Command="&quot;$(C4Python)&quot; &quot;$(RepoRoot)tools\c4_compile_collection.py&quot; --target renderer --source &quot;$(RepoRoot)src\component\collection&quot; --out &quot;$(C4Generated).&quot; --glslang &quot;$(RepoRoot)out\c4-tools\bin\glslangValidator.exe&quot; --spirv-cross &quot;$(RepoRoot)out\c4-tools\bin\spirv-cross.exe&quot; --fxc &quot;$(WindowsSdkDir)bin\$(WindowsTargetPlatformVersion)\x64\fxc.exe&quot;" />
+ </Target>
+ <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

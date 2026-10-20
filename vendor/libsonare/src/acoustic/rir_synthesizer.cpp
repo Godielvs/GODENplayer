@@ -1,0 +1,245 @@
+#include "acoustic/rir_synthesizer.h"
+
+#include <algorithm>
+#include <cmath>
+
+#include "acoustic/image_source.h"
+#include "acoustic/late_reverb.h"
+#include "util/constants.h"
+#include "util/dsp_primitives.h"
+#include "util/numeric_validation.h"
+
+namespace sonare::acoustic {
+
+namespace {
+
+// Auto mixing-time bounds (ms): the crossover sits after the early-reflection
+// cluster but well inside any musically useful tail.
+constexpr float kMinMixingMs = 3.0f;
+constexpr float kMaxMixingMs = 150.0f;
+
+// Fraction by which fully-rough walls (mean scattering = 1) pull the auto mixing
+// time earlier: at scattering = 1 the auto mixing time is (1 - this) of the
+// purely volume-derived sqrt(V) ms. Bounded so the shift stays physically sane
+// and the mixing time never collapses to zero.
+constexpr float kScatterMixingShift = 0.4f;
+
+// Relative boost applied to the level-matched late tail per unit mean scattering
+// (scale *= 1 + this * mean_scattering). Bounded so a fully-rough room adds at
+// most this fraction of diffuse energy; keeps the early/late balance monotonic
+// in scattering even when the mixing time is pinned or clamped to the direct
+// arrival.
+constexpr float kScatterLateBoost = 0.5f;
+
+// Safety ceiling for the auto-sized late tail. Consumes synthesize_late_tail's
+// own internal cap so the clamp telemetry below does not false-positive (or the
+// length estimate overflow) when a near-rigid room yields an unbounded RT60.
+constexpr double kLateTailCeiling = static_cast<double>(kMaxAutoSamples);
+
+// RMS over the half-open sample range [lo, hi), clamped to [0, n). Delegates to
+// the shared sonare::rms primitive over the clamped sub-range. Takes a raw
+// pointer + length so it reads the synthesized buffers in place (no copy).
+float rms_range(const float* x, int n, int lo, int hi) noexcept {
+  lo = std::max(0, lo);
+  hi = std::min(n, hi);
+  if (hi <= lo) return 0.0f;
+  return sonare::rms(x + lo, static_cast<size_t>(hi - lo));
+}
+
+}  // namespace
+
+RirSynthResult synthesize_rir(const ShoeboxRoom& room, const SourceListener& placement,
+                              int sample_rate, const RirSynthConfig& config) {
+  RirSynthResult result;
+  result.diagnostics = validate_shoebox(room, placement);
+  if (config.ism_order < 0 ||
+      !numeric::finite_in_closed_range(config.max_seconds, 0.0f, kMaxRirSeconds) ||
+      !numeric::finite_in_closed_range(config.mixing_time_ms, 0.0f, kMaxRirMixingTimeMs) ||
+      !numeric::finite_in_closed_range(config.crossfade_ms, 0.0f, kMaxRirCrossfadeMs)) {
+    result.diagnostics.push_back({Diagnostic::Severity::Error, "acoustic.invalid_rir_config",
+                                  "RIR timing values must be finite and within safe bounds"});
+  }
+  if (sample_rate < kMinAudioSampleRate || sample_rate > kMaxAudioSampleRate) {
+    result.diagnostics.push_back({Diagnostic::Severity::Error, "acoustic.invalid_sample_rate",
+                                  "sample rate is outside supported bounds"});
+  }
+  if (has_error(result.diagnostics)) {
+    const int diagnostic_sample_rate =
+        sample_rate >= kMinAudioSampleRate && sample_rate <= kMaxAudioSampleRate ? sample_rate
+                                                                                 : 48000;
+    result.rir = Audio::from_vector(std::vector<float>{}, diagnostic_sample_rate);
+    return result;
+  }
+
+  const float sr = static_cast<float>(sample_rate);
+
+  // Bound the image-source order: cost grows ~ order^3, so an unbounded value is
+  // a memory/CPU exhaustion vector. shoebox_image_sources clamps internally; we
+  // mirror the clamp here only to inform the caller via a diagnostic.
+  const int ism_order = std::min(config.ism_order, kMaxImageSourceOrder);
+  if (config.ism_order > kMaxImageSourceOrder) {
+    result.diagnostics.push_back({Diagnostic::Severity::Warning, "acoustic.ism_order_clamped",
+                                  "ism_order exceeded the safe maximum and was clamped"});
+  }
+
+  // Early reflections (image-source) and the per-band reverberation time.
+  const std::vector<ImageSource> images = shoebox_image_sources(room, placement, ism_order);
+  const Audio early_audio = synthesize_early_ir(images, sample_rate);
+  const ReverbTime rt = shoebox_reverb_time(room, config.late_model);
+
+  // Decide the cap up front so we can both avoid over-allocating the late tail
+  // and report when max_seconds actually truncates the natural tail. The natural
+  // tail length mirrors synthesize_late_tail's default headroom (2x the longest
+  // RT60); if that grows past the cap, we clamp and emit a Warning.
+  //
+  // synthesize_late_tail excludes bands at/above Nyquist from both its length
+  // estimate and its synthesis (a band never rendered cannot drive a real
+  // clamp). Mirror that same octave_center_hz(b) * sqrt(2) >= nyquist exclusion
+  // here so a low-absorption above-Nyquist band cannot make `longest` -- and the
+  // rir_length_clamped diagnostic below -- report a clamp that never happened.
+  const float nyquist = sr * 0.5f;
+  float longest = 0.0f;
+  for (size_t b = 0; b < rt.rt60_bands.size(); ++b) {
+    const float center = 125.0f * std::pow(2.0f, static_cast<float>(b));  // octave_center_hz
+    if (center * sonare::constants::kSqrt2 >= nyquist) continue;
+    longest = std::max(longest, rt.rt60_bands[b]);
+  }
+  // Mirror synthesize_late_tail's ceiling so the estimate cannot overflow int or
+  // claim a clamp that the late tail's own cap (not max_seconds) actually made.
+  const double natural_tail_d =
+      std::min(std::ceil(static_cast<double>(longest) * 2.0 * sr), kLateTailCeiling);
+  const int natural_len =
+      std::max(static_cast<int>(early_audio.size()), static_cast<int>(natural_tail_d));
+
+  LateReverbConfig late_cfg;
+  late_cfg.seed = config.seed;
+  int cap = 0;  // 0 = no cap
+  if (config.max_seconds > 0.0f) {
+    cap = std::max(1, static_cast<int>(std::ceil(config.max_seconds * sr)));
+    late_cfg.max_samples = cap;  // avoid synthesizing tail past the cap
+  }
+  const Audio late_audio = synthesize_late_tail(rt, sample_rate, late_cfg);
+
+  // Read the synthesized buffers in place: a full std::vector copy of each would
+  // transiently double the (already large) RIR working set for no benefit.
+  const float* early = early_audio.data();
+  const float* late = late_audio.data();
+  const int early_n = static_cast<int>(early_audio.size());
+  const int late_n = static_cast<int>(late_audio.size());
+
+  // Mean wall scattering (rough surfaces) biases the early/late split: rougher
+  // walls diffuse specular energy into the diffuse late field both *sooner* (an
+  // earlier auto mixing time) and *more strongly* (a higher relative late level).
+  // Both uses are bounded and monotonic in mean_scattering; an explicit
+  // config.mixing_time_ms override skips the timing shift but keeps the energy
+  // bias (the diffusion is a material property, not a crossover choice).
+  const float mean_scattering = shoebox_mean_scattering(room);  // [0,1]
+
+  // Mixing time: the early/late crossover. Auto estimate ~ sqrt(V) ms (physical
+  // mixing time grows with room volume), pulled earlier by scattering, clamped
+  // to a sensible range.
+  const float volume = shoebox_volume(room);
+  float mixing_ms;
+  if (config.mixing_time_ms > 0.0f) {
+    mixing_ms = config.mixing_time_ms;
+  } else {
+    const float scatter_factor = 1.0f - kScatterMixingShift * mean_scattering;
+    mixing_ms = std::sqrt(std::max(volume, 0.0f)) * scatter_factor;
+  }
+  mixing_ms = std::clamp(mixing_ms, kMinMixingMs, kMaxMixingMs);
+  const int half_xfade = std::max(
+      1, static_cast<int>(std::lround(std::max(0.0f, config.crossfade_ms) * 0.001f * sr * 0.5f)));
+
+  // The direct sound (and the crossfade head) must never be faded: push the
+  // crossover so its start t0 = t_mix - half_xfade lands at or after the direct
+  // arrival. sqrt(V) alone ignores the source->listener delay and can otherwise
+  // attenuate the direct impulse.
+  const float direct_dist = length(placement.listener - placement.source);
+  const int direct_sample = static_cast<int>(std::lround(direct_dist / kSoundSpeed * sr));
+  int t_mix = static_cast<int>(std::lround(mixing_ms * 0.001f * sr));
+  t_mix = std::max(t_mix, direct_sample + half_xfade);
+
+  // Level-match the late tail to the early reflections across the crossover so
+  // the splice has no energy discontinuity. A wider window than the crossfade
+  // gives a stable estimate of the (sparse, decaying) early-reflection level.
+  // The early window must start strictly AFTER the direct tap: t_mix is clamped
+  // to direct_sample + half_xfade, so a symmetric window would otherwise capture
+  // the (loudest) direct impulse and inflate the early level, over-scaling the
+  // tail in small rooms.
+  const int level_half = std::max(half_xfade, static_cast<int>(std::lround(0.005f * sr)));
+  const int early_lo = std::max(t_mix - level_half, direct_sample + 1);
+  const float early_ref = rms_range(early, early_n, early_lo, t_mix + level_half + 1);
+  const int late_center = late_n == 0 ? 0 : std::min(t_mix, late_n - 1);
+  const float late_ref =
+      rms_range(late, late_n, late_center - level_half, late_center + level_half + 1);
+  float scale = 1.0f;
+  if (late_ref > 1e-9f) {
+    if (early_ref > 1e-9f) {
+      scale = early_ref / late_ref;
+    } else {
+      // Sparse/absent early energy at the crossover: fall back to the physical
+      // diffuse level a reflection travelling c*t_mix would carry, 1/(4*pi*d).
+      const float d_mix = std::max(kSoundSpeed * static_cast<float>(t_mix) / sr, 0.1f);
+      scale = (1.0f / (4.0f * sonare::constants::kPi * d_mix)) / late_ref;
+    }
+  }
+  // Scattering bias: rough surfaces feed proportionally more energy into the
+  // diffuse late field, so boost the level-matched tail by up to
+  // kScatterLateBoost at mean_scattering == 1 (1 + kScatterLateBoost * s). This
+  // is the part of the scattering effect that survives an explicit/clamped
+  // mixing time, keeping the early/late balance monotonic in mean_scattering.
+  scale *= 1.0f + kScatterLateBoost * mean_scattering;
+
+  int length = std::max(early_n, late_n);
+  if (cap > 0) {
+    if (natural_len > cap) {
+      result.diagnostics.push_back({Diagnostic::Severity::Warning, "acoustic.rir_length_clamped",
+                                    "synthesized RIR length exceeded max_seconds and was clamped"});
+    }
+    length = std::min(length, cap);
+  }
+  if (length < 1) length = 1;
+
+  // Two cases yield no usable late tail across the crossover: a fully-rigid room
+  // (every band RT60 == 0, so the tail is empty), and a highly-absorptive room
+  // whose short tail ends before the early/late crossover (late_n < t1).
+  // Crossfading either would ramp x toward 1 past t1 where the tail is zero,
+  // silencing the early reflections and leaving an abruptly faded RIR. Fall back
+  // to early-only (no crossfade) and note it, so the geometric energy is
+  // preserved.
+  const bool no_late_tail = late_n == 0 || late_n < t_mix + half_xfade;
+  if (no_late_tail) {
+    result.diagnostics.push_back(
+        {Diagnostic::Severity::Warning, "acoustic.no_late_tail",
+         "no usable late-reverberation tail at the mixing time; RIR is early reflections only"});
+  }
+
+  // Equal-power crossfade (decorrelated early vs. noise late => energy-preserving):
+  // early-only before t0, late-only after t1, ramping across [t0, t1]. t0 >= the
+  // direct arrival (enforced above) so the direct sound is rendered at full level.
+  const int t0 = std::max(0, t_mix - half_xfade);
+  const int t1 = std::max(t0 + 1, t_mix + half_xfade);
+  std::vector<float> rir(static_cast<size_t>(length), 0.0f);
+  for (int i = 0; i < length; ++i) {
+    const float e = i < early_n ? early[static_cast<size_t>(i)] : 0.0f;
+    if (no_late_tail) {
+      rir[static_cast<size_t>(i)] = e;  // early-only: never fade toward silence
+      continue;
+    }
+    const float l = (i < late_n ? late[static_cast<size_t>(i)] : 0.0f) * scale;
+    float x;
+    if (i <= t0) {
+      x = 0.0f;
+    } else if (i >= t1) {
+      x = 1.0f;
+    } else {
+      x = static_cast<float>(i - t0) / static_cast<float>(t1 - t0);
+    }
+    rir[static_cast<size_t>(i)] = sonare::equal_power_crossfade(e, l, x);
+  }
+
+  result.rir = Audio::from_vector(std::move(rir), sample_rate);
+  return result;
+}
+
+}  // namespace sonare::acoustic

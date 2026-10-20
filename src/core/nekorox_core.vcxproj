@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{1A9D7960-BC9A-4FAF-847F-147B88D0F921}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>nekorox_core</RootNamespace>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType><UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType><UseDebugLibraries>false</UseDebugLibraries><WholeProgramOptimization>true</WholeProgramOptimization>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup>
+    <OutDir>$(RepoRoot)out\$(Configuration)\</OutDir>
+    <IntDir>$(RepoRoot)out\obj\$(ProjectName)\$(Configuration)\</IntDir>
+    <TargetName>nekorox_core</TargetName>
+    <OutDir Condition="'$(GodenEnableQaHooks)'=='1'">$(RepoRoot)out\$(Configuration)\core-qa\</OutDir>
+    <IntDir Condition="'$(GodenEnableQaHooks)'=='1'">$(RepoRoot)out\obj\$(ProjectName)\$(Configuration)\qa\</IntDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(RepoRoot)vendor\sqlite;$(RepoRoot)vendor\zstd\lib;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <WarningLevel>Level4</WarningLevel>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <PreprocessorDefinitions>GODEN_ENABLE_QA_HOOKS=$(GodenEnableQaHooks);WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="src\ambient_features.cpp" />
+    <ClCompile Include="src\dynamics_history.cpp" />
+    <ClCompile Include="src\art_palette.cpp" />
+    <ClCompile Include="src\artwork_resampler.cpp" />
+    <ClCompile Include="src\compression.cpp" />
+    <ClCompile Include="src\crt_xy_model.cpp" />
+    <ClCompile Include="src\database.cpp" />
+    <ClCompile Include="src\glyph_flow.cpp" />
+    <ClCompile Include="src\lyrics_timeline.cpp" />
+    <ClCompile Include="src\lyrics_match_policy.cpp" />
+    <ClCompile Include="src\lyrics_timeline_v2.cpp" />
+    <ClCompile Include="src\packet_cost.cpp" />
+    <ClCompile Include="src\realtime_visual_model.cpp" />
+    <ClCompile Include="src\scope_large_model.cpp" />
+    <ClCompile Include="src\scroll_controller.cpp" />
+    <ClCompile Include="src\tag_mutation.cpp" />
+    <ClCompile Include="src\album_session.cpp" />
+    <ClCompile Include="src\track_identity.cpp" />
+    <ClCompile Include="src\waveform_pyramid.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\vendor\sqlite\sqlite3.vcxproj"><Project>{D9607F66-E1AA-4BB3-A4A3-4E8C7D6F2A91}</Project></ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="include\nekorox\ambient_features.h" />
+    <ClInclude Include="include\nekorox\dynamics_history.h" />
+    <ClInclude Include="include\nekorox\art_palette.h" />
+    <ClInclude Include="include\nekorox\artwork_resampler.h" />
+    <ClInclude Include="include\nekorox\contracts.h" />
+    <ClInclude Include="include\nekorox\compression.h" />
+    <ClInclude Include="include\nekorox\crt_xy_model.h" />
+    <ClInclude Include="include\nekorox\crt_xy_render_spec.h" />
+    <ClInclude Include="include\nekorox\database.h" />
+    <ClInclude Include="include\nekorox\glyph_flow.h" />
+    <ClInclude Include="include\nekorox\lyrics_timeline.h" />
+    <ClInclude Include="include\nekorox\lyrics_document.h" />
+    <ClInclude Include="include\nekorox\lyrics_match_policy.h" />
+    <ClInclude Include="include\nekorox\packet_cost.h" />
+    <ClInclude Include="include\nekorox\playback_presentation_gate.h" />
+    <ClInclude Include="include\nekorox\presentation_timing.h" />
+    <ClInclude Include="include\nekorox\public_branding.h" />
+    <ClInclude Include="include\nekorox\realtime_ring.h" />
+    <ClInclude Include="include\nekorox\realtime_visual_model.h" />
+    <ClInclude Include="include\nekorox\recording_identity.h" />
+    <ClInclude Include="include\nekorox\scroll_controller.h" />
+    <ClInclude Include="include\nekorox\scrub_crossfade.h" />
+    <ClInclude Include="include\nekorox\tag_mutation.h" />
+    <ClInclude Include="include\nekorox\album_session.h" />
+    <ClInclude Include="include\nekorox\track_identity.h" />
+    <ClInclude Include="include\nekorox\visual_sample_guard.h" />
+    <ClInclude Include="include\nekorox\waveform_pyramid.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

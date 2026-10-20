@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" shape-rendering="crispEdges" role="img" aria-labelledby="title">
+  <title id="title">Now playing</title>
+  <path fill="currentColor" data-role="primary" d="M2 2h4v1h-4z M10 2h4v1h-4z M2 3h1v3h-1z M13 3h1v3h-1z M6 6h1v1h-1z M6 7h3v1h-3z M6 8h4v1h-4z M6 9h3v1h-3z M2 10h1v3h-1z M6 10h1v1h-1z M13 10h1v3h-1z M2 13h4v1h-4z M10 13h4v1h-4z"/>
+</svg>

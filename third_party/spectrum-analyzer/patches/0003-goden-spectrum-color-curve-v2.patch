@@ -1,0 +1,208 @@
+diff --git a/Visuals/Spectrum/NekoVisualPalette.h b/Visuals/Spectrum/NekoVisualPalette.h
+index ba35741..ac532c7 100644
+--- a/Visuals/Spectrum/NekoVisualPalette.h
++++ b/Visuals/Spectrum/NekoVisualPalette.h
+@@ -6,6 +6,7 @@
+ #include "Style.h"
+ 
+ #include <algorithm>
++#include <array>
+ #include <cmath>
+ 
+ namespace nekorox_visual
+@@ -103,6 +104,118 @@ namespace nekorox_visual
+         return Mix(accent, D2D1::ColorF(D2D1::ColorF::White, accent.a), highlight);
+     }
+ 
++    struct spectrum_color_curve_v2_t
++    {
++        static constexpr size_t Count = 13;
++        std::array<double, Count> X{};
++        std::array<double, Count> Y{
++            -12., -10., -6., -3., -1., 0., 0., 1.5, 2.5, 0., -3., -7., -12.
++        };
++        std::array<double, Count> M{};
++
++        spectrum_color_curve_v2_t() noexcept
++        {
++            constexpr std::array<double, Count> Frequency{
++                20., 31.5, 63., 125., 250., 500., 1000., 2000.,
++                4000., 8000., 12000., 16000., 20000.
++            };
++            std::array<double, Count - 1> h{};
++            std::array<double, Count - 1> delta{};
++            for (size_t i = 0; i < Count; ++i)
++                X[i] = std::log(Frequency[i]);
++            for (size_t i = 0; i + 1 < Count; ++i)
++            {
++                h[i] = X[i + 1] - X[i];
++                delta[i] = (Y[i + 1] - Y[i]) / h[i];
++            }
++
++            const auto endpoint = [](double h0, double h1,
++                double d0, double d1) noexcept
++            {
++                double result = ((2. * h0 + h1) * d0 - h0 * d1) /
++                    (h0 + h1);
++                if (result * d0 <= 0.) return 0.;
++                if ((d0 * d1 < 0.) && (std::abs(result) > std::abs(3. * d0)))
++                    return 3. * d0;
++                return result;
++            };
++            M[0] = endpoint(h[0], h[1], delta[0], delta[1]);
++            M[Count - 1] = endpoint(h[Count - 2], h[Count - 3],
++                delta[Count - 2], delta[Count - 3]);
++            for (size_t i = 1; i + 1 < Count; ++i)
++            {
++                if (delta[i - 1] * delta[i] <= 0.)
++                {
++                    M[i] = 0.;
++                    continue;
++                }
++                const double w1 = 2. * h[i] + h[i - 1];
++                const double w2 = h[i] + 2. * h[i - 1];
++                M[i] = (w1 + w2) /
++                    ((w1 / delta[i - 1]) + (w2 / delta[i]));
++            }
++        }
++
++        double Evaluate(double frequency) const noexcept
++        {
++            const double x = std::log(std::clamp(frequency, 20., 20000.));
++            if (x <= X.front()) return Y.front();
++            if (x >= X.back()) return Y.back();
++            const auto upper = std::upper_bound(X.begin(), X.end(), x);
++            const size_t i = static_cast<size_t>(upper - X.begin() - 1);
++            const double h = X[i + 1] - X[i];
++            const double t = (x - X[i]) / h;
++            const double t2 = t * t;
++            const double t3 = t2 * t;
++            return (2. * t3 - 3. * t2 + 1.) * Y[i] +
++                (t3 - 2. * t2 + t) * h * M[i] +
++                (-2. * t3 + 3. * t2) * Y[i + 1] +
++                (t3 - t2) * h * M[i + 1];
++        }
++    };
++
++    inline double PerceptualCorrectionDb(double frequency) noexcept
++    {
++        static const spectrum_color_curve_v2_t Curve;
++        return Curve.Evaluate(frequency);
++    }
++
++    inline D2D1_COLOR_F SpectrumColorV2(
++        const nekorox::interop::SharedThemeSnapshotV2 & theme,
++        double normalizedValue,
++        double frequency,
++        double minimumDb,
++        double maximumDb) noexcept
++    {
++        const double rawDb = minimumDb +
++            std::clamp(normalizedValue, 0., 1.) * (maximumDb - minimumDb);
++        const double correctedDb = rawDb + PerceptualCorrectionDb(frequency);
++        const D2D1_COLOR_F accent = Color(theme.accent);
++        const FLOAT neutralAmount = SmoothStep((FLOAT) ((rawDb + 80.) / 30.));
++        const D2D1_COLOR_F neutral = Mix(
++            D2D1::ColorF(0x151515, accent.a),
++            D2D1::ColorF(0x333637, accent.a),
++            neutralAmount);
++        const FLOAT accentAmount = SmoothStep((FLOAT) ((correctedDb + 50.) / 22.));
++        // Restore the old Musical Spectrum white impact without discarding
++        // the perceptual colour threshold. Dense masters rarely reached the
++        // narrow -18..-10 dB knee after smoothing, so the strongest notes
++        // could remain accent-coloured forever. The legacy top quarter is a
++        // stable second path to white while corrected dB still decides when
++        // colour first becomes audible.
++        const FLOAT perceptualHighlight = SmoothStep(
++            (FLOAT) ((correctedDb + 20.) / 10.));
++        const FLOAT legacyHighlight = SmoothStep(
++            (FLOAT) ((std::clamp(normalizedValue, 0., 1.) -
++                HighlightStart) / (HighlightFull - HighlightStart)));
++        const FLOAT highlightAmount = (std::max)(
++            perceptualHighlight, legacyHighlight);
++        return Mix(
++            Mix(neutral, accent, accentAmount),
++            D2D1::ColorF(D2D1::ColorF::White, accent.a),
++            highlightAmount);
++    }
++
+     inline void SetSolidBrushColor(ID2D1Brush * brush, const D2D1_COLOR_F & color) noexcept
+     {
+         if (brush == nullptr)
+diff --git a/Visuals/Spectrum/Spectrum.cpp b/Visuals/Spectrum/Spectrum.cpp
+index 83ba38e..fd23918 100644
+--- a/Visuals/Spectrum/Spectrum.cpp
++++ b/Visuals/Spectrum/Spectrum.cpp
+@@ -230,10 +230,10 @@ void spectrum_t::RenderBars(ID2D1DeviceContext * deviceContext) noexcept
+         if (!GreaterThanNyquist || !_State->_SuppressMirrorImage)
+         {
+             if (fb.Value > 0.)
+-                RenderBar(deviceContext, Rect, _BarAreaStyle, _BarTopStyle, fb.Value, fb.Opacity);
++                RenderBar(deviceContext, Rect, _BarAreaStyle, _BarTopStyle, fb.Value, fb.Opacity, fb.Center);
+ 
+             if ((_State->_PeakMode != PeakMode::None) && (fb.MaxValue > 0.))
+-                RenderBarTop(deviceContext, Rect, _BarPeakTopStyle, fb.MaxValue, fb.Opacity);
++                RenderBarTop(deviceContext, Rect, _BarPeakTopStyle, fb.MaxValue, fb.Opacity, fb.Center);
+         }
+ 
+         x1 = x2;
+@@ -299,7 +299,7 @@ void spectrum_t::RenderNekoTemporalLayers(ID2D1DeviceContext * deviceContext, FL
+ /// <summary>
+ /// Renders a single bar.
+ /// </summary>
+-void spectrum_t::RenderBar(ID2D1DeviceContext * deviceContext, D2D1_RECT_F & rect, style_t * areaStyle, style_t * topStyle, double value, double opacity) noexcept
++void spectrum_t::RenderBar(ID2D1DeviceContext * deviceContext, D2D1_RECT_F & rect, style_t * areaStyle, style_t * topStyle, double value, double opacity, double frequency) noexcept
+ {
+     rect.top    = 0.f;
+     rect.bottom = _ClientSize.height * (FLOAT) value;
+@@ -307,18 +307,22 @@ void spectrum_t::RenderBar(ID2D1DeviceContext * deviceContext, D2D1_RECT_F & rec
+     // Draw the bar area.
+     if (areaStyle->IsEnabled())
+     {
+-        nekorox_visual::ApplyAmplitudeColor(areaStyle, _NekoTheme, value);
++        if (areaStyle->IsAmplitudeBased())
++            nekorox_visual::SetSolidBrushColor(
++                areaStyle->_Brush,
++                nekorox_visual::SpectrumColorV2(_NekoTheme, value, frequency,
++                    _Settings->_AmplitudeLo, _Settings->_AmplitudeHi));
+ 
+         RenderBarPart(deviceContext, rect, areaStyle);
+     }
+ 
+-    RenderBarTop(deviceContext, rect, topStyle, value, opacity);
++    RenderBarTop(deviceContext, rect, topStyle, value, opacity, frequency);
+ }
+ 
+ /// <summary>
+ /// Renders only the marker at the top of a bar.
+ /// </summary>
+-void spectrum_t::RenderBarTop(ID2D1DeviceContext * deviceContext, D2D1_RECT_F & rect, style_t * topStyle, double value, double opacity) noexcept
++void spectrum_t::RenderBarTop(ID2D1DeviceContext * deviceContext, D2D1_RECT_F & rect, style_t * topStyle, double value, double opacity, double frequency) noexcept
+ {
+     // Draw the bar top.
+     if (topStyle->IsEnabled())
+@@ -329,7 +333,8 @@ void spectrum_t::RenderBarTop(ID2D1DeviceContext * deviceContext, D2D1_RECT_F &
+         if ((_BarAreaStyle != nullptr) && _BarAreaStyle->IsAmplitudeBased())
+             nekorox_visual::SetSolidBrushColor(
+                 topStyle->_Brush,
+-                nekorox_visual::AmplitudeColor(_NekoTheme, value));
++                nekorox_visual::SpectrumColorV2(_NekoTheme, value, frequency,
++                    _Settings->_AmplitudeLo, _Settings->_AmplitudeHi));
+ 
+         rect.bottom = _ClientSize.height * (FLOAT) value;
+ 
+diff --git a/Visuals/Spectrum/Spectrum.h b/Visuals/Spectrum/Spectrum.h
+index b966da9..02221d5 100644
+--- a/Visuals/Spectrum/Spectrum.h
++++ b/Visuals/Spectrum/Spectrum.h
+@@ -57,8 +57,8 @@ private:
+     void Resize() noexcept;
+ 
+     void RenderBars(ID2D1DeviceContext * deviceContext) noexcept;
+-    void RenderBar(ID2D1DeviceContext * deviceContext, D2D1_RECT_F & rect, style_t * areaStyle, style_t * topStyle, double value, double opacity) noexcept;
+-    void RenderBarTop(ID2D1DeviceContext * deviceContext, D2D1_RECT_F & rect, style_t * topStyle, double value, double opacity) noexcept;
++    void RenderBar(ID2D1DeviceContext * deviceContext, D2D1_RECT_F & rect, style_t * areaStyle, style_t * topStyle, double value, double opacity, double frequency) noexcept;
++    void RenderBarTop(ID2D1DeviceContext * deviceContext, D2D1_RECT_F & rect, style_t * topStyle, double value, double opacity, double frequency) noexcept;
+     void RenderNekoTemporalLayers(ID2D1DeviceContext * deviceContext, FLOAT barWidth, FLOAT horizontalOffset) noexcept;
+     void UpdateNekoTemporalLayers() noexcept;
+ 

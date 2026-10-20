@@ -1,0 +1,301 @@
+/// @file chroma_test.cpp
+/// @brief Reference compatibility tests for chroma features.
+/// @details Reference values from: tests/librosa/reference/chroma.json
+
+#include "feature/chroma.h"
+
+#include <algorithm>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_floating_point.hpp>
+#include <cmath>
+#include <string>
+#include <vector>
+
+#include "core/spectrum.h"
+#include "filters/chroma.h"
+#include "util/json_reader.h"
+#include "util/math_utils.h"
+
+using namespace sonare;
+using namespace sonare::constants;
+using namespace sonare::test;
+
+TEST_CASE("chroma filterbank matches librosa.filters.chroma",
+          "[chroma][reference][librosa-parity]") {
+  auto json = JsonReader::parse_file("tests/librosa/reference/chroma_filterbank.json");
+  const auto& d = json["data"];
+  const int sr = d["sr"].as_int();
+  const int n_fft = d["n_fft"].as_int();
+  const int n_chroma = d["n_chroma"].as_int();
+  const int n_bins = d["n_bins"].as_int();
+  const auto& expected = d["filterbank"].as_array();
+
+  auto fb = create_chroma_filterbank(sr, n_fft, ChromaFilterConfig{});
+  REQUIRE(fb.size() == expected.size());
+  REQUIRE(static_cast<int>(fb.size()) == n_chroma * n_bins);
+
+  // The Gaussian-bump bank is built in double precision and stored as float, so a
+  // tight absolute tolerance pins exact librosa numerical parity (not just argmax).
+  for (size_t i = 0; i < fb.size(); ++i) {
+    CAPTURE(i, fb[i], expected[i].as_float());
+    REQUIRE(std::abs(fb[i] - expected[i].as_float()) < 1e-5f);
+  }
+}
+
+TEST_CASE("chroma reference compatibility", "[chroma][reference]") {
+  auto json = JsonReader::parse_file("tests/librosa/reference/chroma.json");
+  const auto& data = json["data"].as_array();
+
+  constexpr int sr = 22050;
+  constexpr float duration = 1.0f;
+  size_t n_samples = static_cast<size_t>(sr * duration);
+
+  for (const auto& entry : data) {
+    std::string signal_name = entry["signal"].as_string();
+
+    SECTION(signal_name) {
+      // Generate signal
+      std::vector<float> samples(n_samples);
+      if (signal_name == "C_major_chord") {
+        for (size_t i = 0; i < n_samples; ++i) {
+          float t = static_cast<float>(i) / static_cast<float>(sr);
+          samples[i] =
+              (1.0f / 3.0f) * (std::sin(kTwoPi * 261.63f * t) + std::sin(kTwoPi * 329.63f * t) +
+                               std::sin(kTwoPi * 392.0f * t));
+        }
+      } else if (signal_name == "440Hz_tone") {
+        for (size_t i = 0; i < n_samples; ++i) {
+          float t = static_cast<float>(i) / static_cast<float>(sr);
+          samples[i] = std::sin(kTwoPi * 440.0f * t);
+        }
+      } else {
+        FAIL("Unknown signal: " + signal_name);
+      }
+      Audio audio = Audio::from_buffer(samples.data(), n_samples, sr);
+
+      // Compute spectrogram, then chroma from spectrogram
+      StftConfig stft_config;
+      stft_config.n_fft = 2048;
+      stft_config.hop_length = 512;
+      Spectrogram spec = Spectrogram::compute(audio, stft_config);
+      Chroma chroma = Chroma::from_spectrogram(spec, sr);
+
+      // Verify shape
+      const auto& shape = entry["shape"].as_array();
+      int expected_n_chroma = shape[0].as_int();
+      int expected_n_frames = shape[1].as_int();
+      REQUIRE(chroma.n_chroma() == expected_n_chroma);
+      REQUIRE(chroma.n_frames() == expected_n_frames);
+
+      // Chroma::from_spectrogram now L-inf normalizes per frame, matching
+      // librosa.feature.chroma_stft's default norm=np.inf (the fixture was
+      // generated with that default). The exact normalization convention is
+      // verified by the per-frame max==1 guarantee below; the residual
+      // per-class spread vs librosa comes from chroma filterbank / tuning
+      // details (a separate parity concern), so here we only require the
+      // dominant pitch class to agree.
+      const auto& ref_mean = entry["mean_per_class"].as_array();
+      auto mean_energy = chroma.mean_energy();
+      REQUIRE(mean_energy.size() == ref_mean.size());
+
+      // Verify dominant pitch class (argmax of mean_per_class should match)
+      size_t ref_dominant = 0;
+      float ref_max = ref_mean[0].as_float();
+      for (size_t c = 1; c < ref_mean.size(); ++c) {
+        if (ref_mean[c].as_float() > ref_max) {
+          ref_max = ref_mean[c].as_float();
+          ref_dominant = c;
+        }
+      }
+
+      size_t our_dominant = 0;
+      float our_max = mean_energy[0];
+      for (size_t c = 1; c < mean_energy.size(); ++c) {
+        if (mean_energy[c] > our_max) {
+          our_max = mean_energy[c];
+          our_dominant = c;
+        }
+      }
+      REQUIRE(our_dominant == ref_dominant);
+
+      // Every per-frame max is 1 (or 0 for silent frames) under L-inf norm.
+      const float* d = chroma.data();
+      const int nc = chroma.n_chroma();
+      const int nf = chroma.n_frames();
+      for (int t = 0; t < nf; ++t) {
+        float max_abs = 0.0f;
+        for (int cidx = 0; cidx < nc; ++cidx) {
+          max_abs = std::max(max_abs, std::abs(d[cidx * nf + t]));
+        }
+        REQUIRE((max_abs < 1e-6f || std::abs(max_abs - 1.0f) < 1e-4f));
+      }
+    }
+  }
+}
+
+TEST_CASE("chroma_cqt reference compatibility (default L-inf norm)",
+          "[.][slow][chroma_cqt][reference][librosa-parity]") {
+  // librosa.feature.chroma_cqt defaults to norm=np.inf; the reference JSON was
+  // generated against that default, so our default must match within tolerance.
+  auto json = JsonReader::parse_file("tests/librosa/reference/chroma_cqt.json");
+  const auto& data = json["data"];
+
+  const int sr = data["sr"].as_int();
+  const int hop_length = data["hop_length"].as_int();
+  const float duration = 1.0f;
+  const size_t n_samples = static_cast<size_t>(sr * duration);
+
+  // Reference signal: C major chord (C4 + E4 + G4), matches generator.
+  std::vector<float> samples(n_samples);
+  for (size_t i = 0; i < n_samples; ++i) {
+    float t = static_cast<float>(i) / static_cast<float>(sr);
+    samples[i] = (1.0f / 3.0f) * (std::sin(kTwoPi * 261.63f * t) + std::sin(kTwoPi * 329.63f * t) +
+                                  std::sin(kTwoPi * 392.0f * t));
+  }
+  Audio audio = Audio::from_buffer(samples.data(), n_samples, sr);
+
+  ChromaCqtConfig cfg;
+  cfg.cqt.hop_length = hop_length;
+  cfg.cqt.fmin = 32.703f;  // librosa.note_to_hz('C1')
+  cfg.cqt.bins_per_octave = 12;
+  cfg.cqt.n_bins = 12 * 7;  // n_octaves=7
+  cfg.n_chroma = 12;
+  Chroma chroma = chroma_cqt(audio, cfg);
+
+  const auto& shape = data["shape"].as_array();
+  REQUIRE(chroma.n_chroma() == shape[0].as_int());
+  // Frame count can differ by ±1 depending on edge handling; require close.
+  REQUIRE(std::abs(chroma.n_frames() - shape[1].as_int()) <= 1);
+
+  // Verify dominant pitch class matches reference argmax.
+  const auto& ref_mean = data["mean_per_class"].as_array();
+  size_t ref_dominant = 0;
+  float ref_max = ref_mean[0].as_float();
+  for (size_t c = 1; c < ref_mean.size(); ++c) {
+    if (ref_mean[c].as_float() > ref_max) {
+      ref_max = ref_mean[c].as_float();
+      ref_dominant = c;
+    }
+  }
+  auto our_mean = chroma.mean_energy();
+  size_t our_dominant = 0;
+  float our_max = our_mean[0];
+  for (size_t c = 1; c < our_mean.size(); ++c) {
+    if (our_mean[c] > our_max) {
+      our_max = our_mean[c];
+      our_dominant = c;
+    }
+  }
+  REQUIRE(our_dominant == ref_dominant);
+
+  // Every per-frame max should be exactly 1 (or 0 for silent frames) under
+  // L-inf normalization — this is the librosa parity guarantee.
+  const float* d = chroma.data();
+  const int nc = chroma.n_chroma();
+  const int nf = chroma.n_frames();
+  for (int t = 0; t < nf; ++t) {
+    float max_abs = 0.0f;
+    for (int cidx = 0; cidx < nc; ++cidx) {
+      max_abs = std::max(max_abs, std::abs(d[cidx * nf + t]));
+    }
+    REQUIRE((max_abs < 1e-6f || std::abs(max_abs - 1.0f) < 1e-4f));
+  }
+}
+
+TEST_CASE("chroma_cqt matches librosa with bins_per_octave=36 (centered fold)",
+          "[.][slow][chroma_cqt][reference][librosa-parity]") {
+  // bins_per_octave=36 gives n_merge=3 CQT bins per pitch class, so the
+  // half-window centering roll (librosa.filters.cq_to_chroma's
+  // np.roll(-(n_merge // 2))) is active — unlike the bins_per_octave=12 case
+  // where n_merge=1 makes it a no-op. An uncentered fold leaks a third of each
+  // pitch class's energy onto a neighbouring class, so the off-triad classes
+  // (D#, F#, B) spike far above librosa's near-zero reference.
+  auto json = JsonReader::parse_file("tests/librosa/reference/chroma_cqt_bpo36.json");
+  const auto& data = json["data"];
+
+  const int sr = data["sr"].as_int();
+  const int hop_length = data["hop_length"].as_int();
+  const int bins_per_octave = data["bins_per_octave"].as_int();
+  const int n_octaves = data["n_octaves"].as_int();
+  const size_t n_samples = static_cast<size_t>(sr);  // duration = 1.0 s
+
+  std::vector<float> samples(n_samples);
+  for (size_t i = 0; i < n_samples; ++i) {
+    float t = static_cast<float>(i) / static_cast<float>(sr);
+    samples[i] = (1.0f / 3.0f) * (std::sin(kTwoPi * 261.63f * t) + std::sin(kTwoPi * 329.63f * t) +
+                                  std::sin(kTwoPi * 392.0f * t));
+  }
+  Audio audio = Audio::from_buffer(samples.data(), n_samples, sr);
+
+  ChromaCqtConfig cfg;
+  cfg.cqt.hop_length = hop_length;
+  cfg.cqt.fmin = static_cast<float>(data["fmin"].as_float());  // librosa.note_to_hz('C1')
+  cfg.cqt.bins_per_octave = bins_per_octave;
+  cfg.cqt.n_bins = bins_per_octave * n_octaves;
+  cfg.n_chroma = data["n_chroma"].as_int();
+  Chroma chroma = chroma_cqt(audio, cfg);
+
+  const auto& shape = data["shape"].as_array();
+  REQUIRE(chroma.n_chroma() == shape[0].as_int());
+  REQUIRE(std::abs(chroma.n_frames() - shape[1].as_int()) <= 1);
+
+  // Per-class mean energy must track librosa. The tolerance absorbs the small
+  // CQT float32 divergence between libsonare and librosa (the centered fold lands
+  // within ~0.05 L1 overall) while still rejecting the uncentered fold, whose
+  // off-triad leakage sits ~0.3 above the reference.
+  const auto& ref_mean = data["mean_per_class"].as_array();
+  auto our_mean = chroma.mean_energy();
+  REQUIRE(our_mean.size() == ref_mean.size());
+  for (size_t c = 0; c < ref_mean.size(); ++c) {
+    CAPTURE(c, our_mean[c], ref_mean[c].as_float());
+    REQUIRE(std::abs(our_mean[c] - ref_mean[c].as_float()) < 0.15f);
+  }
+}
+
+TEST_CASE("chroma_cens reference compatibility",
+          "[.][slow][chroma_cqt][reference][librosa-parity]") {
+  // librosa.feature.chroma_cens smooths the quantized chromagram with a
+  // SYMMETRIC Hann window of length win_len_smooth + 2 (get_window(fftbins=False))
+  // convolved at mode='same' (zero-padded edges). The per-class means below
+  // reject the previous periodic-window / reflected-edge implementation, whose
+  // off-triad classes drifted away from librosa's near-zero reference.
+  auto json = JsonReader::parse_file("tests/librosa/reference/chroma_cens.json");
+  const auto& data = json["data"];
+
+  const int sr = data["sr"].as_int();
+  const int hop_length = data["hop_length"].as_int();
+  const int win_len_smooth = data["win_len_smooth"].as_int();
+  const size_t n_samples = static_cast<size_t>(sr);  // duration = 1.0 s
+
+  // Reference signal: C major chord (C4 + E4 + G4), matches the generator.
+  std::vector<float> samples(n_samples);
+  for (size_t i = 0; i < n_samples; ++i) {
+    float t = static_cast<float>(i) / static_cast<float>(sr);
+    samples[i] = (1.0f / 3.0f) * (std::sin(kTwoPi * 261.63f * t) + std::sin(kTwoPi * 329.63f * t) +
+                                  std::sin(kTwoPi * 392.0f * t));
+  }
+  Audio audio = Audio::from_buffer(samples.data(), n_samples, sr);
+
+  ChromaCensConfig cfg;
+  cfg.base.cqt.hop_length = hop_length;
+  cfg.base.cqt.fmin = 32.703f;  // librosa.note_to_hz('C1')
+  cfg.base.cqt.bins_per_octave = 12;
+  cfg.base.cqt.n_bins = 12 * 7;  // n_octaves = 7
+  cfg.base.n_chroma = 12;
+  cfg.win_len_smooth = win_len_smooth;
+  Chroma chroma = chroma_cens(audio, cfg);
+
+  const auto& shape = data["shape"].as_array();
+  REQUIRE(chroma.n_chroma() == shape[0].as_int());
+  REQUIRE(std::abs(chroma.n_frames() - shape[1].as_int()) <= 1);
+
+  // Per-class means track librosa within the CQT float32 tolerance. The triad
+  // classes (C, E, G) dominate and the off-triad classes stay near zero.
+  const auto& ref_mean = data["mean_per_class"].as_array();
+  auto our_mean = chroma.mean_energy();
+  REQUIRE(our_mean.size() == ref_mean.size());
+  for (size_t c = 0; c < ref_mean.size(); ++c) {
+    CAPTURE(c, our_mean[c], ref_mean[c].as_float());
+    REQUIRE(std::abs(our_mean[c] - ref_mean[c].as_float()) < 0.1f);
+  }
+}

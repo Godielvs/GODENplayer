@@ -1,0 +1,1617 @@
+{
+  "schema": "goden.vendored-files.v1",
+  "files": [
+    {
+      "path": "vendor/foobar2000/foobar2000_component_client/component_client.cpp",
+      "sha256": "bbca037ce74ca19eb14311f26bcaa9b3e419024822caca4e353a5dd59566c05a"
+    },
+    {
+      "path": "vendor/foobar2000/foobar2000_component_client/debug-x64-v142/foobar2000_component_client/foobar20.71AD2674.tlog/foobar2000_component_client.lastbuildstate",
+      "sha256": "b78d0a23a567dbe9dd5be786afe448d5c7b24bc61dba8a09aa1d30397a4140f0"
+    },
+    {
+      "path": "vendor/foobar2000/foobar2000_component_client/debug-x64-v142/foobar2000_component_client/foobar2000_component_client.lib.recipe",
+      "sha256": "e68192ea7180a53ff41b201936b074c7189f62533bd0b6a3087354b3df6ed73c"
+    },
+    {
+      "path": "vendor/foobar2000/foobar2000_component_client/debug-x64-v142/foobar2000_component_client/foobar2000_component_client.vcxproj.FileListAbsolute.txt",
+      "sha256": "6a0106cac07fd3990cdffe818f7b867ca09ef2333bd1de5e4be2c69dc9224269"
+    },
+    {
+      "path": "vendor/foobar2000/foobar2000_component_client/foobar2000_component_client.vcxproj",
+      "sha256": "b3172faaac783676bc6ebdb949ea30826203b4e6b7e17ecc7e1a71f464541375"
+    },
+    {
+      "path": "vendor/foobar2000/foobar2000_component_client/foobar2000_component_client.xcodeproj/project.pbxproj",
+      "sha256": "6be1c22bfe7504413caedbabb76438002fd6cc2a5eba538c8cac96cdcbb06a62"
+    },
+    {
+      "path": "vendor/foobar2000/foobar2000_component_client/release-x64-v142/foobar2000_component_client/foobar20.71AD2674.tlog/foobar2000_component_client.lastbuildstate",
+      "sha256": "1172b74d747d6f2434e45045a350e7f371f7cf9a996c043a5d6a3649508a3535"
+    },
+    {
+      "path": "vendor/foobar2000/foobar2000_component_client/release-x64-v142/foobar2000_component_client/foobar2000_component_client.lib.recipe",
+      "sha256": "e68192ea7180a53ff41b201936b074c7189f62533bd0b6a3087354b3df6ed73c"
+    },
+    {
+      "path": "vendor/foobar2000/foobar2000_component_client/release-x64-v142/foobar2000_component_client/foobar2000_component_client.vcxproj.FileListAbsolute.txt",
+      "sha256": "486b8f0cc9452d306f69df89ebd3bea7764b147b9227685854a34a6b52bbf60c"
+    },
+    {
+      "path": "vendor/foobar2000/foobar2000_component_client/release-x64-v143/foobar2000_component_client/foobar20.71AD2674.tlog/foobar2000_component_client.lastbuildstate",
+      "sha256": "e5cb6e8103454c26cfa1aa753821bc20237fc015a469c675946f415e62e7dc40"
+    },
+    {
+      "path": "vendor/foobar2000/foobar2000_component_client/release-x64-v143/foobar2000_component_client/foobar2000_component_client.lib.recipe",
+      "sha256": "e68192ea7180a53ff41b201936b074c7189f62533bd0b6a3087354b3df6ed73c"
+    },
+    {
+      "path": "vendor/foobar2000/foobar2000_component_client/release-x64-v143/foobar2000_component_client/foobar2000_component_client.vcxproj.FileListAbsolute.txt",
+      "sha256": "abc00e82b2628bff969cb42d934e1c04bd3f9c5f322473e1a2fd03a40aac75ba"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/advconfig_impl.h",
+      "sha256": "7933ba50df3f3dbeab422120e27d0307151d865dd5e5a6d9ae4e208c9dee2c3e"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/advconfig_runtime.h",
+      "sha256": "77eda8ae711d243e0dafde27cedcb4fc2e5c7914f4568898099b101cfb9cbd11"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/album_art_helpers.cpp",
+      "sha256": "8a071bb238c479b06e5fc2ebf25baa631da9ad34638a1737553668f7758ba502"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/album_art_helpers.h",
+      "sha256": "51377af0f6a16e8d5ad3bc7df221b5272fca1d0804f685a7ceafc15fae21e4c3"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/albumArtCache.h",
+      "sha256": "19e869fd42b38c606cef1d43b0f0700e96dd2d7727db4a9787724fa4c4a10c3d"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/atl-misc.h",
+      "sha256": "4f52ba57123543a175d53e207c658a31614416954d83fe9436bd76f04f078815"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/audio_render_float.h",
+      "sha256": "7e588cf17c7b84e903cb8624df05d2c8acfda7595bcaa54663d54e69a46c3cfe"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/AutoComplete.cpp",
+      "sha256": "bbb992bc76b8e48f39fd571bf51225e3ab1d6e8fa304eda75d45969b9f3aadea"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/AutoComplete.h",
+      "sha256": "8b19e2c90508d73a7a471cbb27d45a80eaf10aa5bbcd7f18cbe65a854336ba1c"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/bitreader_helper.h",
+      "sha256": "c6f52fc4657da67719669c51cc37a03be508b8c57d6eb1d9069eae08bf951491"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/BumpableElem.h",
+      "sha256": "dc01aa02d4225ec9735d6e0570ce05f9a5cd7d94fe66fd146e91f11ce45ca432"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/callback_merit.h",
+      "sha256": "7ac43be649219685f2c8ee1a50b6021b3cbac314f7044a052be9ff71ee0bb759"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/CallForwarder.h",
+      "sha256": "de348f6d1d4b3a020002e77645fa51570a175a6f5641b1eb1436be7d76413b41"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/callInMainThreadHelper.h",
+      "sha256": "9b5868bd29019940b3b32241365e89174c390877af40209be3dc3860c17c6e50"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/CDialogResizeHelper.h",
+      "sha256": "f58c7762a4c07c5ed84dc619cd0145f621d6a8b61695ff84526d69cc5850ed5a"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/cfg_dsp_chain_config.h",
+      "sha256": "0888d2488a0bdc41686cdf6b10c2400de73a5fa0f6c203cac0eaa27ff156b2f6"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/cfg_guidlist.cpp",
+      "sha256": "53d77e928d7a2813e572d5872eb06c131f191b7d020d4bcab64216dcfd702a34"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/cfg_guidlist.h",
+      "sha256": "45a2a6a189702e748aee4efcc99b98137d54b0b5c3e9f8163a9232f2ac9f3e8c"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/cfg_obj.h",
+      "sha256": "054fc23d1a7ce77232a1005222293be79dd760dfe6737278fbdec1515b014f91"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/cfg_objList.h",
+      "sha256": "846f27c9056465e2780cad829fa6b591a035b6e1f7b3089ebee5ed68c764dfcd"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/cfg_var_import.cpp",
+      "sha256": "d09f78474182f105562a9a26c345023b9375d03eb6bf000f5190237c9135451a"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/cfg_var_import.h",
+      "sha256": "5b7cd199f8ebd4ab3202aabf7fdfb460a7331c8aefd8e88a8fa4436cf0aaa25c"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/CListControlFb2kColors.h",
+      "sha256": "2605fe3d600db2ab44f6c881e16123b1ba3534d52ee5aa22606addcfd33ed117"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/CmdThread.h",
+      "sha256": "4d2cb6fbd28461e6d62181453bd8dbc6d5b2f58a92cf28ebb323c4cf8b3218d8"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/CModelessDialogMessages.h",
+      "sha256": "0e4ac02c0bec6abed1270e90503da6135392a89ec8e9d033c01b5974a313fe1a"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/COM_utils.h",
+      "sha256": "ad7af6e2315682eec2259f19dc5f41c018f538df6d3c40dcdef6f94a533d46ee"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/CPropVariant.h",
+      "sha256": "a357cd4896c6248c8a98b8e706255515855f631ccbbf51136d974680e4fa3cf9"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/create_directory_helper.cpp",
+      "sha256": "be945e19ac243dfbc47603627abe9ad3d62a73d8fe684f973ef6213f15e66733"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/create_directory_helper.h",
+      "sha256": "3b8f8eb0c60e9e8da5a51494b1477c6289ab89175e77dbf50b61c676e7d8b85c"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/CSingleThreadWrapper.h",
+      "sha256": "d7977044b1caaccc8116d3be3ef800aa1dbe284cb5512d23bd0cbf8c2ec68755"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/CTableEditHelper-Legacy.cpp",
+      "sha256": "e5a14c9a3e13da0b62c066cb1d2901b382ba72be6fc2099ebb4c5c3d736b599b"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/CTableEditHelper-Legacy.h",
+      "sha256": "db0318baedbd2e6888dc6cfa0692b52ad580dfe8d50e4f66b7906cb95fa97580"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/cue_creator.cpp",
+      "sha256": "380c2c3f603c5cdf70f85973e8c60f7bd2d6b881f18f09e2c91f6886cada84c1"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/cue_creator.h",
+      "sha256": "5743e2077b65241836af7d016c936407661ee5f2d8cdd7e6f71776b6803edb0d"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/cue_parser.cpp",
+      "sha256": "e1fa9d4a07c2de6172d0a98d8629a16818fc3e34fa5dbfa3538f6a418f018b8c"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/cue_parser.h",
+      "sha256": "4779a98eb5f6a0767213cf6c43a1dc81b338b174228c7b3f14e6370b69b97721"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/cue_parser_embedding.cpp",
+      "sha256": "2e76d5a38fa76562828468e8ec5a6fe86f6ec324afc3b173124938a72f474c21"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/cuesheet_index_list.cpp",
+      "sha256": "ff0e72b257a0e74689c9e14996b6ad12d7352cd9ca72e7527c8e112fd1a9a0f3"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/cuesheet_index_list.h",
+      "sha256": "dc5c864773daf8c4a5f17aec39f4dcc1a19355066ec52dee1cf6955b1a82726b"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/DarkMode.cpp",
+      "sha256": "d9d7d38006791109af0e66dafbbe7c65736f3b84fa10338e2c4c844f7ca3d68b"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/DarkMode.h",
+      "sha256": "937223cbe8fbcbe10dc927e1cb41975c5186bd857b9c97d2ead609958447925a"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/dialog_resize_helper.cpp",
+      "sha256": "687c684b4040dfa2fcaaed550ed7803fcb9b114b75af19efa2d4b91285ba0fc3"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/dialog_resize_helper.h",
+      "sha256": "5215422596aa209e49a61082d125914115a5a31a394399af21036fb644662ca3"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/dropdown_helper.cpp",
+      "sha256": "85584a77e72e3610d0f258b11f2f8316ef4f933f1f461036ffdc3ea2a38c251b"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/dropdown_helper.h",
+      "sha256": "e62f1df4b69c39d43f32960d004c681f3deec06af56d669b68e7171c5d25ebff"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/dsp_dialog.h",
+      "sha256": "c40e1ff593d983ad8d01d9bf10ae7331271d0d34c2f35e44347323e1d03a4871"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/duration_counter.h",
+      "sha256": "5afdbefac4c1b4291953415b294d989210573778aa6f9c3891b363213a2223fe"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/dynamic_bitrate_helper.cpp",
+      "sha256": "272df29f74792586a21908287db7e1e3b13469a4b284a9cd782442cdf2064f5c"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/dynamic_bitrate_helper.h",
+      "sha256": "a68fbdf1cace8108e7182f56c73a364a97f2f2b9cc483e34b5065a373062b569"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/fb2k_threads.h",
+      "sha256": "26762fa95081f5655b1e40766b39d572532ba2d045847e42208f3410d97c493c"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/fb2k_wfx.h",
+      "sha256": "fa28ce81ed883a6571a04b51d856d6196f43702187473e606bf30ef929767c4a"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/fb2kWorkerTool.h",
+      "sha256": "5cd9672db35fd8909c77a3cd0184e8fb28de83cc945cc2edfb44d7f2170a86b3"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/file_cached.h",
+      "sha256": "510901f67414bbfe30b82a3709998e284fd7852608c24defd40543ea3cb1252f"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/file_info_const_impl.h",
+      "sha256": "587ef7f38a2b9bef6eb7362c98e242a7dda59efa7ef6ea7adc3e05d32f1e475a"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/file_list_helper.cpp",
+      "sha256": "ad698f3492f5da521cd9ee6ed222138955c874f8f926aee20f4898038d9a972c"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/file_list_helper.h",
+      "sha256": "99110e990a24b78dce7196f85640a2eee4ad90058b6c82e337514e396cbd59a3"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/file_move_helper.cpp",
+      "sha256": "a29af2d8c32ca6273c4cfba07feff80e399853022abf499efaeeac8099062312"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/file_move_helper.h",
+      "sha256": "49b006dda498bd35079d6acbbed6ea4f250d0457840c0f033a636d9e872d9050"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/file_streamstub.h",
+      "sha256": "6e7a92d4185a0e186036e890292175490d3c0271715e0f839003a6851c353427"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/file_win32_wrapper.cpp",
+      "sha256": "ddd466bbd944705a6788641d1fd521a580a3ca007baed07e23e04798da725202"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/file_win32_wrapper.h",
+      "sha256": "663552a74c6efefa149d1ee1c533a1a42060b50d4693c65b3e27cc4512797cff"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/fileReadAhead.h",
+      "sha256": "e009315573a291fcbfde52fbc3c8c96d3bb8e794160bb513a0944418bee70d3f"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/filetimetools.cpp",
+      "sha256": "fcb9120ff7316f9e094bd64473ccbc514969f706cda144aec05abba5f2b15233"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/filetimetools.h",
+      "sha256": "42c729025bc2070507a3d398c4948e2188cd5730bea5ac2224fa1d49363979be"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/foobar2000+atl.h",
+      "sha256": "46b54aa49d52358c8483de30803ebf334f7da8738ca3c216c4884dfc6fc1c8a6"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/foobar2000-lite+atl.h",
+      "sha256": "6a2f3a2376a48d81bcb8197f8b49eef998853c2068af3a547c04395eb2751766"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/foobar2000_sdk_helpers.vcxproj",
+      "sha256": "034fc803cb01ad37ea809966b24ab3421346ff9f393c0ad91f82fbc7b04c49ec"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/foobar2000_sdk_helpers.vcxproj.filters",
+      "sha256": "689d743902d52dd2ac6aaa32cf0b270c4b247cd1b87d782fa64f5b1c509ca3c4"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/foobar2000_SDK_helpers.xcodeproj/project.pbxproj",
+      "sha256": "5517d25de319a05c43610b1913ea49a01b19981153535e56d8f91c52d1ab8dbb"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/fullFileBuffer.h",
+      "sha256": "6ace15fe05af895ee95f23624824a9ed0090539c9e8f55f5d8eb095ed15d42b1"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/helpers.h",
+      "sha256": "ddab9816889ac9c06ac9679936606cab2ebfd4e2d9dd90481f5241a5081f5ba8"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/icon_remapping_wildcard.h",
+      "sha256": "26874932a60ad1e5193b59054319bb7a1c0cc658e3805a54f5fb0f8e1b0f27f3"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/image_load_save.cpp",
+      "sha256": "e4987518ceb6f2f8c5dbb757a681d15a3c4bd377e2c09f915e081a324ae8af9a"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/image_load_save.h",
+      "sha256": "499d1e227bdb4705d5bcd325bfc19d77913408c43e5b98a2001386160719c9cf"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/inplace_edit.cpp",
+      "sha256": "d4be40863ff3877c88afe835c4d8149ae304669709cc0c9d001ca989e56f32db"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/inplace_edit.h",
+      "sha256": "833b8cac648719f1f9c34dba876141448e479d9af257bdea15a272d433095995"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/input_fix_seeking.h",
+      "sha256": "5fbbf4e89f5e634c8c435cd0ef85870cd5da9cdb4c65a4048c575eac3227835d"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/input_helper_cue.cpp",
+      "sha256": "1e0f5c55848c2c857b94c648fa031f591e623d9d72e6accb148f179912dea0e3"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/input_helper_cue.h",
+      "sha256": "89099214654e2ec56c794ddd8933468bef51d231a629f5939eb634c954df66c4"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/input_helpers.cpp",
+      "sha256": "a1060530bcfd6e6d0b29b08e506b1ba141efaef56ae25c92867c8973ae9b2624"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/input_helpers.h",
+      "sha256": "62ba5dd1d5f302b9079afdaf861dd6a2d343295fa5282fa3432291028ea0f18d"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/input_logging.h",
+      "sha256": "8d3b78439db6c19ad3bfbaa3f347650eedb2f412d1810ca061fe8d31cc6b0145"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/input_stream_info_reader.h",
+      "sha256": "2d073328d45021fc9209eed7175a9a4e74fadde442dcfa223eb7097628084b4d"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/meta_table_builder.h",
+      "sha256": "03cf990daadf2d767aeffd8215d37559c592675252c37befd2a3eba168290e7f"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/metadb_handle_array.h",
+      "sha256": "3d6b98c173d20e81edaba2a3788d3e2301b761b4de3b74b65cfa5cfa7bc57d83"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/metadb_handle_set.h",
+      "sha256": "4528a1c2d0407db6afdcb5c81a461b52ec27b9bb9b60a20c057d9a3ab7394e36"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/metadb_info_container_impl.h",
+      "sha256": "d2cb2c945182821b0c0f0e434eb67cf8f2789cebba853e30a4da3bd917762e91"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/metadb_io_callback_v2_data.h",
+      "sha256": "cae32cdfdfcec02d9756097307117b63991de97a756cde2ec7c3703dfb26e546"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/metadb_io_hintlist.h",
+      "sha256": "6048d06d57765a1e8840e22f945d0d162891b6b9e7f15f9a24feab71f8dbb183"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/mp3_utils.cpp",
+      "sha256": "b2fc4aa8e8e68fb8bee483c5070438a07763819d3f0906f1d096c30939a8af5e"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/mp3_utils.h",
+      "sha256": "441de4b5f13a47a03b3da61d4fe1323274d1cca26e13327120ee3c99e1dc1432"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/notifyList.h",
+      "sha256": "ca850f9d22583538c4bf0cfa92dd6b1b6cdea67947860940b011337610382488"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/packet_decoder_aac_common.cpp",
+      "sha256": "787868c9bd12dca4c428c607aa972190368ab1653ec38ef5c5d52a47a7bd21b7"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/packet_decoder_aac_common.h",
+      "sha256": "e8050ecf2e8cb29f25e6e0d45d40cf3498aaa7f6b23f6caee817584b8885904f"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/packet_decoder_mp3_common.cpp",
+      "sha256": "05945620c19da676a69f197bc0d4f603f8baedf85248e3beeb1b102ea3ec9152"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/packet_decoder_mp3_common.h",
+      "sha256": "3edebf9e0a2cdd0bdb4cfadab85df62150cd1bce505db93d66fb970230fbc842"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/playlist_position_reference_tracker.h",
+      "sha256": "9376593ef09989493893b402d376060107503877773fe55b4840e45cd3570bbf"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/ProcessUtils.h",
+      "sha256": "3bfade4e09478957625c0b51dbb27e8c53cb17805d35b0dc117435ff5fa28ecc"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/ProfileCache.h",
+      "sha256": "6ca5a1868d424c84388d54baef858b69b9e1848c3afa134537f852396c610802"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/reader_pretend_nonseekable.h",
+      "sha256": "f773fc9c9d07e9fcdeb7aae57d0df4406f0a6de60e5d8c5c23aac285b2641b8a"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/readers.cpp",
+      "sha256": "936533cd835c6d9d26da726f32e3897195a0a17378fed6c41cd7c70dc121c19f"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/readers.h",
+      "sha256": "b71865b2fafe3d34a524b2630e6a710dd04e9ba47141360e8e20ad243aa5bbc9"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/readers_lite.h",
+      "sha256": "8b1c49f091d7523091f1e88bf764ce869eea02c40ce1a209f86ec88ffcb13422"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/readWriteLock.h",
+      "sha256": "7ec3123b22c1fe294aab2de33abaea8ebed7e024d384ff3a32394c2f861c09c7"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/rethrow.h",
+      "sha256": "5e9e94e13a33d0650d9413d75520942712b8a4e787b8bf2f6b5223d0feb85e49"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/seekabilizer.cpp",
+      "sha256": "ea0db958f79529d6459d00353d61406955e172d4c49d98e49e663bb82ea9b582"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/seekabilizer.h",
+      "sha256": "2e0c7a407859754159bfbfe3fd539a59d20d5b4422b65a1fdd21f9c0dd3e0b78"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/StdAfx.cpp",
+      "sha256": "d88157f0674c4d7c178fae0bff3cdc8498bdbf4678a8784c4111196762b62b49"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/StdAfx.h",
+      "sha256": "0dbaf27041c4268a3ccf2f81ad30a9e98deef84216ae2bd4e2d81e5e9ed63082"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/stream_buffer_helper.cpp",
+      "sha256": "09ad371634e1913b93823137b96ee24fae1a68a6e9a1535d77decf4a55743b72"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/stream_buffer_helper.h",
+      "sha256": "f5a176e975eb2e5841f4ba64b8ea2e73e2ad00bb113a71e5d932082b77aae320"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/tag_write_callback_impl.h",
+      "sha256": "e9e4a3034663657bf9c246badcfa5b4c17ef7d8904eed1a6d8723c607f7779ea"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/text_file_loader.cpp",
+      "sha256": "c909e7bfb9b3ac0d49507b92ecadad62eaa30f5cd82837b23fd31f29585397b3"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/text_file_loader.h",
+      "sha256": "74661908101796c3029cda9f841a309332384520c56a507d6851bdedf4fcac63"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/text_file_loader_v2.cpp",
+      "sha256": "a482160f258493df3c9b2467ea4c6f914295157737247b51199e5754e25240f6"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/text_file_loader_v2.h",
+      "sha256": "3b9826f2e28972c77c716c711032d243fb9446fb01dc225a9e03cef0ef23bf64"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/ThreadUtils.cpp",
+      "sha256": "a66dc72442ef68001104bdcb9b2a121d24da3681fa2f2d5c65027123f2392e8b"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/ThreadUtils.h",
+      "sha256": "47d36b128f7fe186c02a0ce40ab5b8c9f22a8ae487d9a517fcfd3f17ef203faa"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/track_property_callback_impl.cpp",
+      "sha256": "5e09c1e26d3fa4866bc2a5ad15a0977cbc4e6082aeb02c880eece07a4996c216"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/track_property_callback_impl.h",
+      "sha256": "225d1d003946e75e8b84e06ee7ebcc9057c046d768edfee9275840cf89f8afb1"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/ui_element_helpers.cpp",
+      "sha256": "54d16310fa06076acab96e94c5bf967d0429a2b26108db62191cc27227c443c9"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/ui_element_helpers.h",
+      "sha256": "27590adabb938fdd51df3c44f99aedcbdfbf1f3caa6ffa7a2531309858aec9b4"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/VisUtils.cpp",
+      "sha256": "07edd24e915c68165d27a0342a8ad0413a1a27db1b707beed7f0cb33fce40026"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/VisUtils.h",
+      "sha256": "fe6e532b44ab8492884b7a6efacd9fdf72f6dd58909c88ab39a9e5d65011dea1"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/VolumeMap.cpp",
+      "sha256": "a9aa36aa05a87d871a244f0aa9c803bfdec82012361ed7fb4a0e2aaca7fcc57b"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/VolumeMap.h",
+      "sha256": "566ed79acd149b3f2f2ac9ddd00aa50f17eec6f13e131ec8d6fa2f15d1a1aa4f"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/win-MulDiv.h",
+      "sha256": "e27a7e5084b2bb148df31c6815f4d3f1ee7ba1cc90f618344115c8eb5e1d3087"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/win-systemtime.cpp",
+      "sha256": "388955ab58e074af496e3117aff15cd9f615a29fc622a5ab5dd4635e9328eef1"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/win-systemtime.h",
+      "sha256": "a7f54add5c6640522afc351b799a184622927ac2c7ad9728feb02ef868bc5bce"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/win32_dialog.cpp",
+      "sha256": "7dfe909eb3d0f7ebd00086769e4538329e0b56d4dea444f28fb03f2e846b0643"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/win32_dialog.h",
+      "sha256": "b72c3a95b738182cfa1035c5997ff7415e0d1b94a6eb27590876f01ca70c7254"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/win32_misc.cpp",
+      "sha256": "29913d8da5e9439a155d2e36950a6f0fcd1ddb6471c51137cc369e6212596e2c"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/win32_misc.h",
+      "sha256": "c06eaf90de03bbb0f100bc580195166ded2dca40006cc3b8e0f0753154c2c763"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/window_placement_helper.cpp",
+      "sha256": "521f7a1020ed71d8c1d4dd46e8ca581c2925ac56a973342c6e21599ddb1fa17d"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/window_placement_helper.h",
+      "sha256": "77c3fbb49015ee18d5b73ddb4942900f0906459d89ba9f4784370c525f5cddc4"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/WindowPositionUtils.cpp",
+      "sha256": "baa317fad731b9ec2fb710a583f260f76f59aec27b0ab34ee4f49d1b56d58fd8"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/WindowPositionUtils.h",
+      "sha256": "e5f678c06dd32284262397e7f16717f09c0d3a920ed6db0b5e9786415ad325a2"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/winmm-types.h",
+      "sha256": "77011a08243954d2d14ec07afcd863eefed6b204328ba161fa702693bd91341d"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/writer_wav.cpp",
+      "sha256": "7aab4da3e6e65bd710d80e7b950679f2e53db25b2866715403dae5ca1bae931f"
+    },
+    {
+      "path": "vendor/foobar2000/helpers/writer_wav.h",
+      "sha256": "334f6dd1b111cbecc2b6bfeb3be478966c3210ff8321f741d739d66b7059a6a3"
+    },
+    {
+      "path": "vendor/foobar2000/README.md",
+      "sha256": "56601ceae809e68c45f14d61510e2ebd5e51f71c4e2f7e1677f13ad2f9371d1d"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/abort_callback.cpp",
+      "sha256": "97c584c4c31678f26d03f53484dea81b8545482b12bd0102ea2cbd6f13829fb0"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/abort_callback.h",
+      "sha256": "ff348ec6d6c5141676d651a348bf724f974b9dfa025c530d26d65984591aa1be"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/advconfig.cpp",
+      "sha256": "29b5a5e05cdfde7a80a99f9bf3c04eea0ee40319185dcf14174da785e7090229"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/advconfig.h",
+      "sha256": "e67936474857710c285fd5fa7a5c7efd79ee06e870f574feb8c1b47c7faf39ae"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/advconfig_impl.h",
+      "sha256": "e56bc08e4cec64ef7a46037a508201474880dc0a7230275563304488c86d9241"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/advconfig_impl_legacy.h",
+      "sha256": "a4533e91e6792f8655bcdbcf47a38705e68731fdd3103f71a4d9de0cdf758852"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/album_art.cpp",
+      "sha256": "90a6fa9b689e3e4daaacf4ecb2488078c6c4e5a19f26b9b76d21d566188e5f57"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/album_art.h",
+      "sha256": "5974e9c75e9a1a469981e27868829af5377a295ca73986a199312041d1fd76c1"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/album_art_helpers.h",
+      "sha256": "0c3ff23922c3db55b37727947a9b89448737a23fb5c6b660079cab9dddceebb1"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/app_close_blocker.cpp",
+      "sha256": "b46c4cc5a73e7015563b30b7548a20713dd407f83bb8e0b7e67de9f92043c4d1"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/app_close_blocker.h",
+      "sha256": "89ba89a38763b536c1cb8160b5d4fcf5bb9644c89ca2ad79d49b83d5953b3311"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/archive.h",
+      "sha256": "3b7de3c5a241f6fe6af3b9380e6f825d5a33a09df14ff59736cf5b18cb98d677"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/audio_chunk.cpp",
+      "sha256": "e49c68954f82fded976d2e1312a814ce672fb4173d52e836b2b2d45a86a45b73"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/audio_chunk.h",
+      "sha256": "c9c7cf3d17081c1c96df8c499715bb8f47901fa2dac63b29f3dc36893b5552d2"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/audio_chunk_channel_config.cpp",
+      "sha256": "2190d56af923e6ba97472591411cc0e93525acb36c6b903adc8819a87e9ec2d1"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/audio_chunk_impl.h",
+      "sha256": "5a1644b384d564b862b6a2cf3b452c4f3e558edf5ccb269691f13e0ad1d0f315"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/audio_postprocessor.h",
+      "sha256": "ccf85c4cdc6350b98ae848fc66387df5ed4c19d849b55fedb2cee94c69df849e"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/audioEncoder.h",
+      "sha256": "363ec6fcd914a5a9e7335b25d2b5d3c7cef809cd9dd23c24d23b0e43df46ddd5"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/autoplaylist.h",
+      "sha256": "b87a8313b23edf0303af73367af3e89a5e3680bbc9b14fc0f2b43a54119f82fb"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/callback_merit.h",
+      "sha256": "e564ff689a3f6fa59faffe8be5b82675ec9a7cf99d5ad33c2134d061a05272b6"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/cfg_var.cpp",
+      "sha256": "d7c1c367fb26467167eefc981e8dc58db7d775b5680be557740b8c2077f2e432"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/cfg_var.h",
+      "sha256": "fe240d03299e1c1427a781071bdf627cb2c75b9f951a7cfe9f1b668d9c6d655c"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/cfg_var_legacy.cpp",
+      "sha256": "02ca9e7b75f3f205a013bdf7a568b1f134aec7eb4002b81be4d37c0bdb364601"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/cfg_var_legacy.h",
+      "sha256": "8cb9ae8e6ce7a1da41425ac78cdaf2043c9861db46d31b6333bcadeebe8ebeb8"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/chapterizer.cpp",
+      "sha256": "0adc04fbb434e006d41b753ef73ade71f8701ffcac15b9e70c9ddd1ff83e1796"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/chapterizer.h",
+      "sha256": "e954ff8e81a897773371786b287aed1d9e7bc3086047fad0c613f53287a4bbe7"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/commandline.cpp",
+      "sha256": "6ff6d8dd45bb65f3445b3307769e39f113ff15610738d9c4c0763a6c08a315b0"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/commandline.h",
+      "sha256": "c78e9f0b360d77a316dbc4a7a84f0f001efa8cfe12de889f24ec5154730a81af"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/commonObjects-Apple.h",
+      "sha256": "c57961715cc2a2d789bf6d08fb336bff0eea8963aad95b43282c732ef811595b"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/commonObjects-Apple.mm",
+      "sha256": "d43d671d9d2319e70c27cbf298306501dfd3fc531ed210e0f92ae844033f3f12"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/commonObjects.cpp",
+      "sha256": "0d9b1624a9beaeb08d452f3f78ba70800b988c7405444cc53af4c480aa6db02a"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/commonObjects.h",
+      "sha256": "0336c1fd3cbf32ad55c022499eb544f09332d059e37b75b66d05a8bb6c1f78a9"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/completion_notify.cpp",
+      "sha256": "0566752563d0643b0ab223d458f246a296eb16a8fea55c360d65a7b683c5b206"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/completion_notify.h",
+      "sha256": "2879205076dc8a6162a9880861a81e767a2e389ed4c78eb9aa85a69bc37c293c"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/component.h",
+      "sha256": "0be8984c9dcf8e616ed214571b650fb473573b9ef7dd7f049ffd80c0ce4cef2c"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/component_client.h",
+      "sha256": "011fe3f79b53832a80ee7a04e67e0c814d3bf703daedb9c4f6c2b89e1c98ad3a"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/components_menu.h",
+      "sha256": "27490e2836076ad19b227f09cfc2f855b76032d4b7633594cf8769cc53be96e5"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/componentversion.cpp",
+      "sha256": "da913b9b6aa96d344f1805f8dafbaef6b3aa15a4740be5843f152146b02dd10e"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/componentversion.h",
+      "sha256": "6d5029b6551dae998ba0d6b5bba6b7e596520c9a79f3001e7d4b42088bf28b9c"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/config_io_callback.cpp",
+      "sha256": "239eebf4166d4b5ef607872b61b5d8234391f09ed9dd46741aae74591047b246"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/config_io_callback.h",
+      "sha256": "53550596dccef3e3e7dbd88c5b5f319006a3ee1ba1ab75174ca26a85beba9071"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/config_object.cpp",
+      "sha256": "0ae14ab10da8ec8afa53f90c638108e8c924b1147ee11cd4df07bd1e51f7db86"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/config_object.h",
+      "sha256": "df5806ec8d9bc2a248572366a0c2096ce84fe6bfce231235312b94ef5d5d9604"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/config_object_impl.h",
+      "sha256": "1bafc48ee7ae574f00ef7261e6feb329e5a97b7cbb686ee3095780a974deda69"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/configCache.h",
+      "sha256": "12f05f20dedc409c09a0a8458bf3192bcd1f75d9c3670bcbcac15236043414ea"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/configStore.cpp",
+      "sha256": "3a8b13f062da3a2b96ad74347249c3715e94990b5c931b057ec5eac35017e747"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/configStore.h",
+      "sha256": "933ab148186e1ad2b3f7e1ae0481e411f2acc1dbb26f349016a49361930d86f9"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/console.cpp",
+      "sha256": "87e6a2988a049f044e8956cec2f26d8358c100f330e22f58beef4252f66d8735"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/console.h",
+      "sha256": "e333e9423590e16ee6ca700c06ad1c33bb20d7fa5f8af5b616c360bee9187ede"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/console_manager.h",
+      "sha256": "3673fdaf345e446ae9050f53aa559e215ea712419c1cacb55446929bdc8f9e39"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/contextmenu.h",
+      "sha256": "b15d067dbd4e2ddfcea9a02635ed02e1206567a7c770970a1257bd002df13b87"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/contextmenu_manager.h",
+      "sha256": "d11a9d73b3ec595a5a6bae68e19d7d7827cf0bce9f82cbc71189b5d8eec1aad0"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/core_api.h",
+      "sha256": "956e1cfcb3262552720c11d8706f771fd393133d6092bb02f3baba8a704f4fac"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/coreDarkMode.h",
+      "sha256": "0651ee231dc4c652d83db3f49b60fc8c0e08bf0848904f75b90ae065dd1f09ff"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/coreversion.h",
+      "sha256": "e8bd90394f5f51e5847be2004421865e5b60bacecf6830e79e0739e5d1b2004d"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/debug-x64-v142/foobar2000_SDK/foobar2000_SDK.lib.recipe",
+      "sha256": "e68192ea7180a53ff41b201936b074c7189f62533bd0b6a3087354b3df6ed73c"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/debug-x64-v142/foobar2000_SDK/foobar2000_SDK.pch",
+      "sha256": "a022d209545fb48a314a7459d95c78ce022d863f2da9e4172eb660569d27cdeb"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/debug-x64-v142/foobar2000_SDK/foobar2000_SDK.tlog/foobar2000_SDK.lastbuildstate",
+      "sha256": "0b9c5a5328ce76c61bbaf8d88f571c850eb2a4cba387505cb79d850e89473615"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/debug-x64-v142/foobar2000_SDK/foobar2000_SDK.vcxproj.FileListAbsolute.txt",
+      "sha256": "161ed865605587cce134c68678a526260b849719f553a41cc5656b39c1c609d0"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/decode_postprocessor.h",
+      "sha256": "39ce545c0f2bdbedac0b412c38f58c04ebf28f3ae3de0e1b165270bef73d279f"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/dsp-frontend.h",
+      "sha256": "09dc013da6a8bd1d1a3507742a125a9368d0e388975f113cf6dea9ea3c213367"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/dsp.cpp",
+      "sha256": "1e7e43250dc2ebeee3b5fc1869c44bc3e7cfd12da03d548f1a8176eeca4984cc"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/dsp.h",
+      "sha256": "c230ce2be5b14781cfeaab4612cbe647dc3da80785433badba57c82708dda4b8"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/dsp_manager.cpp",
+      "sha256": "f6da7e42a2d48ac1e67cf2e20e5fe214e99bd798cf7d4758a29238594d7eb9b6"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/dsp_manager.h",
+      "sha256": "4de2fc3e529d67359af69aac194773e2204da2e52d5edec6932f1f86a8466cb8"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/event_logger.h",
+      "sha256": "df96d7ca1bdb546ed0b265d76cf140867e615fad1bc38a057b14ca5f1f8b77ef"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/exception_io.h",
+      "sha256": "aec7d540d4a528baa606cf90fbf49689e7471b7ffd93c42fd4dec5f97c409a12"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/exceptions.h",
+      "sha256": "6c15f8f4ba20c4f79bf0f96078ffea2d0a65ba2f5ed37d9b964981243844002c"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/file.h",
+      "sha256": "d1ba6c7fe56223cf9123ef980f1d66ea29fb8143391893629f32c1bb8f5d17e6"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/file_cached_impl.cpp",
+      "sha256": "b3a059ef77c193a04a8df38e1fa7827fd77c43bf1fc8da9a3573e65d72f6138c"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/file_format_sanitizer.h",
+      "sha256": "edac61c1522a97faa10f335938e49e3fea61b5767e062394efb1dc08fdf4b8af"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/file_info.cpp",
+      "sha256": "762d6a7d3b6006c3e235f15daf6eeb852df759e9a52c30b744759848f2afacbb"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/file_info.h",
+      "sha256": "6f9a9992b5b781efe11e23cca8a9b09a7b09ba24bff4e75cdff58d83c80ad62a"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/file_info_const_impl.cpp",
+      "sha256": "40e25a22c723f8f5a434e60bf41fda989b2b5c326d2df47fa2b9203f92f28d50"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/file_info_const_impl.h",
+      "sha256": "47756348dde849d0d407d9f58b277c873393fcecdb63b65eb8055fb945a19ae5"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/file_info_filter.h",
+      "sha256": "14139dfcfec880ba9d506e991bd0e061983a01f26ea925f9af5641801d02d895"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/file_info_filter_impl.h",
+      "sha256": "7a20e78d46a90de424728f7895a231473a3de85202dd509a031ab296c6ebb051"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/file_info_impl.cpp",
+      "sha256": "dae4ed6b2b3da1861efc31fd806d4e56b63c3d627ed0958441139d03e4d56402"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/file_info_impl.h",
+      "sha256": "f8c7a1bb5c0c7cc8e34a7a4c76bd8d8b47ee0a641f47dcd76cd359fcff6dbca2"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/file_info_merge.cpp",
+      "sha256": "c0e4813ab705ed2158ad1e32b66a60bf9b57dc3c928a6cd41b1db855836c16ca"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/file_lock_manager.h",
+      "sha256": "9cb5a2db2b8b3c4bb371ff192c278f0d7c10a3374160d8d23b18e90afdc1a57a"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/file_operation_callback.cpp",
+      "sha256": "830cbe0954a3ef47f91e7f208b1e54f4427d708a3950ddf38d35dacdf705a9c3"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/file_operation_callback.h",
+      "sha256": "ab3e81a1a76853893fe3cf89ee430f435003b7e7bbad6bd9dacecc66c71535bf"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/fileDialog.h",
+      "sha256": "a395e353811e22387eb2eafd0bcb0f5083a2c5ffc2dd1f98c6f8148d210efc5d"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/filesystem.cpp",
+      "sha256": "515801a57d4a0e2a882b2f19d5dc79d3a8ec4cd7849ca055952b488f9e8433d5"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/filesystem.h",
+      "sha256": "8d009a901e3f81629d7b5865a26111af2e9785441825a93e6d218f1fa012ff36"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/filesystem_helper.cpp",
+      "sha256": "2963754c67c6323a0fb0810dfc381336c473d536101bef9c5fd33111133095a4"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/filesystem_helper.h",
+      "sha256": "8d6e9410f1e623c2f1c3e89faa6b390714efd7a259781b652187a41c3852be88"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/filesystem_transacted.h",
+      "sha256": "33b6a18ae4a59c13a8c068ea695ca4b4ab573d319ad204ef7ad3abe649c4706d"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/foobar2000-all.h",
+      "sha256": "963a5d315c7a15996d7010ed0586ebda60cb91090883aba037e80325079ffa11"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/foobar2000-lite.h",
+      "sha256": "a5b2c882e6ea3dff2dc483d068a17440fd11ff79f4343a8b2948fdf28d27ad6d"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/foobar2000-pfc.h",
+      "sha256": "a486478bd5d5a12371548d65b3605bc52d98edf0e4c8edee20685d089c1f3087"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/foobar2000-sdk-pch.h",
+      "sha256": "692dba6b4e8128dbf90531bc2df95be36e84fff375a5c4ae2d0dc6cabbe48094"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/foobar2000-versions.h",
+      "sha256": "b7114edd79e00eb459c13cb013339b743bad3b244d9212329b4ab4412cf8dfb9"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/foobar2000-winver.h",
+      "sha256": "5bb54911272cb4278dd62aff941b2d1f5012a19fcff9145351f206589fd1cadb"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/foobar2000.h",
+      "sha256": "16ce548ea01436a656b06afdcb1b417382263df53e1c6b3c881b24c17bbac059"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/foobar2000_SDK.vcxproj",
+      "sha256": "d13760800ed7c7c495d604d99776a3cafab3a80b48b5d549bbbd0c01256c6941"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/foobar2000_SDK.vcxproj.filters",
+      "sha256": "61ff8ab615fa03b6d55a6116d53a176accae9ff766fb8b128ab7ec897f86cdc8"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/foobar2000_SDK.xcodeproj/project.pbxproj",
+      "sha256": "3dfee088b7c7991d91ddf12cf282707fa2bd3e10a5d7af4cc9d5024fd7583a50"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/foosort.cpp",
+      "sha256": "f3180f379757b72044d763a2de6ca554c1f5903ccffa4d570856f860c93a60d6"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/foosort.h",
+      "sha256": "c3e086218b5543fe84bcbf640d1fbad9926eb29a571e578da6e2a04d5915538a"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/foosortstring.h",
+      "sha256": "c3869c20c815e2695a790a23570d06ffe58860a3ed28023449af3c87fce664f2"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/forward_types.h",
+      "sha256": "718eda2e0898064160fd18d5ab16e14a8772a33bab84d0860e1a5bf9d1e2ed27"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/fsItem.cpp",
+      "sha256": "2756777db3d2f4df51b1daa6b85b68431f80314f09eb5a7e4137662b07058344"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/fsitem.h",
+      "sha256": "5e79ba30a14c0ae3dc4ea4a5319db91b17aa151410a13ca6cd06e1a2a3722da8"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/genrand.h",
+      "sha256": "a7404848fa0baee5ef3572f68f09bb4634760a12ca35472d206a6d391074ba10"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/guids.cpp",
+      "sha256": "b3b07f9d7b344ca338450e1980b7e06a5abf0e3131bc54e4d69c8562864b2ce0"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/hasher_md5.cpp",
+      "sha256": "4f02a92bf1027d213d2b450bb7d9ceaafab1bf2a1ecfdfe3489670fa47b7d45e"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/hasher_md5.h",
+      "sha256": "57c30a85e58f1369115dcb8a3ca81ae5aedbfb3dcc97ebb4e1685ed54fd38f06"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/http_client.h",
+      "sha256": "e2df2fd92eccbbdb29d9e91ff12f1a0e1816a74e24d0739b5e507caa2468ede5"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/icon_remap.h",
+      "sha256": "f2b43816dd25e0408fbbeb2bcca4b774cc82931a71e8da39fc0ac80655dc87ff"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/image.cpp",
+      "sha256": "b68428c5ff1690e77ba37bb6ec044caf8615a950bd3e874be9e6cbf231d6ed02"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/image.h",
+      "sha256": "bb813c5b20c2a4c811cf015caac98d34e85a88f0d6a5312362c4fea08a285912"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/imageLoaderLite.h",
+      "sha256": "dd486c86572cabb2a7601fd6d867811d74654c4d947b2a1dbe51f7681666e065"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/imageViewer.h",
+      "sha256": "829351c40feeacc4d9f44aa0e6cacb907db1e6cf9e32e24f40b75adcab782cb8"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/info_lookup_handler.h",
+      "sha256": "59c596e23b22a4447c70a4013aaf2f7f536ef228fb24288544cddfcfb8bc3945"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/initquit.h",
+      "sha256": "8f89a6e3605ca02261149458d2d0d3722d7d4015f4ad981e34c1a9e4ca3f0865"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/input.cpp",
+      "sha256": "ad1890379e5f4574dfdbae66a482eac2fc5a3d2dcd833b6fac22275e509c8486"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/input.h",
+      "sha256": "7413501538991a1935c28ed50706418fc6336da3bcd7fbe53c5db51878ff0bd2"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/input_file_type.cpp",
+      "sha256": "94a228aa597ccef9a0666028608d111f8f9eac845ab99936a25c5ecb1f62979c"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/input_file_type.h",
+      "sha256": "8df49e37339e16c51e2a95b64afcde4791def411ba941d728e07001e84989cac"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/input_impl.h",
+      "sha256": "9bda0fd27aad1c9e2eae44648c43c102cd3dff42250063b02a937b93b425fd42"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/keyValueIO.h",
+      "sha256": "ceaa6862ca3930b8ff9e903ad55d70b18d09f6b2268a428196935bb5d89df94c"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/keyValueIOimpl.h",
+      "sha256": "3eba89da4e4a98f1f268c97e4253e68802b3767b106e9e97c70af0f0f18b9e4d"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/library_callbacks.h",
+      "sha256": "20aa44c6d8a6686b3553d55fd2d6cc77daf94a41256ec278084c280a268fabb1"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/library_index.h",
+      "sha256": "4aaab2f24f3144a07e679cc6d679598a632c3c79f5dc90dbe32224d396612842"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/library_manager.h",
+      "sha256": "bf4467c5c74ec23824447b21892effdbef2b99b43b7d3004009d31caf03b641a"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/link_resolver.cpp",
+      "sha256": "1e4100ddb03346ae9f3c60cef4060855307f89781c39b4d993cc6f69ab66c0e1"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/link_resolver.h",
+      "sha256": "438f83a3adb1b47207b03a71cc72869c65bb9ffcd5f97b9291546c3cc0852a15"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/main_thread_callback.cpp",
+      "sha256": "fa34bd61328ca4245c28d538ca44e4d232dac2a03ae76a375ae7a8cf73c582ab"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/main_thread_callback.h",
+      "sha256": "1f7229d0dc3eb14fb1b7dc53fee1fdc7a2a8bd82bcba631bd678e763f0397b46"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/mainmenu.cpp",
+      "sha256": "ea84f74b616f86357429fd8d329ffb01add808a2a1ce4f4324f3ffecb37749b4"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/mem_block_container.cpp",
+      "sha256": "870bdfe29ab8914df945c8abc7ba507054ab4db1e0a03cb80de330df595b2b7f"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/mem_block_container.h",
+      "sha256": "0aaa445eccfc43a9a719e230b0dbda81cbe099a7e8a5308d92a72b28c6e4d461"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/menu.h",
+      "sha256": "68a92034af41d65cbcace3533bd2c469b4c4bc5663765f107e48494c008017a5"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/menu_common.h",
+      "sha256": "8feb74ab3f603cd4c79b6bb7668b2d6a53f89941210c3b8d912d377bf72b9965"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/menu_helpers.cpp",
+      "sha256": "6e7000558b4a20428254406d36a72b36b0727d701af0391d9d253bea53f74810"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/menu_helpers.h",
+      "sha256": "f08b1975e57e8cde45532ecec62c089d4f8ca3746260fdfd62f27eb554ab0f2c"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/menu_item.cpp",
+      "sha256": "7e585508b2f9ade61a6f126037db933c9f33fff2f42b99732376a5bfb68293b5"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/menu_manager.cpp",
+      "sha256": "d77aa784b5e6c2ead7710c53b66db85358dca046bd17b401066ba7eaa345925a"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/message_loop.h",
+      "sha256": "4ee1cad06235345738cc85be5538384418074a841c712cbd792705f18d4037c6"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/messageBox.h",
+      "sha256": "78cd39a7b48ba4e61a1d63f4e04868ec0e548fca5665fb6a3ae94925d66499a4"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/metadb.cpp",
+      "sha256": "871e1ec0bb765a8faa0ff11737299acd175d24a2cbae4b43c7422594105e839f"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/metadb.h",
+      "sha256": "ec2e6743f7a2527a4624c2c493b480bcebc90be157b811f61c63cd181681d3d2"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/metadb_callbacks.h",
+      "sha256": "7656851268fb8cc3d407adf8f2e0a6159445b225476da9feaae213d55b76c7b3"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/metadb_display_field_provider.h",
+      "sha256": "8f1a56df68cf1b683496935a223a81a88c2ca8eebed091b5b612e262b8119ac0"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/metadb_handle.cpp",
+      "sha256": "58f2fe3a641ffd657500a897e810a28601f0064fc8491a987502193a6a280da2"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/metadb_handle.h",
+      "sha256": "b315ec03293bee4cdfcd997125b5f0b1cc5f6f8b16599416bd2f3cb47630bab7"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/metadb_handle_list.cpp",
+      "sha256": "ade4994fb94e99bee8bcc9cb2f324c6afb8df346b587f5fd4d524e1370d277ad"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/metadb_index.h",
+      "sha256": "1613e5bef1613f9e2b7b928fc13bfbe5bc614fbacc7af19364e83ceea3603ddd"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/metadb_info_container_impl.h",
+      "sha256": "729b1f0a305d4b60f52de1c76c30cc96a26f6b44b6da2929a975b53592fc65b5"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/modeless_dialog.h",
+      "sha256": "fb75900d5f4789d21c581f1478fd5f49f71197ab8e3a05cecd8ff3350fbff3b3"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/noInfo.h",
+      "sha256": "2dc5bb0bd2ddf0513cbc02b82faaf350c87f8a2d58438a3c5d19d6dbc666a70f"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/ole_interaction.h",
+      "sha256": "e9c7d3bf9961e9fd863a6fe7562ff10a0a7d63a96948284de5cc38979b8dbfe3"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/output.cpp",
+      "sha256": "f56097d7978954e7cc265e5043206009d1bc0e46868ccc36c9b280777f2e868e"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/output.h",
+      "sha256": "d5ccaa4ea8bdda184dd83b5136cc334d5513902148e81cce567d3cb2a273ed6f"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/packet_decoder.cpp",
+      "sha256": "593cfb505222726f5123b95a0beaab0ab572d992c9849f75a345391cc746311c"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/packet_decoder.h",
+      "sha256": "667a5eed4c8588cdd5b30c71efcb58b63942698f6d4c13ea54f5dc349c1941bb"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/play_callback.h",
+      "sha256": "022a05577e3b399e436a150d369049ff8bc72d48f1019b9cb6babadd35822869"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/playable_location.cpp",
+      "sha256": "600c8ce4b7e4da71be56240fcff001b610b61873337bdd65b92e706828cb2e41"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/playable_location.h",
+      "sha256": "cee60658d9449e7846b818ab2b68d6d24069e6948a0291a2b3796bb3d925a2da"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/playback_control.cpp",
+      "sha256": "19d4024689059b2d9d767f081b016d2ac198cc92b781503ef7591e1790033b8b"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/playback_control.h",
+      "sha256": "16c97273bd8680d91532b80649bbfedeaaa1a4150ccee20b1e9ff8400e57e925"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/playback_stream_capture.h",
+      "sha256": "9fa02bcffa5abfc2388da96f1e9d847c4444a31fc8ad3d1f8a5b5d536972ae2c"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/playlist.cpp",
+      "sha256": "6e0488abcf8637f609353ec01e705647a45974deb824cb8b4bc0032a03448ce8"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/playlist.h",
+      "sha256": "d0addbda2ad431260049daabce1392b26bf94672b0f91ff879c9f48482bec9a2"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/playlist_loader.cpp",
+      "sha256": "d546e2de721ae82cb4aa70010925976dd803c9db3cb2516519fd3e3891c11b6c"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/playlist_loader.h",
+      "sha256": "dc2e39a6e65b6ee36037a496b7a7bdeb64bccc12eeba10ebc181237d820fcc9a"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/playlistColumnProvider.h",
+      "sha256": "ac2e6159aa6ae4eafbae7f276cd2c599d3a779f2a2cf681d2ea2bb3cdfbb6845"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/popup_message.cpp",
+      "sha256": "5256ddb6f7f679cc1e5b5f8845f8fc8f0ca398cec252349f46f554651f7b670e"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/popup_message.h",
+      "sha256": "df888a99f8c00230853077be8405825240ebf9936f6d7566fc99607844223005"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/powerManager.h",
+      "sha256": "aeb132106886155597d59be2ee555f69324a8f1f53bc0410aa5bb89f443c4dfe"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/preferences_page.cpp",
+      "sha256": "e3cf058aa69e0e5dd60115bf9b5bd2f217fb59cdc78487eb38d84d59d572385e"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/preferences_page.h",
+      "sha256": "2fa9e5ac924f608fada149740c6f636810d5aa1d3683e2f38aad39c37617f6f8"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/progress_meter.h",
+      "sha256": "00b4262849450d3c41afb48be74b94151a2ed41e1217d3394314a980b00d0b2e"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/release-x64-v142/foobar2000_SDK/foobar2000_SDK.lib.recipe",
+      "sha256": "e68192ea7180a53ff41b201936b074c7189f62533bd0b6a3087354b3df6ed73c"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/release-x64-v142/foobar2000_SDK/foobar2000_SDK.pch",
+      "sha256": "46e9345d338c3c2906270e467200af9dba9950193de6cb68f371e9e29d742c3e"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/release-x64-v142/foobar2000_SDK/foobar2000_SDK.tlog/foobar2000_SDK.lastbuildstate",
+      "sha256": "a1ec23987b3c34496c12999209a227b956a63380b873669eacdeebf9efad5a0e"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/release-x64-v142/foobar2000_SDK/foobar2000_SDK.vcxproj.FileListAbsolute.txt",
+      "sha256": "c6fd6df53245a5c58cdab8378ab5dc85dd5ca13199830480f0ebd2305c9ea891"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/release-x64-v143/foobar2000_SDK/foobar2000_SDK.lib.recipe",
+      "sha256": "e68192ea7180a53ff41b201936b074c7189f62533bd0b6a3087354b3df6ed73c"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/release-x64-v143/foobar2000_SDK/foobar2000_SDK.pch",
+      "sha256": "c70be8bb97d30d01595601e146b7bb32655171e4166c738d86449f88b4597561"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/release-x64-v143/foobar2000_SDK/foobar2000_SDK.tlog/foobar2000_SDK.lastbuildstate",
+      "sha256": "e899048e04cf40957521cf54f765210e1b01e6c0fc0e5abde792a823e7e3395e"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/release-x64-v143/foobar2000_SDK/foobar2000_SDK.vcxproj.FileListAbsolute.txt",
+      "sha256": "22cc768a61a1630a3e4d9f4422c8cdcb6b4bc686ea41da2fe6be8399fd3021dd"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/replaygain.cpp",
+      "sha256": "16cb5d254290cf088ec201af0edd1c9cdc92f3ac5e85162db3ea5e7b3a247c83"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/replaygain.h",
+      "sha256": "5668c866b5be8a3bf84a76a5fd6f78d9566a082b3a410255a1007051270fdf09"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/replaygain_info.cpp",
+      "sha256": "358456da16cc379e2b218458fd9572f1895e1844394a8a1c6631e1cde3d73e4f"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/replaygain_scanner.h",
+      "sha256": "bbf1100d9a53f22fc725d347420f422dd713a95a50f01c658009c959bce475b8"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/resampler.h",
+      "sha256": "d70fd4a934e54706f12d8472fc42f3518ae6516fe587d1c25d1a727bb881f085"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/search_tools.h",
+      "sha256": "878c09877fd2b5d15904adbe7d913ef3292f9b7323fead0bff218898bf016e1a"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/service.cpp",
+      "sha256": "abbf233a335af72fca128e81e5f587d0ca46e655a8eab24ec59e3c7289442ff7"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/service.h",
+      "sha256": "977c1d80e676ddfbc727e8dae4e0593bd66e525750f7d9a009d4a5d102113e77"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/service_by_guid.h",
+      "sha256": "ecd3ef79c30271cc71eae509202bf37e7378ab674ca3a413394330d2fa1f153a"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/service_compat.h",
+      "sha256": "6e2a6b44bd3287793eeb82d2c314e18954945eaef770e0ecfc83c45cf2b7f86d"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/service_impl.h",
+      "sha256": "90e1d11385159a1b7c1dc15afcb2b1c9ebd44684b01127f40a97b0eed7f6263d"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/shortcut_actions.h",
+      "sha256": "632bc023aa0db4d4f2ef1d6f288c8280fa938902bd3772b1892cb84881906100"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/stdafx.cpp",
+      "sha256": "62b4f9d9d7c09c4c4bb191f7d5bb94ba59ba544e87bd109910372fb362478d4e"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/system_time_keeper.h",
+      "sha256": "5e70d9f72a8242e6242baa6466595b39278868d51427ba41d020b8ae20e8a1fd"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/tag_processor.cpp",
+      "sha256": "5078fd13e27603e30f09bce74d8733339fa111ee7020aa39dcb9b53191860905"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/tag_processor.h",
+      "sha256": "94c0398f25099fa38bf28aa72666b2668b23443554a97a7fd4bdecf077de9fc3"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/tag_processor_id3v2.cpp",
+      "sha256": "24f590a699f0c9e7193d8ab1743b2cc77901b1d750b1e55196d591054f927eba"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/threaded_process.cpp",
+      "sha256": "2b43414979917ec89fe069a1aff8830a0e96795bdbcb59768355e0f8d1c01c7f"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/threaded_process.h",
+      "sha256": "8d4ab0e7adfe67029057d442014136ee36877a28e6db255cf4082b202bc9ab51"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/threadPool.h",
+      "sha256": "6d1eba1f50414e6729993a9a309abccfdbbde79358f03ab6644195514eeee8a6"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/threadsLite.h",
+      "sha256": "50942bc2522924ff9faaea7d4de3e47edb989b5f587e027a59a901078a5a64b2"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/timer.h",
+      "sha256": "87bc87676383875f47bd4eaaa1250030ed0d27da38fa09ccc5bf9eb0dfeedb0a"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/titleformat.cpp",
+      "sha256": "a06f317de92e5484f353b020ac1dacf248104821e72ff0c96076893bd0a45fa6"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/titleformat.h",
+      "sha256": "a580632a83276ced47e146a217c43cad6999f0855d4340805c99c4b1f07d41d9"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/titleformat_object.h",
+      "sha256": "4c7212ad45065ccf27308e5121b90460b366b051777980f09eb1f219fa97b56c"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/toolbarDropDown.h",
+      "sha256": "5259f2e9ce9d563519429e3979eb0eec2647dede13c11e766b9f7bcd8627d130"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/track_property.cpp",
+      "sha256": "a23ad2ad09cdb1808642ba0aee6073fb514a6775c76b6bf7b2f0207cf7bf04f4"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/track_property.h",
+      "sha256": "495c811b7f9e94bc83113bc74ec2357c8dd415741234f1fcaa992a2b78fd5cec"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/tracks.h",
+      "sha256": "e5cc34876fa451ef7a252f8330ae62a363ca3e1dd4d47cb5d93d13e6d83b06c8"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/ui.cpp",
+      "sha256": "239493ab91d0aed72c057bcb9f6e4a90ba9e5014422eded2161eb7b65fd8119a"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/ui.h",
+      "sha256": "0c873c68464e2e72934f6bd3019c06f2da53f8e34db91889dc67d1fa30826309"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/ui_edit_context.h",
+      "sha256": "22d2e153c1ae5b6c46f04d9c7e7bf0642e5517d084893a5dbd190195100fe17f"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/ui_element.cpp",
+      "sha256": "3cbbb5abef63466fa26172a5de7998147d6614fd9283843960891858099aae18"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/ui_element.h",
+      "sha256": "bed624e57386efde0ecbc7e498a28bf32487e01c6f2c35b2f6f960f084ecdb25"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/ui_element_mac.h",
+      "sha256": "6b1aecc9a44fb0c043bf4618728ce80578dfdc15df4b0eed0726d187069e1c0b"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/ui_element_typable_window_manager.h",
+      "sha256": "15619a4aeee9ecf9a545ebc7351de7e2d8c0aa7f0bd57ccb7d3d54ddc71bd0d9"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/unpack.h",
+      "sha256": "aca1bf3193d19056fd312ff0fc5c146ec1d9a192fd811b199a243637946c3007"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/utility.cpp",
+      "sha256": "a621c3b793c76a5ad7e9989b019d59f4d1c8d6de461b3b29a30affbdc907c115"
+    },
+    {
+      "path": "vendor/foobar2000/SDK/vis.h",
+      "sha256": "0e2a417c202fb228ba53a4e65099b88c99e8268c3a3aa986ff50a7e50dcc6b38"
+    },
+    {
+      "path": "vendor/foobar2000/sdk-license.txt",
+      "sha256": "2aa8af2f2a0cce2dce4c2a4f422bcbd1752dab7d1e1b973981b77c971b0b8a32"
+    },
+    {
+      "path": "vendor/foobar2000/sdk-readme.html",
+      "sha256": "ac8fd008d2bbaadff4205e5c802fda6afaf6f8f87a2b604efb14b3c6ed017a78"
+    },
+    {
+      "path": "vendor/foobar2000/shared/audio_math.cpp",
+      "sha256": "10d2873e86d385e05a7f71daabd1516dea2dd8fdf372fb3be8b8cf80e9b53481"
+    },
+    {
+      "path": "vendor/foobar2000/shared/audio_math.h",
+      "sha256": "9fd75a79ad6cbfd5608b3ee6e14cdeb07c98f3e7e49fb0d2f3807b3ced7c4e4d"
+    },
+    {
+      "path": "vendor/foobar2000/shared/crash_info.cpp",
+      "sha256": "cc308703be57101895735b7fcf50964163f8a0f45c59c16da1f9a548e7e61837"
+    },
+    {
+      "path": "vendor/foobar2000/shared/fb2kdebug.h",
+      "sha256": "0e0228e79670e2ddb0205c015e973a5292135318661f23a66decacd80d419b8c"
+    },
+    {
+      "path": "vendor/foobar2000/shared/filedialogs.cpp",
+      "sha256": "53f1c5f16be0bef46856268a6228d0c55866a391e2085ebd3711f700061e72e6"
+    },
+    {
+      "path": "vendor/foobar2000/shared/filedialogs.h",
+      "sha256": "8ad74a086f83897bc42fc2dbac090c44fb6ef192a0837f998eaa60c268502215"
+    },
+    {
+      "path": "vendor/foobar2000/shared/filedialogs_vista.cpp",
+      "sha256": "04a61818154e26889e00593ae161102bb947f4dc6206fcc9234a6dcc36e5c2c9"
+    },
+    {
+      "path": "vendor/foobar2000/shared/font_description.cpp",
+      "sha256": "2b41056b8c937b13f35ddf82581ccfdaaf058551c094b9a6f4e812440b96b8df"
+    },
+    {
+      "path": "vendor/foobar2000/shared/minidump.cpp",
+      "sha256": "eb017584bcff80bef3a8f465381328d4fd966cb6cb784efa7ed3435b5d7e6e24"
+    },
+    {
+      "path": "vendor/foobar2000/shared/modal_dialog.cpp",
+      "sha256": "3389b4a7e1cee5a3c5fe20461488985ae44eb7b6eacd2be8a5ad20fa091e795b"
+    },
+    {
+      "path": "vendor/foobar2000/shared/shared-apple.h",
+      "sha256": "58a2b680de7f40616f240ebc8027384bdbdbb52fe058dbab217a1a3dae2dbbb9"
+    },
+    {
+      "path": "vendor/foobar2000/shared/shared-apple.mm",
+      "sha256": "01062b107d03fd1c478962aaa0237f0a864d6431ac544abc04cc60701113ecb2"
+    },
+    {
+      "path": "vendor/foobar2000/shared/shared-nix.cpp",
+      "sha256": "2402372b73f2af62e387187e36fb4e2e870479b2b24a22b1a60d8c23e4da5cdb"
+    },
+    {
+      "path": "vendor/foobar2000/shared/shared-nix.h",
+      "sha256": "6d28edd8e713b9ae828d3d012cce0d654de3698d6c6a4c9c1599245c5fd636bc"
+    },
+    {
+      "path": "vendor/foobar2000/shared/shared-x64.lib",
+      "sha256": "83af6b9936df738af6f6bf33590d2180bfb3a3b847277a602ad38a47338c3e26"
+    },
+    {
+      "path": "vendor/foobar2000/shared/shared.h",
+      "sha256": "e60c1551788e8d2a32d1fbd5dadd18ef24fdb54695d631b6cb8ec9b6b91cb56d"
+    },
+    {
+      "path": "vendor/foobar2000/shared/shared.vcxproj",
+      "sha256": "23ea3296c15e51f218149c746ab5cda43d9fb69088935c930c9382144d610bd1"
+    },
+    {
+      "path": "vendor/foobar2000/shared/shared.vcxproj.filters",
+      "sha256": "8f4e125f04b301afb15f743728b9813db3417e27a708ca8a6613377c2735beb6"
+    },
+    {
+      "path": "vendor/foobar2000/shared/shared.xcodeproj/project.pbxproj",
+      "sha256": "d6e57e7cc0b668c3e5179f51d05749d8b66863ff3de51254e2203c87ecb2b8e7"
+    },
+    {
+      "path": "vendor/foobar2000/shared/stdafx.cpp",
+      "sha256": "1631675c24e90dc5711443beefbd2f75f692aa5dbd1e4834d2edeef70795b5ef"
+    },
+    {
+      "path": "vendor/foobar2000/shared/systray.cpp",
+      "sha256": "f0c1b47e0b7a31bcf56dcf235e817c199b62a3e010345b4c9c827629f9021d05"
+    },
+    {
+      "path": "vendor/foobar2000/shared/text_drawing.cpp",
+      "sha256": "d066cb40e25e8fa675ce12a1d4287bf23a84ce2e8f317b14936d57b5677e765a"
+    },
+    {
+      "path": "vendor/foobar2000/shared/utf8.cpp",
+      "sha256": "b481024bc75e1c8576ce2581ef773312781a21ee083c1899dcf612e520e210f2"
+    },
+    {
+      "path": "vendor/foobar2000/shared/utf8api.cpp",
+      "sha256": "c8a4e8e38f65c38d5ada8615ac63e9fec950e6f274f20f2f3443e5d95b1e77e8"
+    },
+    {
+      "path": "vendor/foobar2000/shared/Utility.cpp",
+      "sha256": "b18902e6f916719da7c6e9a9f3a3e6d0e84d8893109682d938755ff79f40c311"
+    },
+    {
+      "path": "vendor/foobar2000/shared/win32_misc.h",
+      "sha256": "ba32c5baeed9dfdd22df0f5881bec095f526689c4e16187c1f59fd36dd878988"
+    }
+  ]
+}

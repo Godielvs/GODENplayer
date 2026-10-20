@@ -1,0 +1,182 @@
+/// @file audio_test.cpp
+/// @brief Tests for Audio buffer class.
+
+#include "core/audio.h"
+
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_floating_point.hpp>
+#include <vector>
+
+#include "support/audio_fixtures.h"
+#include "util/exception.h"
+#include "util/types.h"
+
+using namespace sonare;
+using Catch::Matchers::WithinAbs;
+using Catch::Matchers::WithinRel;
+
+namespace {
+using sonare::test::generate_sine;
+}  // namespace
+
+TEST_CASE("Audio from_buffer", "[audio]") {
+  std::vector<float> samples = generate_sine(1000, 440.0f, 22050);
+  Audio audio = Audio::from_buffer(samples.data(), samples.size(), 22050);
+
+  REQUIRE(audio.size() == 1000);
+  REQUIRE(audio.sample_rate() == 22050);
+  REQUIRE(audio.channels() == 1);
+  REQUIRE_FALSE(audio.empty());
+  REQUIRE_THAT(audio.duration(), WithinRel(1000.0f / 22050.0f, 0.001f));
+}
+
+TEST_CASE("Audio from_buffer null safety", "[audio]") {
+  SECTION("null pointer with zero size is valid (empty audio)") {
+    Audio audio = Audio::from_buffer(nullptr, 0, 22050);
+    REQUIRE(audio.empty());
+    REQUIRE(audio.size() == 0);
+    REQUIRE(audio.sample_rate() == 22050);
+  }
+
+  SECTION("null pointer with non-zero size throws InvalidParameter") {
+    try {
+      Audio audio = Audio::from_buffer(nullptr, 10, 22050);
+      FAIL("Expected SonareException");
+    } catch (const SonareException& e) {
+      REQUIRE(e.code() == ErrorCode::InvalidParameter);
+    }
+  }
+
+  SECTION("valid pointer with zero size is valid (empty audio)") {
+    float dummy = 0.0f;
+    Audio audio = Audio::from_buffer(&dummy, 0, 22050);
+    REQUIRE(audio.empty());
+    REQUIRE(audio.size() == 0);
+    REQUIRE(audio.sample_rate() == 22050);
+  }
+
+  SECTION("valid pointer with non-zero size succeeds") {
+    std::vector<float> samples = {0.1f, 0.2f, 0.3f, 0.4f};
+    Audio audio = Audio::from_buffer(samples.data(), samples.size(), 22050);
+    REQUIRE(audio.size() == 4);
+    REQUIRE(audio.sample_rate() == 22050);
+    REQUIRE_THAT(audio[0], WithinAbs(0.1f, 1e-6f));
+    REQUIRE_THAT(audio[3], WithinAbs(0.4f, 1e-6f));
+  }
+
+  SECTION("invalid sample rate throws InvalidParameter") {
+    std::vector<float> samples = {0.1f, 0.2f};
+    try {
+      Audio audio = Audio::from_buffer(samples.data(), samples.size(), 0);
+      FAIL("Expected SonareException");
+    } catch (const SonareException& e) {
+      REQUIRE(e.code() == ErrorCode::InvalidParameter);
+    }
+  }
+}
+
+TEST_CASE("Audio from_memory null safety", "[audio]") {
+  SECTION("null pointer throws InvalidParameter") {
+    try {
+      Audio audio = Audio::from_memory(nullptr, 100);
+      FAIL("Expected SonareException");
+    } catch (const SonareException& e) {
+      REQUIRE(e.code() == ErrorCode::InvalidParameter);
+    }
+  }
+
+  SECTION("zero size throws InvalidParameter") {
+    uint8_t dummy = 0;
+    try {
+      Audio audio = Audio::from_memory(&dummy, 0);
+      FAIL("Expected SonareException");
+    } catch (const SonareException& e) {
+      REQUIRE(e.code() == ErrorCode::InvalidParameter);
+    }
+  }
+}
+
+TEST_CASE("Audio from_vector", "[audio]") {
+  std::vector<float> samples = generate_sine(2205, 440.0f, 22050);
+  Audio audio = Audio::from_vector(std::move(samples), 22050);
+
+  REQUIRE(audio.size() == 2205);
+  REQUIRE(audio.sample_rate() == 22050);
+  REQUIRE_THAT(audio.duration(), WithinRel(0.1f, 0.001f));  // 100ms
+}
+
+TEST_CASE("Audio slice by time", "[audio]") {
+  constexpr int sr = 22050;
+  std::vector<float> samples = generate_sine(sr, 440.0f, sr);  // 1 second
+  Audio audio = Audio::from_vector(std::move(samples), sr);
+
+  SECTION("slice first half") {
+    Audio slice = audio.slice(0.0f, 0.5f);
+    REQUIRE(slice.size() == sr / 2);
+    REQUIRE(slice.sample_rate() == sr);
+    REQUIRE_THAT(slice.duration(), WithinRel(0.5f, 0.001f));
+  }
+
+  SECTION("slice second half") {
+    Audio slice = audio.slice(0.5f, 1.0f);
+    REQUIRE(slice.size() == sr / 2);
+    // First sample should be at 0.5s mark
+    REQUIRE_THAT(slice[0], WithinAbs(audio[sr / 2], 1e-6f));
+  }
+
+  SECTION("slice to end (negative end_time)") {
+    Audio slice = audio.slice(0.5f);
+    REQUIRE(slice.size() == sr / 2);
+  }
+}
+
+TEST_CASE("Audio slice by samples", "[audio]") {
+  std::vector<float> samples(1000);
+  for (int i = 0; i < 1000; ++i) {
+    samples[i] = static_cast<float>(i);
+  }
+  Audio audio = Audio::from_vector(std::move(samples), 22050);
+
+  SECTION("slice range") {
+    Audio slice = audio.slice_samples(100, 500);
+    REQUIRE(slice.size() == 400);
+    REQUIRE_THAT(slice[0], WithinAbs(100.0f, 1e-6f));
+    REQUIRE_THAT(slice[399], WithinAbs(499.0f, 1e-6f));
+  }
+
+  SECTION("slice shares buffer") {
+    Audio slice = audio.slice_samples(0, 500);
+    // Data pointers should be within the original buffer
+    REQUIRE(slice.data() == audio.data());
+  }
+}
+
+TEST_CASE("Audio to_mono creates copy", "[audio]") {
+  std::vector<float> samples = generate_sine(1000, 440.0f, 22050);
+  Audio audio = Audio::from_vector(std::move(samples), 22050);
+  Audio mono = audio.to_mono();
+
+  REQUIRE(mono.size() == audio.size());
+  REQUIRE(mono.sample_rate() == audio.sample_rate());
+  // Should be a copy, not sharing buffer
+  REQUIRE(mono.data() != audio.data());
+}
+
+TEST_CASE("Audio empty", "[audio]") {
+  Audio audio;
+  REQUIRE(audio.empty());
+  REQUIRE(audio.size() == 0);
+  REQUIRE(audio.data() == nullptr);
+  REQUIRE(audio.duration() == 0.0f);
+}
+
+TEST_CASE("Audio iterator", "[audio]") {
+  std::vector<float> samples = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f};
+  Audio audio = Audio::from_vector(std::move(samples), 22050);
+
+  float sum = 0.0f;
+  for (float s : audio) {
+    sum += s;
+  }
+  REQUIRE_THAT(sum, WithinAbs(15.0f, 1e-6f));
+}

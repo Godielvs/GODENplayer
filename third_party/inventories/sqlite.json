@@ -1,0 +1,25 @@
+{
+  "schema": "goden.vendored-files.v1",
+  "files": [
+    {
+      "path": "vendor/sqlite/README.md",
+      "sha256": "ef02a48fc82a67522d117ea3e2e48c2a550347014feee36dd1580d006051c8c9"
+    },
+    {
+      "path": "vendor/sqlite/sqlite3.c",
+      "sha256": "87497ab605bedd0dbee27a209c1eeff8c89b229b13f921a7efdbb81a13f779fd"
+    },
+    {
+      "path": "vendor/sqlite/sqlite3.h",
+      "sha256": "4ff81af4849acabc76fc8349abb926814395072617ca18e08800abf734ab7612"
+    },
+    {
+      "path": "vendor/sqlite/sqlite3.vcxproj",
+      "sha256": "11ddc5d307ba5907a88b86dc22da9c3919f4a7ccd5d75d2714dc0b14cd410d3f"
+    },
+    {
+      "path": "vendor/sqlite/sqlite3ext.h",
+      "sha256": "ac9645e5c9ff0cf176efdd6e75cb5e98f46295d38e02db5c4d208826a39ab4be"
+    }
+  ]
+}

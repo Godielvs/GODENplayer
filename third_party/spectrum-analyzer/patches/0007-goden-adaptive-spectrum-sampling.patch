@@ -1,0 +1,250 @@
+diff --git a/Visuals/Spectrum/Spectrum.cpp b/Visuals/Spectrum/Spectrum.cpp
+index 999e095..aa64af8 100644
+--- a/Visuals/Spectrum/Spectrum.cpp
++++ b/Visuals/Spectrum/Spectrum.cpp
+@@ -166,32 +166,45 @@ void spectrum_t::RenderBars(ID2D1DeviceContext * deviceContext) noexcept
+     nekorox_visual::RefreshSharedTheme(_NekoThemeProvider, _NekoTheme);
+     _LEDSize = _State->_LEDLight + _State->_LEDGap;
+ 
+-    FLOAT t = _ClientSize.width / (FLOAT) _Analysis->_FrequencyBands.size();
++    const size_t sourceBandCount = _Analysis->_FrequencyBands.size();
++    if (sourceBandCount == 0 || _ClientSize.width <= 0.f)
++        return;
++
++    // The analyzer remains the same 120-note musical instrument. Rendering
++    // density is a presentation concern: compact panels merge neighbouring
++    // notes, while wide panels interpolate between note anchors. Around the
++    // reference width this resolves to almost exactly the original 120 bars.
++    constexpr FLOAT TargetBandPitch = 8.f;
++    const size_t renderBandCount = std::clamp<size_t>(
++        (size_t) std::llround(_ClientSize.width / TargetBandPitch), 12, 360);
++    const bool renderSignal = !(_State->_IsPaused &&
++        !_State->_VisualizeDuringPause);
++    if (renderSignal)
++        UpdateNekoTemporalLayers();
++    UpdateNekoRenderBands(renderBandCount);
++
++    FLOAT t = _ClientSize.width / (FLOAT) renderBandCount;
+ 
+     // Use the full width of the graph?
+     if (_Settings->_HorizontalAlignment != HorizontalAlignment::Fit)
+         t = std::floor(t);
+ 
+-    // BandPitch is the immutable musical grid: every one of the 120 notes owns
+-    // exactly one cell. BodyWidth is only the optical ink inside that cell. A
+-    // fixed one-DIP gap made the bars look hair-thin in compact windows and
+-    // comically wide on ultrawide windows, even though the note distribution
+-    // itself was correct.
++    // Restore the original one-DIP spacing philosophy. Adaptive sampling keeps
++    // the cell itself close to eight DIP, so neither bars nor gaps become
++    // comically thin or thick at the extremes.
+     const FLOAT BandPitch = std::max(t, 2.f); // In DIP
+-    const FLOAT SpectrumWidth = BandPitch * (FLOAT) _Analysis->_FrequencyBands.size();
++    const FLOAT SpectrumWidth = BandPitch * (FLOAT) renderBandCount;
+ 
+     FLOAT dpiX = 96.f;
+     FLOAT dpiY = 96.f;
+     deviceContext->GetDpi(&dpiX, &dpiY);
+     const FLOAT pixelScale = std::max(dpiX / 96.f, 0.25f);
+     const FLOAT physicalPixel = 1.f / pixelScale;
+-    const FLOAT minimumGap = std::min(0.75f, BandPitch * 0.18f);
+-    const FLOAT maximumBody = std::max(physicalPixel, BandPitch - minimumGap);
+-    const FLOAT preferredBody = std::clamp(BandPitch * 0.80f, 3.5f, 7.5f);
++    const FLOAT preferredBody = std::max(
++        physicalPixel, BandPitch - 1.f);
+     const FLOAT BodyWidth = std::min(
+         std::max(physicalPixel,
+-            std::round(std::min(preferredBody, maximumBody) * pixelScale) /
+-                pixelScale),
++            std::round(preferredBody * pixelScale) / pixelScale),
+         BandPitch);
+     const FLOAT BodyInset = (BandPitch - BodyWidth) / 2.f;
+ 
+@@ -220,7 +233,7 @@ void spectrum_t::RenderBars(ID2D1DeviceContext * deviceContext) noexcept
+ 
+     // Paint the frequency-key backgrounds first so the temporal layers remain
+     // one continuous composition instead of being clipped per band.
+-    for (const auto & fb : _Analysis->_FrequencyBands)
++    for (const auto & fb : _NekoRenderBands)
+     {
+         x1 = std::clamp(x1, 0.f, _ClientSize.width);
+         x2 = std::clamp(x2, 0.f, _ClientSize.width);
+@@ -246,10 +259,9 @@ void spectrum_t::RenderBars(ID2D1DeviceContext * deviceContext) noexcept
+         x2 = x1 + BandPitch;
+     }
+ 
+-    if (_State->_IsPaused && !_State->_VisualizeDuringPause)
++    if (!renderSignal)
+         return;
+ 
+-    UpdateNekoTemporalLayers();
+     RenderNekoTemporalLayers(deviceContext, BandPitch, BodyWidth, HOffset);
+ 
+     x1 = HOffset;
+@@ -258,7 +270,7 @@ void spectrum_t::RenderBars(ID2D1DeviceContext * deviceContext) noexcept
+     // The current artwork-derived body and peak marks are deliberately last.
+     // The slower secondary exposure remains visible only where the signal has
+     // just moved away.
+-    for (const auto & fb : _Analysis->_FrequencyBands)
++    for (const auto & fb : _NekoRenderBands)
+     {
+         x1 = std::clamp(x1, 0.f, _ClientSize.width);
+         x2 = std::clamp(x2, 0.f, _ClientSize.width);
+@@ -280,6 +292,78 @@ void spectrum_t::RenderBars(ID2D1DeviceContext * deviceContext) noexcept
+     }
+ }
+ 
++/// <summary>
++/// Resamples the fixed 120-note analysis for presentation only. Downsampling
++/// keeps the strongest note in each group so audible notes do not disappear;
++/// upsampling interpolates in log-frequency between the original anchors.
++/// </summary>
++void spectrum_t::UpdateNekoRenderBands(size_t renderBandCount) noexcept
++{
++    const auto & source = _Analysis->_FrequencyBands;
++    const auto & shadow = _NekoDoubleExposure.Shadow();
++    const size_t sourceCount = source.size();
++
++    _NekoRenderBands.resize(renderBandCount);
++    const bool hasShadow = shadow.size() == sourceCount;
++
++    if (renderBandCount <= sourceCount)
++    {
++        for (size_t targetIndex = 0; targetIndex < renderBandCount;
++            ++targetIndex)
++        {
++            const size_t first = targetIndex * sourceCount / renderBandCount;
++            const size_t last = std::max(first + 1,
++                (targetIndex + 1) * sourceCount / renderBandCount);
++            const size_t middle = first + (last - first - 1) / 2;
++            auto & target = _NekoRenderBands[targetIndex];
++            target = {};
++            target.Lo = source[first].Lo;
++            target.Center = std::sqrt(
++                source[first].Center * source[last - 1].Center);
++            target.HasDarkBackground = source[middle].HasDarkBackground;
++
++            for (size_t sourceIndex = first; sourceIndex < last;
++                ++sourceIndex)
++            {
++                const auto & band = source[sourceIndex];
++                target.Value = std::max(target.Value, band.Value);
++                target.MaxValue = std::max(target.MaxValue, band.MaxValue);
++                target.Opacity = std::max(target.Opacity, band.Opacity);
++                if (hasShadow)
++                    target.Shadow = std::max(
++                        target.Shadow, shadow[sourceIndex]);
++            }
++        }
++        return;
++    }
++
++    for (size_t targetIndex = 0; targetIndex < renderBandCount; ++targetIndex)
++    {
++        const double position = renderBandCount == 1 || sourceCount == 1
++            ? 0.
++            : (double) targetIndex * (double) (sourceCount - 1) /
++                (double) (renderBandCount - 1);
++        const size_t lower = (size_t) std::floor(position);
++        const size_t upper = std::min(lower + 1, sourceCount - 1);
++        const double fraction = position - (double) lower;
++        const auto & a = source[lower];
++        const auto & b = source[upper];
++        auto & target = _NekoRenderBands[targetIndex];
++        target.Value = std::lerp(a.Value, b.Value, fraction);
++        target.MaxValue = std::lerp(a.MaxValue, b.MaxValue, fraction);
++        target.Opacity = std::lerp(a.Opacity, b.Opacity, fraction);
++        target.Lo = std::exp(std::lerp(
++            std::log(a.Lo), std::log(b.Lo), fraction));
++        target.Center = std::exp(std::lerp(
++            std::log(a.Center), std::log(b.Center), fraction));
++        target.HasDarkBackground =
++            source[(size_t) std::llround(position)].HasDarkBackground;
++        target.Shadow = hasShadow
++            ? std::lerp(shadow[lower], shadow[upper], fraction)
++            : 0.;
++    }
++}
++
+ /// <summary>
+ /// Advances the two temporal layers using QPC time, independent of refresh rate.
+ /// </summary>
+@@ -301,9 +385,7 @@ void spectrum_t::UpdateNekoTemporalLayers() noexcept
+ /// </summary>
+ void spectrum_t::RenderNekoTemporalLayers(ID2D1DeviceContext * deviceContext, FLOAT bandPitch, FLOAT bodyWidth, FLOAT horizontalOffset) noexcept
+ {
+-    const auto & shadow = _NekoDoubleExposure.Shadow();
+-
+-    if (shadow.size() != _Analysis->_FrequencyBands.size())
++    if (_NekoRenderBands.empty())
+         return;
+ 
+     deviceContext->SetAntialiasMode(D2D1_ANTIALIAS_MODE_ALIASED);
+@@ -327,16 +409,16 @@ void spectrum_t::RenderNekoTemporalLayers(ID2D1DeviceContext * deviceContext, FL
+ 
+     FLOAT x1 = horizontalOffset;
+ 
+-    for (size_t i = 0; i < shadow.size(); ++i)
++    for (const auto & fb : _NekoRenderBands)
+     {
+-        const auto & fb = _Analysis->_FrequencyBands[i];
+         const FLOAT x2 = x1 + bandPitch;
+         const bool GreaterThanNyquist = fb.Lo >= _Analysis->_NyquistFrequency;
+ 
+-        if ((!GreaterThanNyquist || !_State->_SuppressMirrorImage) && (shadow[i] > 0.))
++        if ((!GreaterThanNyquist || !_State->_SuppressMirrorImage) &&
++            (fb.Shadow > 0.))
+         {
+             _NekoShadowBrush->SetColor(nekorox_visual::ArtworkShadowColor(
+-                _NekoTheme, shadow[i]));
++                _NekoTheme, fb.Shadow));
+             const FLOAT left = std::round((x1 + shoulderInset) * pixelScale) /
+                 pixelScale;
+             const D2D1_RECT_F rect =
+@@ -345,7 +427,7 @@ void spectrum_t::RenderNekoTemporalLayers(ID2D1DeviceContext * deviceContext, FL
+                 0.f,
+                 std::clamp(std::min(left + shoulderWidth, x2),
+                     0.f, _ClientSize.width),
+-                std::clamp((FLOAT) (shadow[i] * _ClientSize.height), 0.f, _ClientSize.height)
++                std::clamp((FLOAT) (fb.Shadow * _ClientSize.height), 0.f, _ClientSize.height)
+             };
+ 
+             deviceContext->FillRectangle(rect, _NekoShadowBrush);
+diff --git a/Visuals/Spectrum/Spectrum.h b/Visuals/Spectrum/Spectrum.h
+index ec2b246..12c1ccd 100644
+--- a/Visuals/Spectrum/Spectrum.h
++++ b/Visuals/Spectrum/Spectrum.h
+@@ -57,6 +57,7 @@ private:
+     void Resize() noexcept;
+ 
+     void RenderBars(ID2D1DeviceContext * deviceContext) noexcept;
++    void UpdateNekoRenderBands(size_t renderBandCount) noexcept;
+     void RenderBar(ID2D1DeviceContext * deviceContext, D2D1_RECT_F & rect, style_t * areaStyle, style_t * topStyle, double value, double opacity, double frequency) noexcept;
+     void RenderBarTop(ID2D1DeviceContext * deviceContext, D2D1_RECT_F & rect, style_t * topStyle, double value, double opacity, double frequency) noexcept;
+     void RenderNekoTemporalLayers(ID2D1DeviceContext * deviceContext, FLOAT bandPitch, FLOAT bodyWidth, FLOAT horizontalOffset) noexcept;
+@@ -95,6 +96,17 @@ private:
+     HRESULT CreateRadialCurve(const geometry_points_t & gp, FLOAT innerRadius, bool isFilled, ID2D1PathGeometry ** curve) const noexcept;
+ 
+ private:
++    struct neko_render_band_t
++    {
++        double Value = 0.;
++        double MaxValue = 0.;
++        double Opacity = 0.;
++        double Lo = 0.;
++        double Center = 0.;
++        double Shadow = 0.;
++        bool HasDarkBackground = false;
++    };
++
+     const FLOAT PaddingX = 0.f;
+     const FLOAT PaddingY = 0.f;
+ 
+@@ -110,6 +122,7 @@ private:
+     chrono_t _NekoTemporalChrono;
+     int64_t _LastNekoTemporalTick = 0;
+     neko_double_exposure_t _NekoDoubleExposure;
++    std::vector<neko_render_band_t> _NekoRenderBands;
+     service_ptr_t<nekorox::interop::ThemeProviderV1> _NekoThemeProvider;
+     nekorox::interop::SharedThemeSnapshotV2 _NekoTheme;
+ 

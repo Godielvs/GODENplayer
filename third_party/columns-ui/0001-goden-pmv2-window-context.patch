@@ -1,0 +1,67 @@
+diff --git a/foo_ui_columns/main_window.cpp b/foo_ui_columns/main_window.cpp
+index c588998..2264ff1 100644
+--- a/foo_ui_columns/main_window.cpp
++++ b/foo_ui_columns/main_window.cpp
+@@ -122,6 +122,18 @@ HWND cui::MainWindow::initialise(user_interface::HookProc_t hook, bool is_hidden
+ 
+     RegisterClass(&wc);
+ 
++    // GODENplayer: create the real Columns UI root and its synchronous children
++    // in PMv2 without changing or patching the signed foobar2000 host.
++    struct ScopedWindowDpi {
++        DPI_AWARENESS_CONTEXT previous = SetThreadDpiAwarenessContext(
++            DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
++        ScopedWindowDpi() { THROW_LAST_ERROR_IF(!previous); }
++        void restore() noexcept {
++            if (previous) { SetThreadDpiAwarenessContext(previous); previous = nullptr; }
++        }
++        ~ScopedWindowDpi() { restore(); }
++    } window_dpi;
++
+     RECT rc_work{};
+     SystemParametersInfo(SPI_GETWORKAREA, NULL, &rc_work, NULL);
+ 
+@@ -178,6 +190,8 @@ HWND cui::MainWindow::initialise(user_interface::HookProc_t hook, bool is_hidden
+ 
+     RedrawWindow(m_wnd, nullptr, nullptr, RDW_UPDATENOW | RDW_ALLCHILDREN);
+ 
++    window_dpi.restore();
++
+     if (main_window::config_get_is_first_run())
+         SendMessage(m_wnd, MSG_RUN_INITIAL_SETUP, NULL, NULL);
+ 
+diff --git a/foo_ui_columns/mw_wnd_proc.cpp b/foo_ui_columns/mw_wnd_proc.cpp
+index 2bbebf1..0b056bf 100644
+--- a/foo_ui_columns/mw_wnd_proc.cpp
++++ b/foo_ui_columns/mw_wnd_proc.cpp
+@@ -58,9 +58,13 @@ LRESULT cui::MainWindow::s_on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
+ 
+ LRESULT cui::MainWindow::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
+ {
++    if (msg == WM_DPICHANGED)
++        SetPropW(wnd, L"Goden.Dpi.MessageObserved", reinterpret_cast<HANDLE>(1));
+     if (m_hook_proc) {
+         LRESULT ret;
+         if (m_hook_proc(wnd, msg, wp, lp, &ret)) {
++            if (msg == WM_DPICHANGED)
++                SetPropW(wnd, L"Goden.Dpi.HostHandled", reinterpret_cast<HANDLE>(1));
+             return ret;
+         }
+     }
+@@ -120,6 +124,16 @@ LRESULT cui::MainWindow::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
+     }
+ 
+     switch (msg) {
++    case WM_DPICHANGED: {
++        const auto* suggested = reinterpret_cast<const RECT*>(lp);
++        if (suggested) {
++            const bool applied = SetWindowPos(wnd, nullptr, suggested->left, suggested->top,
++                suggested->right - suggested->left, suggested->bottom - suggested->top,
++                SWP_NOZORDER | SWP_NOACTIVATE) != FALSE;
++            SetPropW(wnd, L"Goden.Dpi.ColumnsHandled", reinterpret_cast<HANDLE>(static_cast<INT_PTR>(applied ? 1 : 2)));
++        }
++        return 0;
++    }
+     case WM_CREATE: {
+         m_wm_taskbarcreated = RegisterWindowMessage(L"TaskbarCreated");
+         m_wm_taskbarbuttoncreated = RegisterWindowMessage(L"TaskbarButtonCreated");

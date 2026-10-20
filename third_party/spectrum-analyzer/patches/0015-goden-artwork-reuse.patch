@@ -1,0 +1,379 @@
+diff --git a/Visuals/Artwork.cpp b/Visuals/Artwork.cpp
+index 4cb5532..9acbfe2 100644
+--- a/Visuals/Artwork.cpp
++++ b/Visuals/Artwork.cpp
+@@ -9,45 +9,66 @@
+ #include "ColorThief.h"
+ #include "Support.h"
+ 
++#include <filesystem>
++#include <fstream>
++#include <cmath>
++
+ #pragma hdrstop
+ 
++namespace {
++struct artwork_lock_t {
++    msc::critical_section_t & section;
++    explicit artwork_lock_t(msc::critical_section_t & value) : section(value) { section.Enter(); }
++    ~artwork_lock_t() { section.Leave(); }
++};
++constexpr size_t MaxArtworkBytes = 32U * 1024U * 1024U;
++constexpr uint64_t MaxArtworkPixels = 64ULL * 1024ULL * 1024ULL;
++
++HRESULT ScaledSource(IWICBitmapSource * source, UINT edge, IWICBitmapSource ** result) noexcept
++{
++    UINT width = 0, height = 0;
++    HRESULT hr = source->GetSize(&width, &height);
++    if (FAILED(hr) || !width || !height) return E_INVALIDARG;
++    if (std::max(width, height) <= edge) return source->QueryInterface(IID_PPV_ARGS(result));
++    CComPtr<IWICBitmapScaler> scaler;
++    hr = _WIC.Factory->CreateBitmapScaler(&scaler);
++    const double ratio = static_cast<double>(edge) / std::max(width, height);
++    if (SUCCEEDED(hr)) hr = scaler->Initialize(source,
++        std::max(1U, static_cast<UINT>(std::lround(width * ratio))),
++        std::max(1U, static_cast<UINT>(std::lround(height * ratio))), WICBitmapInterpolationModeFant);
++    if (SUCCEEDED(hr)) hr = scaler->QueryInterface(IID_PPV_ARGS(result));
++    return hr;
++}
++}
++
+ /// <summary>
+ /// Creates the WIC resources.
+ /// </summary>
+ HRESULT artwork_t::CreateWICResources(const uint8_t * data, size_t size) noexcept
+ {
+-    _CriticalSection.Enter();
+-
+-    DeleteDeviceSpecificResources();
+-
+-    if ((data != nullptr) && (size != 0))
+-    {
++    artwork_lock_t lock(_CriticalSection);
++    if (!data || !size || size > MaxArtworkBytes) { DeleteWICResources(); return E_INVALIDARG; }
++    if (_Frame && _Raster.size() == size && std::equal(_Raster.begin(), _Raster.end(), data)) return S_OK;
++    DeleteWICResources();
++    try {
+         _Raster.assign(data, data + size);
+-        _FilePath.clear();
+-
+-        _FormatConverter.Release();
+-        _Frame.Release();
+-    }
+-
+-    HRESULT hr = S_OK;
+-
+-    if (_Frame == nullptr)
+-        hr = _WIC.Load(_Raster.data(), _Raster.size(), &_Frame);
+-
+-    // Create a format converter to 32bppPBGRA.
+-    if (SUCCEEDED(hr) && (_FormatConverter == nullptr))
+-    {
+-        hr = _WIC.Factory->CreateFormatConverter(&_FormatConverter);
+-
+-        if (SUCCEEDED(hr))
+-            hr = _FormatConverter->Initialize(_Frame, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom);
+-    }
+-
+-    SetStatus(Initialized);
+-
+-    _CriticalSection.Leave();
+-
+-    return hr;
++        HRESULT hr = _WIC.Load(_Raster.data(), _Raster.size(), &_Frame);
++        UINT width = 0, height = 0;
++        if (SUCCEEDED(hr)) hr = _Frame->GetSize(&width, &height);
++        if (SUCCEEDED(hr) && (!width || !height || uint64_t(width) * height > MaxArtworkPixels)) hr = E_INVALIDARG;
++        if (SUCCEEDED(hr)) {
++            double dpiX = 96.0, dpiY = 96.0;
++            if (FAILED(_Frame->GetResolution(&dpiX, &dpiY)) ||
++                !std::isfinite(dpiX) || !std::isfinite(dpiY) || dpiX < 0.01 || dpiY < 0.01 ||
++                dpiX > 1000000.0 || dpiY > 1000000.0) dpiX = dpiY = 96.0;
++            _OriginalSize = D2D1::SizeF(static_cast<FLOAT>(width * 96.0 / dpiX), static_cast<FLOAT>(height * 96.0 / dpiY));
++            _SourceEdge = std::max(width, height);
++            hr = ScaledSource(_Frame, 256U, &_PaletteSource);
++        }
++        if (FAILED(hr)) { DeleteWICResources(); return hr; }
++        SetStatus(Initialized);
++        return S_OK;
++    } catch (...) { DeleteWICResources(); return E_OUTOFMEMORY; }
+ }
+ 
+ /// <summary>
+@@ -55,35 +76,19 @@ HRESULT artwork_t::CreateWICResources(const uint8_t * data, size_t size) noexcep
+ /// </summary>
+ HRESULT artwork_t::CreateWICResources(const std::wstring & filePath) noexcept
+ {
+-    _CriticalSection.Enter();
+-
+-    DeleteDeviceSpecificResources();
+-
+-    _FilePath = filePath;
+-    _Raster.clear();
+-
+-    _FormatConverter.Release();
+-    _Frame.Release();
+-
+-    HRESULT hr = S_OK;
+-
+-    if (_Frame == nullptr)
+-        hr = _WIC.Load(_FilePath, &_Frame);
+-
+-    // Create a format converter to 32bppPBGRA.
+-    if (SUCCEEDED(hr) && (_FormatConverter == nullptr))
+-    {
+-        hr = _WIC.Factory->CreateFormatConverter(&_FormatConverter);
+-
+-        if (SUCCEEDED(hr))
+-            hr = _FormatConverter->Initialize(_Frame, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom);
+-    }
+-
+-    SetStatus(Initialized);
+-
+-    _CriticalSection.Leave();
+-
+-    return S_OK;
++    try {
++        std::ifstream file(std::filesystem::path(filePath), std::ios::binary | std::ios::ate);
++        const auto length = file ? file.tellg() : std::streampos(-1);
++        if (length <= 0 || length > static_cast<std::streamoff>(MaxArtworkBytes)) {
++            DeleteWICResources(); return E_INVALIDARG;
++        }
++        std::vector<uint8_t> data(static_cast<size_t>(length));
++        file.seekg(0);
++        if (!file.read(reinterpret_cast<char *>(data.data()), static_cast<std::streamsize>(data.size()))) {
++            DeleteWICResources(); return E_FAIL;
++        }
++        return CreateWICResources(data.data(), data.size());
++    } catch (...) { DeleteWICResources(); return E_OUTOFMEMORY; }
+ }
+ 
+ /// <summary>
+@@ -96,7 +101,12 @@ HRESULT artwork_t::DeleteWICResources() noexcept
+     DeleteDeviceSpecificResources();
+ 
+     _FormatConverter.Release();
++    _PaletteSource.Release();
+     _Frame.Release();
++    _OriginalSize = D2D1::SizeF();
++    _SourceEdge = _DisplayEdge = 0;
++    _CachedPalette.clear();
++    _CachedColorCount = 0;
+ 
+     _FilePath.clear();
+ 
+@@ -116,48 +126,32 @@ HRESULT artwork_t::DeleteWICResources() noexcept
+ /// </summary>
+ HRESULT artwork_t::GetColors(std::vector<D2D1_COLOR_F> & colors, uint32_t colorCount, FLOAT lightnessThreshold, FLOAT transparencyThreshold) noexcept
+ {
+-    HRESULT hr = E_FAIL;
+-
+-    _CriticalSection.Enter();
+-
+-    if (_FormatConverter != nullptr)
+-    {
+-        UINT Width = 0, Height = 0;
+-
+-        hr = _FormatConverter->GetSize(&Width, &Height);
+-
+-        std::vector<ColorThief::color_t> Palette;
+-
+-        if (SUCCEEDED(hr))
+-        {
+-            uint32_t Quality = std::clamp((Width * Height * ColorThief::DefaultQuality) / (640 * 480), 1U, 16U); // Reference: 640 x 480 => Quality = 10
+-
+-            hr = ColorThief::GetPalette(_FormatConverter, Palette, colorCount, Quality, true, (uint8_t) (lightnessThreshold * 255.f), (uint8_t) (transparencyThreshold * 255.f));
++    artwork_lock_t lock(_CriticalSection);
++    try {
++        if (!std::isfinite(lightnessThreshold) || !std::isfinite(transparencyThreshold)) return E_INVALIDARG;
++        lightnessThreshold = std::clamp(lightnessThreshold, 0.f, 1.f);
++        transparencyThreshold = std::clamp(transparencyThreshold, 0.f, 1.f);
++        colorCount = std::clamp(colorCount, 2U, 256U);
++        if (_CachedPalette.empty() || _CachedColorCount != colorCount ||
++            _CachedLightness != lightnessThreshold || _CachedTransparency != transparencyThreshold) {
++            std::vector<ColorThief::color_t> palette;
++            HRESULT hr = _PaletteSource ? ColorThief::GetPalette(_PaletteSource, palette,
++                colorCount, 1U, true, static_cast<uint8_t>(lightnessThreshold * 255.f),
++                static_cast<uint8_t>(transparencyThreshold * 255.f)) : S_OK;
++            if (FAILED(hr)) return hr;
++            std::vector<D2D1_COLOR_F> converted;
++            converted.reserve(std::max(size_t(1), palette.size()));
++            for (const auto & p : palette) converted.push_back(D2D1::ColorF(p[0] / 255.f, p[1] / 255.f, p[2] / 255.f));
++            if (converted.empty()) converted.push_back(D2D1::ColorF(0.5f, 0.5f, 0.5f));
++            _CachedPalette.swap(converted);
++            _CachedColorCount = colorCount;
++            _CachedLightness = lightnessThreshold;
++            _CachedTransparency = transparencyThreshold;
+         }
+-
+-        // Convert to Direct2D colors.
+-        if (SUCCEEDED(hr))
+-        {
+-            size_t i = 0;
+-
+-            colors.resize(Palette.size());
+-
+-            for (const auto & p : Palette)
+-                colors[i++] = D2D1::ColorF(p[0] / 255.f, p[1] / 255.f, p[2] / 255.f);
+-        }
+-    }
+-    else
+-    {
+-        colors.clear();
+-
+-        colors.push_back(D2D1::ColorF(1.f, 0.f, 0.f));
+-    }
+-
+-    SetStatus(GotColors);
+-
+-    _CriticalSection.Leave();
+-
+-    return hr;
++        colors = _CachedPalette;
++        SetStatus(GotColors);
++        return S_OK;
++    } catch (...) { return E_OUTOFMEMORY; }
+ }
+ 
+ /// <summary>
+@@ -192,7 +186,7 @@ void artwork_t::AdjustRect(_In_ const FitMode fitMode, _Inout_ D2D1_RECT_F & rec
+ 
+     FLOAT Scalar = 1.f;
+ 
+-    D2D1_SIZE_F Size = _Bitmap->GetSize();
++    D2D1_SIZE_F Size = this->Size();
+ 
+     if (fitMode != FitMode::Fill)
+     {
+@@ -229,15 +223,30 @@ HRESULT artwork_t::CreateDeviceSpecificResources(ID2D1DeviceContext * deviceCont
+ {
+     _CriticalSection.Enter();
+ 
+-    HRESULT hr = (_FormatConverter != nullptr) ? S_OK : E_FAIL;
++    HRESULT hr = (_Frame != nullptr) ? S_OK : E_FAIL;
+ 
+     // Create a Direct2D bitmap from the WIC bitmap source.
++    if (NeedsResolutionUpgrade(deviceContext)) DeleteDeviceSpecificResources();
+     if (SUCCEEDED(hr) && (_Bitmap == nullptr))
+     {
++        // Sample at the display's actual size; retain intrinsic dimensions for
++        // fit modes, and avoid a full 5000px raster for a small background.
++        _FormatConverter.Release();
++        CComPtr<IWICBitmapSource> displaySource;
++        const auto pixels = deviceContext->GetPixelSize();
++        const auto edge = std::min(_SourceEdge, std::max(2048U, std::max(pixels.width, pixels.height)));
++        hr = ScaledSource(_Frame, edge, &displaySource);
++        if (SUCCEEDED(hr)) hr = _WIC.Factory->CreateFormatConverter(&_FormatConverter);
++        if (SUCCEEDED(hr)) hr = _FormatConverter->Initialize(displaySource, GUID_WICPixelFormat32bppPBGRA,
++            WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom);
++        if (FAILED(hr)) { _CriticalSection.Leave(); return hr; }
+         hr = deviceContext->CreateBitmapFromWicBitmap(_FormatConverter, nullptr, &_Bitmap);
+ 
+         if (SUCCEEDED(hr))
++        {
++            _DisplayEdge = edge;
+             SetStatus(GotBitmap);
++        }
+     }
+ 
+     _CriticalSection.Leave();
+@@ -245,6 +254,14 @@ HRESULT artwork_t::CreateDeviceSpecificResources(ID2D1DeviceContext * deviceCont
+     return hr;
+ }
+ 
++bool artwork_t::NeedsResolutionUpgrade(ID2D1DeviceContext * deviceContext) const noexcept
++{
++    artwork_lock_t lock(_CriticalSection);
++    if (!_Bitmap || !deviceContext || !_SourceEdge) return false;
++    const auto pixels = deviceContext->GetPixelSize();
++    return std::min(_SourceEdge, std::max(2048U, std::max(pixels.width, pixels.height))) > _DisplayEdge;
++}
++
+ /// <summary>
+ /// Releases the device specific resources.
+ /// </summary>
+@@ -253,6 +270,7 @@ void artwork_t::DeleteDeviceSpecificResources() noexcept
+     _CriticalSection.Enter();
+ 
+     _Bitmap.Release();
++    _DisplayEdge = 0;
+ 
+     SetStatus(Initialized);
+ 
+diff --git a/Visuals/Artwork.h b/Visuals/Artwork.h
+index f6bc9cd..8aa97b7 100644
+--- a/Visuals/Artwork.h
++++ b/Visuals/Artwork.h
+@@ -33,7 +33,12 @@ public:
+         DeleteWICResources();
+     }
+ 
+-    D2D1_SIZE_F Size() const noexcept { return (_Bitmap != nullptr) ? _Bitmap->GetSize() : D2D1::SizeF(); }
++    D2D1_SIZE_F Size() const noexcept {
++        _CriticalSection.Enter();
++        const auto size = _OriginalSize;
++        _CriticalSection.Leave();
++        return size;
++    }
+ 
+     void Render(ID2D1DeviceContext * deviceContext, const D2D1_RECT_F & rect, const state_t * state) noexcept;
+ 
+@@ -44,6 +49,7 @@ public:
+     HRESULT GetColors(std::vector<D2D1_COLOR_F> & colors, uint32_t colorCount, FLOAT lightnessThreshold, FLOAT transparencyThreshold) noexcept;
+ 
+     HRESULT CreateDeviceSpecificResources(ID2D1DeviceContext * deviceContext) noexcept;
++    bool NeedsResolutionUpgrade(ID2D1DeviceContext * deviceContext) const noexcept;
+     void DeleteDeviceSpecificResources() noexcept;
+ 
+     HRESULT CreateWICResources(const uint8_t * data, size_t size) noexcept;
+@@ -74,14 +80,22 @@ private:
+     }
+ 
+ private:
+-    msc::critical_section_t _CriticalSection;
++    mutable msc::critical_section_t _CriticalSection;
+ 
+     std::vector<uint8_t> _Raster;
+     std::wstring _FilePath;
+ 
+     CComPtr<IWICBitmapFrameDecode> _Frame;
+     CComPtr<IWICFormatConverter> _FormatConverter;
++    CComPtr<IWICBitmapSource> _PaletteSource;
+     CComPtr<ID2D1Bitmap> _Bitmap;
++    D2D1_SIZE_F _OriginalSize{};
++    UINT _SourceEdge = 0;
++    UINT _DisplayEdge = 0;
++    std::vector<D2D1_COLOR_F> _CachedPalette;
++    uint32_t _CachedColorCount = 0;
++    FLOAT _CachedLightness = -1.f;
++    FLOAT _CachedTransparency = -1.f;
+ 
+     Status _Status;
+ };
+diff --git a/UIElement.cpp b/UIElement.cpp
+index 4486cd8..20007e4 100644
+--- a/UIElement.cpp
++++ b/UIElement.cpp
+@@ -747,7 +747,8 @@ void uielement_t::on_playback_stop(play_control::t_stop_reason reason)
+     _PlaybackStopped.store(true, std::memory_order_release);
+     _PlaybackPaused.store(false, std::memory_order_release);
+ 
+-    _Artwork.DeleteWICResources();
++    if (reason != play_control::stop_reason_starting_another)
++        _Artwork.DeleteWICResources();
+ 
+     _UIState._SampleRate = 0;
+ 
+diff --git a/UIElementRendering.cpp b/UIElementRendering.cpp
+index 5875607..298807b 100644
+--- a/UIElementRendering.cpp
++++ b/UIElementRendering.cpp
+@@ -667,7 +667,7 @@ HRESULT uielement_t::CreateDeviceSpecificResources() noexcept
+     }
+ 
+     // Create the background bitmap from the artwork.
+-    if (SUCCEEDED(hr) && (_Artwork.Bitmap() == nullptr))
++    if (SUCCEEDED(hr) && ((_Artwork.Bitmap() == nullptr) || _Artwork.NeedsResolutionUpgrade(_DeviceContext)))
+     {
+         hr = _Artwork.CreateDeviceSpecificResources(_DeviceContext);
+ 

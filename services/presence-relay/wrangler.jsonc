@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "goden-presence-relay",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-16",
+  "workers_dev": true,
+  "observability": { "enabled": true },
+  "durable_objects": {
+    "bindings": [
+      { "name": "COVER_SESSIONS", "class_name": "CoverSession" },
+      { "name": "RATE_LIMITERS", "class_name": "RateLimiter" }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["CoverSession", "RateLimiter"]
+    }
+  ]
+}

@@ -1,0 +1,573 @@
+{
+  "schema": "goden.vendored-files.v1",
+  "files": [
+    {
+      "path": "vendor/pfc/alloc.h",
+      "sha256": "91dabcad998a62a3e7a2c4afa61f5d260fe02c920fe6fde78ce0f6f1376fadaf"
+    },
+    {
+      "path": "vendor/pfc/array.h",
+      "sha256": "03ca0da3f0e2098f1adc0bf187d5f5f2c026842fdf222374a9a4b2bd17a6ee80"
+    },
+    {
+      "path": "vendor/pfc/audio_math.cpp",
+      "sha256": "5937aa2e030f083d3bad8e0ebb902903ac7fdfd2d8ab965cac9bfeb3ae62daf7"
+    },
+    {
+      "path": "vendor/pfc/audio_sample.cpp",
+      "sha256": "531eef59f8c71758e77b9ad3f0da28599e922001473d9d0c2a61afe47729018a"
+    },
+    {
+      "path": "vendor/pfc/audio_sample.h",
+      "sha256": "5b791c402d76b9aeb4bff0124f1649bb2d51385e9bda538d719eb1f6ee39b784"
+    },
+    {
+      "path": "vendor/pfc/autoref.h",
+      "sha256": "014df86760960308421e2c9cc6e5b3cbe35aa311f214ae321f6953d55c3d62ef"
+    },
+    {
+      "path": "vendor/pfc/avltree.h",
+      "sha256": "cfa75ad2fbfcce87abcd0c7a7fb4b313405dbc4b3d33a8e9a304cce14f5498fc"
+    },
+    {
+      "path": "vendor/pfc/base64.cpp",
+      "sha256": "d63ade89582fe365da77225956615070806267a9a5cf9dd951d4d36e11496276"
+    },
+    {
+      "path": "vendor/pfc/base64.h",
+      "sha256": "126001e2272a37166fe4afc85aa5157053c3ec6d8019b4770769f2194cc66bfb"
+    },
+    {
+      "path": "vendor/pfc/bigmem.cpp",
+      "sha256": "dd1c0be3d5b11626b12795c1553ad6e8db8d372a16799ba6dc8dca08ce95ab4c"
+    },
+    {
+      "path": "vendor/pfc/bigmem.h",
+      "sha256": "29b16638d456aa985c48bfbe7d3e078f671628d250d667ae619c76a2692a6765"
+    },
+    {
+      "path": "vendor/pfc/binary_search.h",
+      "sha256": "ee6be54cd3b191cb9dbb0f50509402c886fc815e3749f5033d9c2a29b10bdb25"
+    },
+    {
+      "path": "vendor/pfc/bit_array.cpp",
+      "sha256": "80398e0de21fd621ecf53e7c2bfa27538f0352301f4d38a19ce6bc9348fc38b1"
+    },
+    {
+      "path": "vendor/pfc/bit_array.h",
+      "sha256": "e34ff352ce902a638141a8b4b8f33d32c97e1a4a276c9cc96adde1e514709d4f"
+    },
+    {
+      "path": "vendor/pfc/bit_array_impl.h",
+      "sha256": "8186f6cd318de6c73232b8819afb30abbc84640e3d911d1d1027ee17511a370c"
+    },
+    {
+      "path": "vendor/pfc/bit_array_impl_part2.h",
+      "sha256": "7e1e07156277938b660878fdcbd6aefa5f344329878b5aedd619ab69c7c2f336"
+    },
+    {
+      "path": "vendor/pfc/bsearch.cpp",
+      "sha256": "67dada51fe2d68929d02bb23da49ebfbeed79b42f0a4f81ebe5305ab6e0b7b98"
+    },
+    {
+      "path": "vendor/pfc/bsearch.h",
+      "sha256": "4c9f63f0db5c589f8776a7a2134db8008fabaa84ef723a38999bd5e7a76b7114"
+    },
+    {
+      "path": "vendor/pfc/bsearch_inline.h",
+      "sha256": "41528e603d20a1e55cdf5060b3cb6f90eab9abed52bd9d111467c88c4dc2f0a4"
+    },
+    {
+      "path": "vendor/pfc/byte_order.h",
+      "sha256": "b1e3fd521c5762b5a0dee7ddffe7f7b5084f9c8af9be429710c3c8458b539842"
+    },
+    {
+      "path": "vendor/pfc/CFObject.h",
+      "sha256": "b6868025f323aee9898cb4f21febe6dd468e1717cc44d97393906a90dc2cf5a8"
+    },
+    {
+      "path": "vendor/pfc/chain_list_v2.h",
+      "sha256": "bc9f6faa03cf2374cb120d47caab919e3d77d6926d15df02c3da11fe2dba551a"
+    },
+    {
+      "path": "vendor/pfc/charDownConvert.cpp",
+      "sha256": "dae0883e3f9d15699e97a61070b725ea58b19df9746390163d3c310f9229937a"
+    },
+    {
+      "path": "vendor/pfc/charDownConvert.h",
+      "sha256": "1c1e6990a5ada596fc317f2e8c1ffc57863e7ebf14cc8cd54f4217cddb08762b"
+    },
+    {
+      "path": "vendor/pfc/cmd_thread.h",
+      "sha256": "cca21c88e7de051f609c7747a1fa8a5dce367902621b431eaa4db899f5362584"
+    },
+    {
+      "path": "vendor/pfc/com_ptr_t.h",
+      "sha256": "43b0b1b83c4570823ed96d62d9c353afc033e1f5bbdb727e464481a670f83738"
+    },
+    {
+      "path": "vendor/pfc/cpuid.cpp",
+      "sha256": "9de3ff339d6058daff0d4c7cd206a783ac16afeaae4eb02007998f6285e6df38"
+    },
+    {
+      "path": "vendor/pfc/cpuid.h",
+      "sha256": "22200434c8a9e8875b9dacd9a79f3291e77cce98ab9a9da843f843587164b631"
+    },
+    {
+      "path": "vendor/pfc/crashWithMessage.cpp",
+      "sha256": "ec9783c8f4ea0580446ee59c5058263069fc33ee572755564de9ccc9e230b6bf"
+    },
+    {
+      "path": "vendor/pfc/debug-x64-v142/pfc/pfc.lib.recipe",
+      "sha256": "e68192ea7180a53ff41b201936b074c7189f62533bd0b6a3087354b3df6ed73c"
+    },
+    {
+      "path": "vendor/pfc/debug-x64-v142/pfc/pfc.pch",
+      "sha256": "c3e0cba5b79c5e871464499262091e20a57d838356e44e75db1966e675c7e7b3"
+    },
+    {
+      "path": "vendor/pfc/debug-x64-v142/pfc/pfc.tlog/pfc.lastbuildstate",
+      "sha256": "e56e029ab0e20f6bb0a669a83e01b0ef37c6a3c40499a2aa232e74192261e366"
+    },
+    {
+      "path": "vendor/pfc/debug-x64-v142/pfc/pfc.vcxproj.FileListAbsolute.txt",
+      "sha256": "633446235a08254018eb7d31b4ea2b2cba2f932cc36f7d9a50f6212c07a23596"
+    },
+    {
+      "path": "vendor/pfc/debug.h",
+      "sha256": "639c9e20dc650e7aa1d846ab9351abdec5deb8299bdfc7a6bcd61e2c642c8296"
+    },
+    {
+      "path": "vendor/pfc/event.h",
+      "sha256": "8441bdf89484fa6ad33437736e56df6276b48dce3698344abc30993a6265ebce"
+    },
+    {
+      "path": "vendor/pfc/event_std.h",
+      "sha256": "053002f9cfcdfdbd076650095560c0beb013774ca2bd3aa7910b7db12c819873"
+    },
+    {
+      "path": "vendor/pfc/filehandle.cpp",
+      "sha256": "bf46f0ad7479c2b9a43f172c5815d17a66ac86f66fd1b0d67cb7dc8895ee946e"
+    },
+    {
+      "path": "vendor/pfc/filehandle.h",
+      "sha256": "48213359f1e3cc4a8fc440f30122196a64ff806c67930c7e047aaca49df09bf3"
+    },
+    {
+      "path": "vendor/pfc/filetimetools.cpp",
+      "sha256": "12b9a5b4942824ac3527664a514e3b0c6ea48dfdfecadc146f3f9e677975752a"
+    },
+    {
+      "path": "vendor/pfc/filetimetools.h",
+      "sha256": "3976e3efc2959cba3fed8840a53a941cc48433665b0d394c0210fc8f5cdc36aa"
+    },
+    {
+      "path": "vendor/pfc/fixed_map.h",
+      "sha256": "fea813d9848cc5c8257db3a0803f237f43cd76acfa7a2cfd70819e2a97db8683"
+    },
+    {
+      "path": "vendor/pfc/fpu.h",
+      "sha256": "d754e03e3caccb44efd5436c61235e40f355e69ecdd40a5543846af1db0e1ea2"
+    },
+    {
+      "path": "vendor/pfc/guid.cpp",
+      "sha256": "5bd91d9c57c119cd924901d1ed9eda44372c15339163e70641df809fab03443e"
+    },
+    {
+      "path": "vendor/pfc/guid.h",
+      "sha256": "15e39432bd94f3cbffeede26fea01a4eeb285c78e8cfb2b9737909fbd70c7d72"
+    },
+    {
+      "path": "vendor/pfc/instance_tracker_legacy.h",
+      "sha256": "0fd1c1682b9df8c9195f2668f7e7a4e3c669203706932a578545e7badf1047dd"
+    },
+    {
+      "path": "vendor/pfc/int_types.h",
+      "sha256": "494e54c6b7d98a7054b1adfc3b28e69b5fd866d00892e6670f462b02146e41e3"
+    },
+    {
+      "path": "vendor/pfc/iterators.h",
+      "sha256": "790688259eed702a133dfbbab84e4bbd7224a6d5737bda38251602ce0017492b"
+    },
+    {
+      "path": "vendor/pfc/killswitch.h",
+      "sha256": "7050e8b76e3fdc01ba58cfdeb8c31d3fd4886db7944e7f36234c6f491c782b6a"
+    },
+    {
+      "path": "vendor/pfc/list.h",
+      "sha256": "e417fbf380d0cb6f76a375120e21bd8c46ff84d74663f5308e7ec65d366cea6d"
+    },
+    {
+      "path": "vendor/pfc/lockless.h",
+      "sha256": "2ff9c578593c693a4e6ef0a4f33a1848110ebda1b6de4ef6616377372d6bd3b4"
+    },
+    {
+      "path": "vendor/pfc/map.h",
+      "sha256": "131ed1d2deabb34d9cf20b42a49f9b5563efbc52bd75dfa48fbc51821f489515"
+    },
+    {
+      "path": "vendor/pfc/mem_block.h",
+      "sha256": "a90c2b186f6d64613990ffe5df63e830bdab78478dbe9d1edba508d8cd17d59d"
+    },
+    {
+      "path": "vendor/pfc/memalign.h",
+      "sha256": "ed9f9d1ae87ca9107b22270f4277a0610c8ba33004c20d9dff8dd02b749a3f64"
+    },
+    {
+      "path": "vendor/pfc/nix-objects.cpp",
+      "sha256": "7c34fe08833e239ec976e3a8063b56c965829e22ab6e262e44f5e8b783cb88c3"
+    },
+    {
+      "path": "vendor/pfc/nix-objects.h",
+      "sha256": "a5a825b92cdabe63808bbe7ad1fbd4fef5456e8ce7484820c77908ca77071a20"
+    },
+    {
+      "path": "vendor/pfc/notifyList.h",
+      "sha256": "668ae82cb111614d7e14e8d8dc57e7cd954cdc031d72dfb9a546a501843c1a2c"
+    },
+    {
+      "path": "vendor/pfc/obj-c.mm",
+      "sha256": "41a8a879be18d9dbf538ecb2df7fa1bf5073512903effaadae53ffbca1f37590"
+    },
+    {
+      "path": "vendor/pfc/once.h",
+      "sha256": "6d14f44b1dea7306e53e0491a34e572b8bd183cbf0947b11517cf0d1078c6fd4"
+    },
+    {
+      "path": "vendor/pfc/order_helper.h",
+      "sha256": "40bf2be3ed2b21f67f9a31166400eab8b7581af35d3889f2bb7cd85a7430176a"
+    },
+    {
+      "path": "vendor/pfc/other.cpp",
+      "sha256": "d1f4dd9fd7c835fec585d7f933c88c30c29a893c2c63c11cfec05520a6a39066"
+    },
+    {
+      "path": "vendor/pfc/other.h",
+      "sha256": "a9295b66a4439cc298c52e71a264b91d58b19e173b23492b9f259766275e1039"
+    },
+    {
+      "path": "vendor/pfc/pathUtils.cpp",
+      "sha256": "e91a8175b178d075a4dd866d3aba631ccdd05e4e1ddf9b5776044b0be9dce1d9"
+    },
+    {
+      "path": "vendor/pfc/pathUtils.h",
+      "sha256": "3e002613e60730b416046a040a578916b30257020000ccc1ac94201850c80063"
+    },
+    {
+      "path": "vendor/pfc/pfc-fb2k-hooks.cpp",
+      "sha256": "78e2e15536bfd7e54b90a8012a4617676f107ce32d32a97d1b71233112668a1d"
+    },
+    {
+      "path": "vendor/pfc/pfc-fb2k-hooks.h",
+      "sha256": "4c065f2742f4217a17fb197d2fc6e7f0ae36384520b3bc3176ac8c06c9a51652"
+    },
+    {
+      "path": "vendor/pfc/pfc-license.txt",
+      "sha256": "23963b0cc6a50e505cbb01cb64cac91a0bd8067eb2410518e5f24deeec51dad4"
+    },
+    {
+      "path": "vendor/pfc/pfc-lite.h",
+      "sha256": "4fc68f6be3c010cdc926f8fd8efaa7890a34708d671013da90a3565e54c9a01d"
+    },
+    {
+      "path": "vendor/pfc/pfc-readme.txt",
+      "sha256": "ea0d550221a710dbaa4e2e2efcccc2cd7bfb114ebbd912a133cd7419af43ca01"
+    },
+    {
+      "path": "vendor/pfc/pfc.h",
+      "sha256": "bdb5ba2b57694f7ff5919d64f31a7b868b54538221aed0307841c1a65fabd944"
+    },
+    {
+      "path": "vendor/pfc/pfc.vcxproj",
+      "sha256": "c190a15e49ea3883161e77ad3764986a9504216ca99b7894f6f6d2817e3a8e59"
+    },
+    {
+      "path": "vendor/pfc/pfc.vcxproj.filters",
+      "sha256": "2ede24de19ee5195cdd053110cd6b0bde89dc5802ff6858fcf180e330811cce8"
+    },
+    {
+      "path": "vendor/pfc/pfc.xcodeproj/project.pbxproj",
+      "sha256": "9d70ff9a3cb12db6e03ad8e43acba49522aa7a5c1b7873d714722d20a68fe646"
+    },
+    {
+      "path": "vendor/pfc/platform-objects.h",
+      "sha256": "6e0f1369b9d19bd426c9d9c40908d9593178fd345bc7f3509e2bb6f3b2f3f4c4"
+    },
+    {
+      "path": "vendor/pfc/pocket_char_ops.h",
+      "sha256": "813967ef2dde31ff028345fe4f04f5380439521eaa8c6766c79b23f735792858"
+    },
+    {
+      "path": "vendor/pfc/pool.h",
+      "sha256": "1febc035583e54067bc9ce5acefc23d02f3c46b9ae5bd9c44351bcfe05ce9398"
+    },
+    {
+      "path": "vendor/pfc/pp-winapi.h",
+      "sha256": "1d5e4e825432d753ee668f7d71b0aa2c166cb5c9e8a84ae8f07f854bce783e3e"
+    },
+    {
+      "path": "vendor/pfc/primitives.h",
+      "sha256": "f178ecbf2c3a91d631a97694803a069a058eca20aaf37def8d21c6ba7132a20f"
+    },
+    {
+      "path": "vendor/pfc/primitives_part2.h",
+      "sha256": "fb15cfc7e8e7947f8e95abe9b25f38b1b7b9eea8f1bbc314761831d6fe13db1c"
+    },
+    {
+      "path": "vendor/pfc/printf.cpp",
+      "sha256": "4b9847e4eb88d902ef68b9bf9ff07afa85462d3b2fedf6dd8053e564ec4b9906"
+    },
+    {
+      "path": "vendor/pfc/ptr_list.h",
+      "sha256": "021fe0fdabcab9b616bd7ea71392e783241db37b42d4937cfda9338ddee8ccc2"
+    },
+    {
+      "path": "vendor/pfc/ptrholder.h",
+      "sha256": "8677799d987b5719c23a06b55956c82aeabaed2154fd07baedadecaf8b04a276"
+    },
+    {
+      "path": "vendor/pfc/rcptr.h",
+      "sha256": "2e49bc4dd032ccd2b82c491e4f66307331d679075937002fc65a422434151f3a"
+    },
+    {
+      "path": "vendor/pfc/README.md",
+      "sha256": "0ec62441d3ec7f9eeb329d5955d0447d485626c655896bd9ddcb5e1be0d9bed6"
+    },
+    {
+      "path": "vendor/pfc/ref_counter.h",
+      "sha256": "88560278e14f8ed089f77e8113adba63445868adcf659679d0f03a8561c88dd7"
+    },
+    {
+      "path": "vendor/pfc/release-x64-v142/pfc/pfc.lib.recipe",
+      "sha256": "e68192ea7180a53ff41b201936b074c7189f62533bd0b6a3087354b3df6ed73c"
+    },
+    {
+      "path": "vendor/pfc/release-x64-v142/pfc/pfc.pch",
+      "sha256": "848db81d55456c96e2410b81d6902bf60d2f86b88e3975653c7e05bd71da776b"
+    },
+    {
+      "path": "vendor/pfc/release-x64-v142/pfc/pfc.tlog/pfc.lastbuildstate",
+      "sha256": "3e3e1fee02a70984126561ffabe3c3c9f166484a1ea5642b2738dcbb7c0200e7"
+    },
+    {
+      "path": "vendor/pfc/release-x64-v142/pfc/pfc.vcxproj.FileListAbsolute.txt",
+      "sha256": "18b4ce0f19f05f13ec079e58e0454cb5e64f27c37ebbf210446076b6b1dbb963"
+    },
+    {
+      "path": "vendor/pfc/release-x64-v143/pfc/pfc.lib.recipe",
+      "sha256": "e68192ea7180a53ff41b201936b074c7189f62533bd0b6a3087354b3df6ed73c"
+    },
+    {
+      "path": "vendor/pfc/release-x64-v143/pfc/pfc.pch",
+      "sha256": "3f17dee09239ff188af398025ff9e52a42f9f12e2705e4ba7caf7763001b3dd2"
+    },
+    {
+      "path": "vendor/pfc/release-x64-v143/pfc/pfc.tlog/pfc.lastbuildstate",
+      "sha256": "1411f061dab70c81fc0cd1c545c17833c2bb0460f937522327e551f1e93a0d8e"
+    },
+    {
+      "path": "vendor/pfc/release-x64-v143/pfc/pfc.vcxproj.FileListAbsolute.txt",
+      "sha256": "2d234a12c86ee3012d0c23db17308e4ab58c05eda285bd70f8ea4e6e9ae6db60"
+    },
+    {
+      "path": "vendor/pfc/selftest.cpp",
+      "sha256": "03e0ab07aee89a9f063d346d32cd29301f655ea25d9b962f87e2a670b2750b4a"
+    },
+    {
+      "path": "vendor/pfc/SmartStrStr-table.h",
+      "sha256": "c5df665b5c076f7869a2e2e1806f94af113dc9a4494fa3ed883a39ffe016b677"
+    },
+    {
+      "path": "vendor/pfc/SmartStrStr-twoCharMappings.h",
+      "sha256": "e6daf54643f8297a36c41d8f7dd83e60553163644cd5f3c655b5b5b1e4e7dae0"
+    },
+    {
+      "path": "vendor/pfc/SmartStrStr.cpp",
+      "sha256": "09e0374130cadfd62efe012e3dd01541c4fcdbbf9985099caa7e0815595d55a3"
+    },
+    {
+      "path": "vendor/pfc/SmartStrStr.h",
+      "sha256": "13b2354fafd01ab8643e46ddf836f7ed0ee2d64f3f9cb39b8e859a23a88c9e11"
+    },
+    {
+      "path": "vendor/pfc/sort.cpp",
+      "sha256": "fb8d36a7fe7544281dafb6d8cc68e26b36ddc19f76c0e28a4f17e8c5f9a650d8"
+    },
+    {
+      "path": "vendor/pfc/sort.h",
+      "sha256": "71f729f6700f9b5473520e442483966d048a2c0b0236aefac934a3705eb71fdf"
+    },
+    {
+      "path": "vendor/pfc/sort2.h",
+      "sha256": "b09448f4ea0d0a4dd20f1683f520fa9fbc7aec4d4df76b841a55ff0ca2627bd6"
+    },
+    {
+      "path": "vendor/pfc/sortstring.h",
+      "sha256": "b5ee2fd59f55438e17a9b9173f4b3f2a4dba62a9c27cc3582c91daa3568c28ca"
+    },
+    {
+      "path": "vendor/pfc/splitString.h",
+      "sha256": "f345527c34527ca05379e77b3255fd5994d9965a6fee542dc7ce306e53399047"
+    },
+    {
+      "path": "vendor/pfc/splitString2.cpp",
+      "sha256": "99aadcc0f420ecff986537beb1a8968bdd40f9c9a65794b232b0ec8f5237bea4"
+    },
+    {
+      "path": "vendor/pfc/splitString2.h",
+      "sha256": "e86c9b826b22eacbcf32b1389bc1d5f3caca8aa74ede3f0496277a8a07de030f"
+    },
+    {
+      "path": "vendor/pfc/stdafx.cpp",
+      "sha256": "10261dec1640aecd489897f68e5bbc8aebdaac2d7f2e3a5af2ef24e57a579e95"
+    },
+    {
+      "path": "vendor/pfc/stdsort.h",
+      "sha256": "2fdfad49a7ab59de2d07aa141f9b4248ba924a29ec5768429b7d475e8db92950"
+    },
+    {
+      "path": "vendor/pfc/string-compare.cpp",
+      "sha256": "d4fc0a8de898fe34199f6f60439245d14bba01e9efc69b28c259542991a35fea"
+    },
+    {
+      "path": "vendor/pfc/string-compare.h",
+      "sha256": "e011a9b1cd263c221b654be07ae7d5b2c3ec987e023116e6bde9be57dc9d800d"
+    },
+    {
+      "path": "vendor/pfc/string-conv-lite.cpp",
+      "sha256": "08d85d6934b1633084a41c061b5b8ad43780902780809e5648a801c8754c3169"
+    },
+    {
+      "path": "vendor/pfc/string-conv-lite.h",
+      "sha256": "cc0f2dc198792d884aed982e0bcd95a90039f22b0d80c04869033137823b6177"
+    },
+    {
+      "path": "vendor/pfc/string-interface.h",
+      "sha256": "716246cdca013afdf4f1912cb8830394949204e31d5749a157bd4cb15fe54edd"
+    },
+    {
+      "path": "vendor/pfc/string-lite.cpp",
+      "sha256": "f047b919b5a3feea07f9aa1ae5aa312ae061ebbb20db77219230a3134f977144"
+    },
+    {
+      "path": "vendor/pfc/string-lite.h",
+      "sha256": "913b20c5ed4feff3fedc9efb493d32b16730e7d0576615f250ce05892bc76809"
+    },
+    {
+      "path": "vendor/pfc/string-part.h",
+      "sha256": "cf7da6e85b44bb038584068a7bf0eaaed38aece1d6ad1f2629d11ab89a3b82b1"
+    },
+    {
+      "path": "vendor/pfc/string_base.cpp",
+      "sha256": "6fb93bc7e352f82668b69173b23a63641aae6395651fa6efc57965bc0898dd98"
+    },
+    {
+      "path": "vendor/pfc/string_base.h",
+      "sha256": "9d23a108c5b35c78479e4a5ca070317074028b86c79959898dead2b7952ef4ea"
+    },
+    {
+      "path": "vendor/pfc/string_conv.cpp",
+      "sha256": "643e3b9529724d4ae860ba0bea3d541e0523ffbc8eec204128a43940cfa883f9"
+    },
+    {
+      "path": "vendor/pfc/string_conv.h",
+      "sha256": "842644091d665099cfca798e12195059a70583a5ddf614e0b8d78636c3f9132c"
+    },
+    {
+      "path": "vendor/pfc/string_list.h",
+      "sha256": "6dff8325c17947977a39b3e1fbc9118ff2e3a122e246971da474d49fb79044f0"
+    },
+    {
+      "path": "vendor/pfc/string_simple.h",
+      "sha256": "37b8ed780a8f325f4199e89fa2c8f8548a6980a78b738c2a457c80bcee687d23"
+    },
+    {
+      "path": "vendor/pfc/suppress_fb2k_hooks.h",
+      "sha256": "d7c63ea4ff9daacd90d03af6039efaf7917b9b8b8695267fb70826cb3540114f"
+    },
+    {
+      "path": "vendor/pfc/syncd_storage.h",
+      "sha256": "1abdaf59951d8be1e1eed7dcbdbc69a576b07f669420c1ca53e7ccb9b244fa84"
+    },
+    {
+      "path": "vendor/pfc/synchro.h",
+      "sha256": "8659ba21d1693340b520e38785cd96202586efe3a5d71e5998778a6dfa725948"
+    },
+    {
+      "path": "vendor/pfc/synchro_nix.cpp",
+      "sha256": "2aa62e29a30a95f8b907ae11d70fc735cbb598ab91b962fb7c71a14fa4660cc7"
+    },
+    {
+      "path": "vendor/pfc/synchro_nix.h",
+      "sha256": "e1ca623299d561da5697de897048429d27e883922e3077634992737418ea847f"
+    },
+    {
+      "path": "vendor/pfc/synchro_win.h",
+      "sha256": "cce1920d4fd4ef33e503bb1370d38fe78aee444476c7ab05cda2e00de4d51a40"
+    },
+    {
+      "path": "vendor/pfc/targetver.h",
+      "sha256": "b133821d89e7df09d8217f42b31017724bebcb1e1498e103157663079ab98682"
+    },
+    {
+      "path": "vendor/pfc/threads.cpp",
+      "sha256": "486d65c4ef830e6118e0bc32321c745430ba45734755ad9c260088d6320b78c0"
+    },
+    {
+      "path": "vendor/pfc/threads.h",
+      "sha256": "8905794d4a37ea13f44c6bc426eb5e555f950809ccca016b5f4c4119aafee272"
+    },
+    {
+      "path": "vendor/pfc/threadSafeObj.h",
+      "sha256": "3a0b689ce8bb11996be9b9619be8d57fa4b6ac3044033070c949e7ce766c9784"
+    },
+    {
+      "path": "vendor/pfc/timers.cpp",
+      "sha256": "d93c352efdfd730a3b1001784e19ebd74a78e6b5d23041307e8f18d9b03d830f"
+    },
+    {
+      "path": "vendor/pfc/timers.h",
+      "sha256": "93f7b15a9433a8cb72db07b6f34b3d3fb6775eea667012a9e7d62d939a72cd42"
+    },
+    {
+      "path": "vendor/pfc/traits.h",
+      "sha256": "c6e3d7cf7c689645a1090cd453c2de33bc2d4dbc2836d48e18be144446b6fd8a"
+    },
+    {
+      "path": "vendor/pfc/unicode-normalize.cpp",
+      "sha256": "60560d09c913b4c58d8d71a642303603afdc51fa61519866aaca3c5cc6a4a397"
+    },
+    {
+      "path": "vendor/pfc/unicode-normalize.h",
+      "sha256": "b73eb7080c1135170f521dab2ba2c4780704299adb7ff5c30db100af293b0ab8"
+    },
+    {
+      "path": "vendor/pfc/utf8.cpp",
+      "sha256": "e27cb12530d8330e29c6ebe2b7064463e52eebfc51351c6b5bce212174925207"
+    },
+    {
+      "path": "vendor/pfc/wait_queue.h",
+      "sha256": "09b0aa0236ea42781c0d98cc64fb4304f1b3ff02032520cb714e342c7d133454"
+    },
+    {
+      "path": "vendor/pfc/weakRef.h",
+      "sha256": "5ec6e6fdd412b85f107bfc57e1e8252492b340a9e3141c168652c44cb8c6aff5"
+    },
+    {
+      "path": "vendor/pfc/wildcard.cpp",
+      "sha256": "f7cf8844c41ab4ac94c3110ed076029b6ca232882f19a52c54303e0a3127b532"
+    },
+    {
+      "path": "vendor/pfc/wildcard.h",
+      "sha256": "4b348018e2cc26ba859d63711a38ab44db63af2c38949555414934446f971842"
+    },
+    {
+      "path": "vendor/pfc/win-objects.cpp",
+      "sha256": "4a0bb745c03e57d150c761ac56e13a334348684d6d2770bf8fe101f7d7256df8"
+    },
+    {
+      "path": "vendor/pfc/win-objects.h",
+      "sha256": "f95d4a24db5b28e775092ec5bed2be4d3ab404e50632f58a4c50dc4224546c41"
+    }
+  ]
+}

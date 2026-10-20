@@ -1,0 +1,109 @@
+#pragma once
+
+/// @file boundary_detector.h
+/// @brief Section boundary detection using self-similarity analysis.
+
+#include <vector>
+
+#include "core/audio.h"
+
+namespace sonare {
+
+// Forward declarations
+class MelSpectrogram;
+class Chroma;
+
+/// @brief Configuration for boundary detection.
+struct BoundaryConfig {
+  int n_fft = 2048;            ///< FFT size
+  int hop_length = 512;        ///< Hop length
+  int kernel_size = 64;        ///< Checkerboard kernel size in frames
+  float threshold = 0.3f;      ///< Novelty threshold for boundary detection
+  int n_mfcc = 13;             ///< Number of MFCC coefficients
+  int n_chroma = 12;           ///< Number of chroma bins
+  float peak_distance = 2.0f;  ///< Minimum distance between peaks in seconds
+  bool use_mfcc = true;        ///< Use MFCC features
+  bool use_chroma = true;      ///< Use chroma features
+};
+
+/// @brief Detected boundary event.
+struct Boundary {
+  float time;      ///< Boundary time in seconds (authoritative output)
+  int frame;       ///< Index into the full-resolution analysis grid.
+  float strength;  ///< Boundary strength (novelty score)
+};
+
+/// @brief Boundary detector for finding section transitions.
+/// @details Uses MFCC and chroma features with an exact local checkerboard
+/// novelty calculation. Prefix sums avoid materializing the quadratic
+/// self-similarity matrix.
+class BoundaryDetector {
+ public:
+  /// @brief Constructs boundary detector from audio.
+  /// @param audio Input audio
+  /// @param config Boundary detection configuration
+  explicit BoundaryDetector(const Audio& audio, const BoundaryConfig& config = BoundaryConfig());
+
+  /// @brief Constructs boundary detector from pre-computed features.
+  /// @param mel Pre-computed mel spectrogram
+  /// @param chroma Pre-computed chroma
+  /// @param sr Sample rate
+  /// @param config Boundary detection configuration
+  /// @pre @p mel and @p chroma MUST share the same time base — i.e. both
+  ///      computed with the same hop_length as @p config.hop_length. The two
+  ///      feature streams are combined frame-for-frame (truncated to the
+  ///      shorter), so a hop mismatch silently misaligns MFCC and chroma frames
+  ///      and corrupts the novelty curve. There is no hop metadata on the inputs
+  ///      to verify this, so the caller is responsible for the precondition.
+  BoundaryDetector(const MelSpectrogram& mel, const Chroma& chroma, int sr,
+                   const BoundaryConfig& config = BoundaryConfig());
+
+  /// @brief Returns detected boundaries with timing.
+  const std::vector<Boundary>& boundaries() const { return boundaries_; }
+
+  /// @brief Returns boundary times in seconds.
+  std::vector<float> boundary_times() const;
+
+  /// @brief Returns the novelty curve.
+  const std::vector<float>& novelty_curve() const { return novelty_curve_; }
+
+  /// @brief Returns number of detected boundaries.
+  size_t count() const { return boundaries_.size(); }
+
+  /// @brief Returns sample rate.
+  int sample_rate() const { return sr_; }
+
+  /// @brief Returns hop length.
+  int hop_length() const { return hop_length_; }
+
+ private:
+  void compute_features();
+  /// @brief Combines and L2-normalizes flattened MFCC/chroma features.
+  /// @details Shared by both constructors. Sets n_frames_, n_features_, features_.
+  void combine_features(const std::vector<float>& mfcc_features, int mfcc_frames,
+                        const std::vector<float>& chroma_features, int chroma_frames);
+  void prepare_novelty_prefix();
+  void compute_novelty_curve();
+  void detect_boundaries();
+  float compute_checkerboard_kernel(int center) const;
+
+  std::vector<Boundary> boundaries_;
+  std::vector<float> novelty_curve_;
+  std::vector<float> features_;  // Combined feature matrix
+  std::vector<double> feature_prefix_;  // Prefix sums by frame and feature
+  int n_frames_;
+  int n_features_;
+  int sr_;
+  int hop_length_;
+  BoundaryConfig config_;
+  Audio audio_;
+};
+
+/// @brief Quick boundary detection function.
+/// @param audio Input audio
+/// @param config Boundary detection configuration
+/// @return Vector of boundary times in seconds
+std::vector<float> detect_boundaries(const Audio& audio,
+                                     const BoundaryConfig& config = BoundaryConfig());
+
+}  // namespace sonare

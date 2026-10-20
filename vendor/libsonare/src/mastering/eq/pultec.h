@@ -1,0 +1,91 @@
+#pragma once
+
+/// @file pultec.h
+/// @brief Passive-style program equalizer.
+
+#include <vector>
+
+#include "mastering/eq/parametric.h"
+#include "rt/processor_base.h"
+
+namespace sonare::mastering::eq {
+
+enum class PultecComponentModel {
+  CurveOnly,
+  Eqp1aWdf,
+};
+
+class PultecEq : public rt::ProcessorBase {
+ public:
+  void prepare(double sample_rate, int max_block_size) override;
+  void process(float* const* channels, int num_channels, int num_samples) override;
+  void reset() override;
+
+  void set_low_frequency(float frequency_hz);
+  void set_low_boost(float amount);
+  void set_low_attenuation(float amount);
+  void set_high_boost(float frequency_hz, float amount, float bandwidth = 0.5f);
+  void set_high_attenuation(float frequency_hz, float amount);
+  void set_component_model(PultecComponentModel model);
+  void set_output_drive(float drive);
+  void clear();
+
+  // Automatable parameters (RT-safe: rebuild() recomputes the four EQ-band
+  // biquad coefficients in place without resetting filter state; output drive
+  // touches no biquad state). The component model enum is not automatable.
+  //   0 = lowFrequencyHz (clamped to > 0)
+  //   1 = lowBoost (clamped to [0, 10])
+  //   2 = lowAttenuation (clamped to [0, 10])
+  //   3 = highBoostFrequencyHz (clamped to > 0)
+  //   4 = highBoost (clamped to [0, 10])
+  //   5 = highBandwidth (clamped to [0, 1])
+  //   6 = highAttenuationFrequencyHz (clamped to > 0)
+  //   7 = highAttenuation (clamped to [0, 10])
+  //   8 = outputDrive (clamped to [0, 10])
+  bool set_parameter(unsigned int param_id, float value) override;
+  std::vector<rt::ParamDescriptor> parameter_descriptors() const override;
+
+  float low_frequency() const { return low_frequency_hz_; }
+  float low_boost() const { return low_boost_; }
+  float low_attenuation() const { return low_attenuation_; }
+  float high_boost_frequency() const { return high_boost_frequency_hz_; }
+  float high_boost() const { return high_boost_; }
+  float high_attenuation_frequency() const { return high_attenuation_frequency_hz_; }
+  float high_attenuation() const { return high_attenuation_; }
+  PultecComponentModel component_model() const { return component_model_; }
+  float output_drive() const { return output_drive_; }
+
+ private:
+  void rebuild();
+  static float clamp_amount(float amount);
+  static float validate_frequency(float frequency_hz);
+  void update_component_coefficients();
+  void prepare_component_state(int num_channels);
+  float process_component_sample(float input, int channel);
+
+  ParametricEq eq_;
+  struct ComponentState {
+    float low_charge = 0.0f;
+    float high_charge = 0.0f;
+  };
+  std::vector<ComponentState> component_state_;
+  static constexpr double kDefaultSampleRate = 48000.0;
+  double sample_rate_ = kDefaultSampleRate;
+  float low_frequency_hz_ = 60.0f;
+  float low_boost_ = 0.0f;
+  float low_attenuation_ = 0.0f;
+  float high_boost_frequency_hz_ = 8000.0f;
+  float high_boost_ = 0.0f;
+  float high_bandwidth_ = 0.5f;
+  float high_attenuation_frequency_hz_ = 10000.0f;
+  float high_attenuation_ = 0.0f;
+  PultecComponentModel component_model_ = PultecComponentModel::CurveOnly;
+  float output_drive_ = 0.0f;
+  // Seeded with the prewarped one-pole coefficient (alpha = 1 - exp(-2*pi*f/fs))
+  // for the default corners; prepare()/update_component_coefficients() recompute
+  // these against the actual sample rate.
+  float low_component_alpha_ = 0.00785f;  // ~60 Hz at 48 kHz
+  float high_component_alpha_ = 0.73f;    // ~10 kHz at 48 kHz
+};
+
+}  // namespace sonare::mastering::eq

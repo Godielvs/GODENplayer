@@ -1,0 +1,68 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <C1Dir>$(MSBuildThisFileDirectory)..\src\component\curated\</C1Dir>
+    <C1Generated>$(IntDir)curated-shaders\</C1Generated>
+    <C1Fxc Condition="'$(C1Fxc)'==''">$(WindowsSdkDir)bin\$(WindowsTargetPlatformVersion)\x64\fxc.exe</C1Fxc>
+    <C1Fxc Condition="!Exists('$(C1Fxc)')">$(WindowsSdkDir)bin\x64\fxc.exe</C1Fxc>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(C1Generated);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="$(C1Dir)curated_renderer.cpp" />
+    <ClCompile Include="$(C1Dir)curated_preferences.cpp" />
+    <ClInclude Include="$(C1Dir)curated_core.h" />
+    <ClInclude Include="$(C1Dir)curated_renderer.h" />
+    <ClInclude Include="$(C1Dir)curated_preferences.h" />
+    <None Include="$(C1Dir)curated_effects.hlsl" />
+    <C1Shader Include="velocity">
+      <Entry>VelocityCS</Entry>
+      <Symbol>kC1Velocity</Symbol>
+    </C1Shader>
+    <C1Shader Include="pressure">
+      <Entry>PressureCS</Entry>
+      <Symbol>kC1Pressure</Symbol>
+    </C1Shader>
+    <C1Shader Include="caustics">
+      <Entry>CausticsCS</Entry>
+      <Symbol>kC1Caustics</Symbol>
+    </C1Shader>
+    <C1Shader Include="caustics_image">
+      <Entry>CausticsImageCS</Entry>
+      <Symbol>kC1CausticsImage</Symbol>
+    </C1Shader>
+    <C1Shader Include="wave_init">
+      <Entry>WaveInitCS</Entry>
+      <Symbol>kC1WaveInit</Symbol>
+    </C1Shader>
+    <C1Shader Include="wave_step">
+      <Entry>WaveStepCS</Entry>
+      <Symbol>kC1WaveStep</Symbol>
+    </C1Shader>
+    <C1Shader Include="wave_image">
+      <Entry>WaveImageCS</Entry>
+      <Symbol>kC1WaveImage</Symbol>
+    </C1Shader>
+    <C1Shader Include="display">
+      <Entry>DisplayCS</Entry>
+      <Symbol>kC1Display</Symbol>
+    </C1Shader>
+    <C1Shader Include="caustics_decay">
+      <Entry>CausticsDecayCS</Entry>
+      <Symbol>kC3CausticsDecay</Symbol>
+    </C1Shader>
+    <ClInclude Include="$(C1Dir)c3_music.hlsli" />
+    <ClInclude Include="$(C1Dir)c3_math.hlsli" />
+  </ItemGroup>
+  <Target Name="C1CompileShaders" BeforeTargets="ClCompile" Inputs="$(C1Dir)curated_effects.hlsl;$(C1Dir)c3_music.hlsli;$(C1Dir)c3_math.hlsli;$(MSBuildThisFileFullPath)" Outputs="@(C1Shader-&gt;'$(C1Generated)c1_%(Identity).generated.h')">
+    <Error Condition="!Exists('$(C1Fxc)')" Text="C1 requires Windows SDK FXC. Set C1Fxc to fxc.exe; do not replace the compute shaders by placeholders." />
+    <MakeDir Directories="$(C1Generated)" />
+    <Exec Command="&quot;$(C1Fxc)&quot; /nologo /Ges /O3 /T cs_5_0 /E %(C1Shader.Entry) /Vn %(C1Shader.Symbol) /Fh &quot;$(C1Generated)c1_%(C1Shader.Identity).generated.h&quot; &quot;$(C1Dir)curated_effects.hlsl&quot;" />
+    <ItemGroup>
+      <FileWrites Include="@(C1Shader-&gt;'$(C1Generated)c1_%(Identity).generated.h')" />
+    </ItemGroup>
+  </Target>
+  <Import Project="$(MSBuildThisFileDirectory)GODEN_C4.targets" />
+</Project>
