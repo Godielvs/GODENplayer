@@ -8,8 +8,17 @@
   A native Windows music player built on foobar2000.
 </p>
 
+<h2 align="center">
+  <a href="https://github.com/Godielvs/GODENplayer/releases/download/v5.1.0-beta.18-public.12/GODENplayer-Beta-Setup-x64.exe">⬇ Download for Windows (.exe)</a>
+</h2>
+
 <p align="center">
-  <a href="https://github.com/Godielvs/GODENplayer/releases/download/v5.1.0-beta.18-public.12/GODENplayer-Beta-Setup-x64.exe"><strong>Download for Windows</strong></a> ·
+  Windows 10 / 11 · 64-bit · Beta<br>
+  Download the installer and run it — no build tools required.
+</p>
+
+<p align="center">
+  <a href="docs/INSTALL.md">Installation guide</a> ·
   <a href="docs/media/godenplayer-demo.mp4">Watch the demo</a> ·
   <a href="#features">Features</a> ·
   <a href="docs/BUILD.md">Build from source</a>
