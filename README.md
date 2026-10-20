@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="docs/INSTALL.md"><strong>Install on Windows</strong></a> ·
+  <a href="https://github.com/Godielvs/GODENplayer/releases/download/v5.1.0-beta.18-public.12/GODENplayer-Beta-Setup-x64.exe"><strong>Download for Windows</strong></a> ·
   <a href="docs/media/godenplayer-demo.mp4">Watch the demo</a> ·
   <a href="#features">Features</a> ·
   <a href="docs/BUILD.md">Build from source</a>
@@ -62,7 +62,7 @@ Cover sharing is optional. Catbox uploads are public and non-ephemeral. [Privacy
 
 ## Installation
 
-Run **GODENplayer-Beta-Setup-x64.exe**, choose your music folder and review the optional online features. Setup includes foobar2000 **2.25.10 x64** in a separate application folder; no existing foobar2000 installation or development tools are required.
+Download the [**beta installer**](https://github.com/Godielvs/GODENplayer/releases/tag/v5.1.0-beta.18-public.12), choose your music folder and review the optional online features. Setup includes foobar2000 **2.25.10 x64** in a separate application folder; no existing foobar2000 installation or development tools are required.
 
 - **Windows 10 build 19041+ or Windows 11, x64.**
 - **Direct3D feature level 11_0** for the full GPU visuals.

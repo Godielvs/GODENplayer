@@ -1,7 +1,9 @@
 # Publication readiness
 
-This is a local preparation candidate, not a published release. Read the exact
-delivery's `QUALIFICATION.md` and `SHA256SUMS.txt` before using its installer.
+The first public beta is available in
+[GitHub Releases](https://github.com/Godielvs/GODENplayer/releases/tag/v5.1.0-beta.18-public.12).
+The preparation and qualification records below describe its build-time evidence.
+Read the exact delivery's `QUALIFICATION.md` and `SHA256SUMS.txt` before using its installer.
 
 ## Completed preparation
 
@@ -45,7 +47,7 @@ They do not replace the exact candidate build and installer transaction results.
 
 ## Beta publication scope
 
-The local public.12 preparation includes synchronized source documentation, a clean
+The public.12 release includes synchronized source documentation, a clean
 source export, corresponding dependency sources, an installer and bound hashes.
 Its generated delivery report identifies exact file transactions and any
 first-boot, active-upgrade, rollback or visual observations. Historical reports
@@ -62,7 +64,7 @@ The broader matrix below is required before claiming comprehensive platform
 qualification. A beta may document untested physical monitors, target OS variants,
 hosted CI and extended network cases as limitations. Source upload alone does
 not establish these results. Publication, repository creation and release upload
-remain separate owner-authorized actions; this local preparation performs none.
+are separate from build qualification; the attached build reports remain unchanged.
 
 ## Outstanding work before claiming a fully qualified public release
 

@@ -1,8 +1,14 @@
-# Building the local public candidate
+# Building GODENplayer
 
 This tree is independent of the private development history. Read
 `LICENSE-SCOPE.md` before redistributing it: technical completeness does not
 clear the outstanding shader and icon permissions.
+
+For the exact sources matching an installer, check out its release tag
+(`v5.1.0-beta.18-public.12` for the first public beta). Each release includes a
+public source archive, a corresponding-sources archive with the modified
+dependencies, and their SHA-256 checksums. The tagged source inventory records
+the packaged revision; `main` may contain later documentation or code changes.
 
 ## Supported environment
 

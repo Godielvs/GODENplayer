@@ -9,4 +9,6 @@ Include candidate version/hash, Windows build, GPU/driver, display scale/refresh
 
 Use a generated or authorized sample. Do not send complete profiles or music. Inspect logs for paths, titles, Discord/session URLs and credentials before sharing. A failure of a cover service should leave text/progress and playback usable. Report the provider and status, not private bearer tokens.
 
-Keep app.previous until the replacement is accepted. Recover app.rollback.pending manually only after closing the player; do not delete the sole retained profile. Installer transaction logs identify the committed and recovery directories. The source preparation has no GitHub issue tracker published yet.
+Keep app.previous until the replacement is accepted. Recover app.rollback.pending manually only after closing the player; do not delete the sole retained profile. Installer transaction logs identify the committed and recovery directories.
+
+Report reproducible problems in [GitHub Issues](https://github.com/Godielvs/GODENplayer/issues), including the information above.
