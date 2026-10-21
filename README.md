@@ -9,7 +9,7 @@
 </p>
 
 <h2 align="center">
-  <a href="https://github.com/Godielvs/GODENplayer/releases/download/v5.1.0-beta.18-public.12/GODENplayer-Beta-Setup-x64.exe">⬇ Download for Windows (.exe)</a>
+  <a href="https://github.com/Godielvs/GODENplayer/releases/latest/download/GODENplayer-Beta-Setup-x64.exe">⬇ Download for Windows (.exe)</a>
 </h2>
 
 <p align="center">
@@ -71,7 +71,7 @@ Cover sharing is optional. Public image uploads may persist; Uguu links expire a
 
 ## Installation
 
-Download the [**beta installer**](https://github.com/Godielvs/GODENplayer/releases/tag/v5.1.0-beta.18-public.12), choose your music folder and review the optional online features. Setup includes foobar2000 **2.25.10 x64** in a separate application folder; no existing foobar2000 installation or development tools are required.
+Download the [**beta installer**](https://github.com/Godielvs/GODENplayer/releases/latest), choose your music folder and review the optional online features. Setup includes foobar2000 **2.25.10 x64** in a separate application folder; no existing foobar2000 installation or development tools are required.
 
 - **Windows 10 build 19041+ or Windows 11, x64.**
 - **Direct3D feature level 11_0** for the full GPU visuals.

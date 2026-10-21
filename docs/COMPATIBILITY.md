@@ -62,7 +62,7 @@ is a normal playback prerequisite.
 - Output is SDR; float intermediate textures do not constitute an HDR output
   pipeline. HDR, Remote Desktop/virtual adapters, multiple GPUs, old drivers
   and physical mixed-DPI migration remain separate observation targets.
-- Layout probes cover 96â€“384 DPI, small/zero-sized windows, portrait, ultrawide
+- Layout probes cover 96-384 DPI, small/zero-sized windows, portrait, ultrawide
   and 8K geometry. A second fixture calls the real panel placement methods on
   hidden Windows child windows, including shrinking exhausted bands to zero.
   This does not verify physical text appearance, clicks or monitor migration.

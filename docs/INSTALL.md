@@ -6,8 +6,8 @@ You do not need an existing foobar2000 installation.
 
 ## Get the beta
 
-Download **5.1.0-beta.18-public.12** from the
-[GitHub release](https://github.com/Godielvs/GODENplayer/releases/tag/v5.1.0-beta.18-public.12).
+Download the **latest beta** from the
+[GitHub release](https://github.com/Godielvs/GODENplayer/releases/latest).
 Start with `GODENplayer-Beta-Setup-x64.exe`. The release also includes:
 
 - `SHA256SUMS.txt`
