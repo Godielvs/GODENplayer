@@ -119,6 +119,13 @@ if ($LASTEXITCODE -ne 0) {
 if ($LASTEXITCODE) {throw 'Public archive/binary correspondence tests failed.'}
 & python -B "$repo\tests\public_privacy_tests.py"
 if ($LASTEXITCODE) {throw 'Public privacy regression tests failed.'}
+. "$PSScriptRoot\import-v142-environment.ps1" | Out-Null
+& python -B "$repo\tests\presence_cover_worker_oracle.py"
+if ($LASTEXITCODE) {throw 'Presence cover worker retry/reconnect tests failed.'}
+& python -B "$repo\tests\presence_cover_settings_oracle.py"
+if ($LASTEXITCODE) {throw 'Presence cover settings/DPAPI tests failed.'}
+& python -B "$repo\tests\options_layout_oracle.py"
+if ($LASTEXITCODE) {throw 'Options layout/navigation tests failed.'}
 & "$repo\tests\public_host_download_tests.ps1"
 & "$PSScriptRoot\test-master-dsp-engine-headless.ps1" -Configuration $Configuration
 & "$PSScriptRoot\test-analysis-revision-headless.ps1"

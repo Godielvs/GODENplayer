@@ -64,6 +64,8 @@ try {
         $count++
     }
     Check 'denied' $valid $true
+    $automatic=Record '9448016b-56f5-4d7f-83b2-925991b68801' ([BitConverter]::GetBytes([uint32]6))
+    Check 'automatic denied' (Envelope ([byte[]]($automatic+$denied+$consumed))) $true
     $varied=[byte[]]$valid.Clone()
     [Array]::Copy([Guid]::NewGuid().ToByteArray(),0,$varied,16,16)
     Check 'opaque header differs' $varied $true

@@ -65,9 +65,9 @@ DAW sessions are temporary and clear on close; project saving and mix export are
 
 ### Discord Presence
 
-Show the current track, progress and cover in Discord. Choose **Catbox**, a custom relay, or text only. No Discord developer setup is required.
+Show the current track, progress and cover in Discord. Choose **Catbox**, temporary **Uguu** hosting, **ImgBB** with your own key, a custom relay, catalogue artwork, or text only. New setup offers Automatic: cached covers first, then Uguu, Catbox and catalogue lookup. Only approved services are used; existing choices are preserved. No Discord developer setup is required.
 
-Cover sharing is optional. Catbox uploads are public and non-ephemeral. [Privacy settings](docs/PRIVACY.md).
+Cover sharing is optional. Public image uploads may persist; Uguu links expire and are renewed during playback. Catalogue mode looks up artwork without uploading your local image. [Privacy settings](docs/PRIVACY.md).
 
 ## Installation
 

@@ -62,7 +62,7 @@ is a normal playback prerequisite.
 - Output is SDR; float intermediate textures do not constitute an HDR output
   pipeline. HDR, Remote Desktop/virtual adapters, multiple GPUs, old drivers
   and physical mixed-DPI migration remain separate observation targets.
-- Layout probes cover 96–384 DPI, small/zero-sized windows, portrait, ultrawide
+- Layout probes cover 96â€“384 DPI, small/zero-sized windows, portrait, ultrawide
   and 8K geometry. A second fixture calls the real panel placement methods on
   hidden Windows child windows, including shrinking exhausted bands to zero.
   This does not verify physical text appearance, clicks or monitor migration.
@@ -134,11 +134,18 @@ TLS verification remains enabled. See [PRIVACY.md](PRIVACY.md).
 
 New or unverified Catbox covers require bounded, complete PNG structure at both
 origin and delivery; a valid proxy image alone cannot conceal a damaged stored
-origin. Acknowledged URLs and encoding progress survive restart. Repair is
-bounded and can remain text-only until a later admitted/revisited request.
+origin. Acknowledged URLs and encoding progress survive restart. Verified
+deliveries now persist a URL-bound SHA-256 fingerprint: after restart, a complete
+CDN response matching that fingerprint can survive an origin outage. Legacy or
+acknowledged-only rows still require healthy origin and delivery checks first.
+Public network failures get at most two slow recovery attempts beyond the four
+ordinary attempts; metadata and RPC reconnects cannot reset the budget. Repair
+remains bounded and may stay text-only until a later admitted/revisited request.
 Generated live images were fully decoded and compared at both endpoints, and a
-human confirmed a new cover in Discord after restart on the preceding native
-candidate with this cover implementation. This is bounded evidence, not an
+human confirmed a new cover in Discord after restart on an earlier native
+candidate. The persistent-proof and slow-recovery changes are covered by native
+fake-transport and extracted-worker tests; new live upload/Discord qualification
+is pending while the origin refuses connections. This is bounded evidence, not an
 availability guarantee or comprehensive network/Discord qualification.
 
 Proxy authentication, TLS inspection, DNS filtering, CDN delay, offline operation,
@@ -161,3 +168,7 @@ display scale/refresh, storage, relevant security/network software and steps.
 Keep credentials, private URLs, music and full personal profiles out of reports.
 See [SUPPORT.md](SUPPORT.md). No matched full-player performance result is
 claimed from this compatibility pass.
+
+### Additional Presence cover choices
+
+New public setup offers Automatic (Uguu, Catbox, catalogue), with versioned disclosure; legacy Catbox markers and configured profiles retain their narrower scope. Options can explicitly enable Uguu, ImgBB (a personal API key), catalogue lookup or an Automatic allowlist. Upload caches are isolated per host. Automatic never enables unchecked hosts or private relay. Uguu links carry conservative expiry and renewal; catalogue lookup is bounded and rate-limited. Native deterministic fixtures cover fallback, cache restart, expiry, cancellation, malformed JSON and provider boundaries. These fixtures do not establish live host or Discord availability; consult the candidate qualification report for network/client observations. No new runtime helper process is required.

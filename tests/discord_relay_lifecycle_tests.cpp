@@ -159,6 +159,8 @@ std::deque<CoverReply> coverReplies;
 bool failRequestCallback = false, failSocketContext = false, holdSocketClose = false;
 std::size_t readChunk = 4096;
 std::string coverResponse = "http://127.0.0.1:1/test.png\n";
+std::map<std::wstring,std::string> providerResponses;
+std::map<std::wstring,DWORD> providerStatuses;
 bool blockSendApi = false, releaseSendApi = false, enteredSendApi = false;
 unsigned opens = 0, sends = 0;
 std::string sessionResponse()
@@ -234,7 +236,7 @@ void reset()
     handles.clear(); holdClose=holdSend=holdHttpRead=holdUpgradeClose=blockSendApi=releaseSendApi=enteredSendApi=false;
     opens=sends=0;
     coverTransport=holdHttpSend=false;readChunk=4096;coverResponse="http://127.0.0.1:1/test.png\n";
-    coverQaOverride=true;holdCoverGet=false;coverUploads=coverGets=0;coverReplies.clear();
+    coverQaOverride=true;holdCoverGet=false;coverUploads=coverGets=0;coverReplies.clear();providerResponses.clear();providerStatuses.clear();
     requireCoverGetProxy=false;
     requireCoverReadProxy=false;
     failRequestCallback=failSocketContext=holdSocketClose=false;
@@ -474,7 +476,8 @@ HINTERNET WINAPI fake_WinHttpConnect(HINTERNET parent,LPCWSTR host,INTERNET_PORT
     std::lock_guard lock(fixture::mutex);
     const auto hostname=std::wstring_view(host);
     const bool simulatedCover=fixture::coverTransport && port==443 &&
-        (hostname==L"catbox.moe" || hostname==L"files.catbox.moe" || hostname==L"wsrv.nl" || hostname==L"litter.catbox.moe");
+        (hostname==L"catbox.moe" || hostname==L"files.catbox.moe" || hostname==L"wsrv.nl" || hostname==L"litter.catbox.moe" || hostname==L"uguu.se" || hostname==L"h.uguu.se" ||
+            hostname==L"api.imgbb.com" || hostname==L"i.ibb.co" || hostname==L"musicbrainz.org");
     fixture::check((hostname==L"127.0.0.1"&&port==1)||simulatedCover,"non-fixture endpoint");
     auto* h=fixture::cast(parent); fixture::checkOwner(h);
     auto* connected=fixture::make(fixture::Kind::connection,h);connected->host=hostname;return connected;
@@ -497,6 +500,10 @@ HINTERNET WINAPI fake_WinHttpOpenRequest(HINTERNET parent,LPCWSTR verb,LPCWSTR p
             fixture::coverReplies.pop_front();
         }
     }
+    if(fixture::coverTransport && !h->get) {
+        if(const auto it=fixture::providerStatuses.find(h->host);it!=fixture::providerStatuses.end()) h->coverStatus=it->second;
+        h->coverBody=fixture::providerResponses.contains(h->host)?fixture::providerResponses.at(h->host):fixture::coverResponse;
+    }
     if(!fixture::coverTransport)fixture::check(std::wstring_view(path)==(h->get?
         L"/v1/sessions/0123456789abcdef0123456789abcdef/socket":L"/v1/sessions"),"unexpected relay request path");
     return h;
@@ -508,7 +515,8 @@ BOOL WINAPI fake_WinHttpCrackUrl(LPCWSTR url,DWORD length,DWORD,LPURL_COMPONENTS
     std::size_t hostStart=7,hostLength=9;
     parts->nScheme=INTERNET_SCHEME_HTTP; parts->nPort=1;
     if(!value.starts_with(prefix) && fixture::coverTransport) {
-        constexpr std::array<std::wstring_view,4> hosts{L"catbox.moe",L"files.catbox.moe",L"wsrv.nl",L"litter.catbox.moe"};
+        constexpr std::array<std::wstring_view,9> hosts{L"catbox.moe",L"files.catbox.moe",L"wsrv.nl",L"litter.catbox.moe",
+            L"uguu.se",L"h.uguu.se",L"api.imgbb.com",L"i.ibb.co",L"musicbrainz.org"};
         hostStart=8;bool found=false;
         for(const auto host:hosts) {
             if(value.starts_with(L"https://") && value.substr(hostStart).starts_with(host) &&
@@ -595,7 +603,7 @@ BOOL WINAPI fake_WinHttpReadData(HINTERNET value,LPVOID buffer,DWORD size,LPDWOR
     {
         std::lock_guard lock(fixture::mutex);h->buffer=buffer;h->capacity=size;
         if(fixture::holdHttpRead){h->pending=fixture::Pending::httpRead;SetLastError(ERROR_IO_PENDING);return FALSE;}
-        const auto& response=fixture::coverTransport?(h->get?h->coverBody:fixture::coverResponse):fixture::response;
+        const auto& response=fixture::coverTransport?h->coverBody:fixture::response;
         copied=static_cast<DWORD>((std::min)({response.size()-h->offset,static_cast<std::size_t>(size),fixture::readChunk}));
         std::memcpy(buffer,response.data()+h->offset,copied);h->offset+=copied;
     }

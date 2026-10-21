@@ -8,6 +8,7 @@ New-Item -ItemType Directory -Force $generated | Out-Null
 $inputs=@('src/component/discord_cover_service.cpp','src/component/discord_cover_service.h',
     'src/component/discord_relay_client.cpp','src/component/discord_relay_client.h',
     'src/component/discord_http_io.h','src/component/presence_cover_policy.h',
+    'src/component/presence_public_hosts.h','vendor/nlohmann-json/nlohmann/json.hpp',
     'src/component/qa_hooks.h','src/component/presence_deployment.h','tests/discord_relay_lifecycle_tests.cpp',
     'tests/discord_cover_lifecycle_tests.cpp','tests/nekorox_cover_tests.vcxproj',
     'tools/test-presence-cover-headless.ps1')

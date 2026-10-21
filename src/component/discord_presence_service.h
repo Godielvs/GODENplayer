@@ -38,6 +38,8 @@ struct DiscordPresenceSettings {
     std::string relayEndpoint;
     bool relayCredentialSaved = false;
     bool coverDisclosureAccepted = false;
+    std::uint32_t automaticProviders = coverProviderBit(PresenceCoverProvider::catbox);
+    bool imgbbKeySaved = false;
 };
 
 // Ephemeral DAW activity. It is deliberately owned by the Presence service
@@ -131,7 +133,11 @@ public:
     void setTemporaryCovers(bool enabled);
     bool setApplicationId(std::string applicationId);
     bool setCoverConfiguration(PresenceCoverProvider provider, std::string endpoint,
-        std::string credential, bool disclosureAccepted);
+        std::string credential, bool disclosureAccepted,
+        std::uint32_t automaticProviders = coverProviderBit(PresenceCoverProvider::catbox),
+        std::string imgbbKey = {});
+    // Uses the saved provider/permission; never enables uploads implicitly.
+    bool retryCurrentCover(bool verifyCachedImage = false);
 
     [[nodiscard]] DiscordPresenceStatus status() const noexcept;
     [[nodiscard]] DiscordCoverStatus coverStatus() const noexcept;
@@ -183,6 +189,9 @@ private:
         DiscordPresenceStatus::disabled};
     std::atomic<DiscordCoverStatus> coverStatus_{
         DiscordCoverStatus::disabled};
+    std::atomic<DiscordCoverFailure> coverFailure_{DiscordCoverFailure::none};
+    std::atomic<bool> coverRetryPending_{false};
+    std::atomic<PresenceCoverProvider> deliveredCoverProvider_{PresenceCoverProvider::unconfigured};
     std::atomic<bool> rpcReady_{false};
     std::atomic<bool> externalPublisherConflict_{false};
     std::atomic<std::uint64_t> staleCoverDiscards_{0};

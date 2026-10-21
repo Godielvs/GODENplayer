@@ -275,7 +275,7 @@ function Assert-SilentCoverConsent([string]$ProfilePath) {
     $disclosure = $values['9448016b-56f5-4d7f-83b2-925991b68802']
     $consumed = $values['9448016b-56f5-4d7f-83b2-925991b68805']
     if ($null -eq $provider -or $provider.Length -ne 4 -or
-            [BitConverter]::ToUInt32($provider, 0) -ne 1 -or
+            [BitConverter]::ToUInt32($provider, 0) -notin @(1,6) -or
             $null -eq $disclosure -or $disclosure.Length -ne 1 -or $disclosure[0] -ne 0 -or
             $null -eq $consumed -or $consumed.Length -ne 1 -or $consumed[0] -ne 1) {
         throw 'Silent cover denial was not consumed and persisted after boot.'
@@ -459,7 +459,7 @@ if (Test-Path -LiteralPath (Join-Path $profile `
     throw 'Clean install unexpectedly shipped OpenLyrics.'
 }
 $coverChoice=Join-Path $profile 'nekorox/cover-provider.install-choice'
-if (!(Test-Path $coverChoice) -or (Get-Content $coverChoice -Raw).Trim() -ne 'catbox-disabled') {throw 'Silent install granted cover upload consent.'}
+if (!(Test-Path $coverChoice) -or (Get-Content $coverChoice -Raw).Trim() -ne 'automatic-v1-disabled') {throw 'Silent install granted cover upload consent.'}
 if (Test-Path (Join-Path $profile 'user-components-x64/foo_playcount/foo_playcount.dll')) {throw 'Offline install unexpectedly contains Playback Statistics.'}
 $presenceEnabledByDefault = $null
 if (!$SkipRuntimeUi) {

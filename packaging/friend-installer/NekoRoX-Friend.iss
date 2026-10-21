@@ -822,10 +822,10 @@ procedure WriteCoverPrivacyChoice;
 var
   Choice, Target: String;
 begin
-  Choice := 'catbox-disabled';
+  Choice := 'automatic-v1-disabled';
   if CoverPrivacyPage.Values[0] and
       (not WizardSilent or (ExpandConstant('{param:ALLOW_PUBLIC_COVERS|0}') = '1')) then
-    Choice := 'catbox-accepted';
+    Choice := 'automatic-v1-accepted';
   Target := AddBackslash(StagingApp) + 'profile\nekorox\cover-provider.install-choice';
   ForceDirectories(ExtractFileDir(Target));
   if not SaveStringToFile(Target, Choice + #13#10, False) then
@@ -858,11 +858,12 @@ begin
   SignatureColorPage.Values[0] := '0, 216, 208';
   CoverPrivacyPage := CreateInputOptionPage(SignatureColorPage.ID,
     'Discord cover privacy', 'Choose before the first upload.',
-    'Only a re-encoded thumbnail is sent anonymously to Catbox, a public external service. ' +
-    'It is not ephemeral: anonymous files may remain until two years without access. ' +
-    'Turning this off stops new uploads; it does not delete previous uploads. Text Presence works independently.',
+    'Automatic cover sharing uses Uguu first (public thumbnails expire after 3 hours), ' +
+    'then Catbox (public, persistent upload) and MusicBrainz / Cover Art Archive lookup (artist and album). ' +
+    'Only a re-encoded thumbnail is uploaded; image delivery also uses wsrv.nl. ' +
+    'Turning this off stops new uploads and lookups; it does not delete previous uploads. Text Presence works independently.',
     False, False);
-  CoverPrivacyPage.Add('Show cover thumbnails using Catbox (public upload)');
+  CoverPrivacyPage.Add('Show album covers automatically in Discord (external services)');
   CoverPrivacyPage.Values[0] := True;
   StatisticsPage := CreateInputOptionPage(CoverPrivacyPage.ID,
     'Optional Playback Statistics', 'Download from the official component site.',

@@ -293,17 +293,21 @@ const GUID kCoverDisclosureGuid = {0x9448016b,0x56f5,0x4d7f,{0x83,0xb2,0x92,0x59
 const GUID kRelayEndpointGuid = {0x9448016b,0x56f5,0x4d7f,{0x83,0xb2,0x92,0x59,0x91,0xb6,0x88,0x03}};
 const GUID kRelayCredentialGuid = {0x9448016b,0x56f5,0x4d7f,{0x83,0xb2,0x92,0x59,0x91,0xb6,0x88,0x04}};
 const GUID kCoverInstallChoiceConsumedGuid = {0x9448016b,0x56f5,0x4d7f,{0x83,0xb2,0x92,0x59,0x91,0xb6,0x88,0x05}};
+const GUID kCoverAutomaticProvidersGuid = {0x9448016b,0x56f5,0x4d7f,{0x83,0xb2,0x92,0x59,0x91,0xb6,0x88,0x06}};
+const GUID kCoverImgBBKeyGuid = {0x9448016b,0x56f5,0x4d7f,{0x83,0xb2,0x92,0x59,0x91,0xb6,0x88,0x07}};
+cfg_uint g_coverAutomaticProviders(kCoverAutomaticProvidersGuid, coverProviderBit(PresenceCoverProvider::catbox));
+cfg_string g_coverImgBBKey(kCoverImgBBKeyGuid, "");
 cfg_uint g_coverProvider(kCoverProviderGuid, 0);
 cfg_bool g_coverDisclosure(kCoverDisclosureGuid, false);
 cfg_bool g_coverInstallChoiceConsumed(kCoverInstallChoiceConsumedGuid, false);
 cfg_string g_relayEndpoint(kRelayEndpointGuid, "");
 cfg_string g_relayCredential(kRelayCredentialGuid, "");
 
-std::string protectRelayCredential(std::string_view value)
+std::string protectRelayCredential(std::string_view value, const wchar_t* description = L"GODENplayer private relay")
 {
     DATA_BLOB input{static_cast<DWORD>(value.size()),
         reinterpret_cast<BYTE*>(const_cast<char*>(value.data()))}, output{};
-    if (!CryptProtectData(&input, L"GODENplayer private relay", nullptr, nullptr,
+    if (!CryptProtectData(&input, description, nullptr, nullptr,
             nullptr, CRYPTPROTECT_UI_FORBIDDEN, &output)) return {};
     constexpr char digits[] = "0123456789abcdef";
     std::string result(output.cbData * 2U, '0');
@@ -339,11 +343,15 @@ void loadPresenceCoverConfiguration()
 {
     PresenceCoverConfiguration value;
     const auto provider=static_cast<unsigned>(g_coverProvider);
-    if(provider<=2U)value.provider=static_cast<PresenceCoverProvider>(provider);
+    if(provider<=6U)value.provider=static_cast<PresenceCoverProvider>(provider);
+    value.automaticProviders=static_cast<unsigned>(g_coverAutomaticProviders)&kPublicCoverProviders;
     value.disclosureAccepted=static_cast<bool>(g_coverDisclosure);
     value.relayEndpoint=g_relayEndpoint.get().c_str();
     if(value.provider==PresenceCoverProvider::privateRelay)
         value.relayCredential=unprotectRelayCredential(g_relayCredential.get().c_str());
+    if(value.provider==PresenceCoverProvider::imgbb ||
+            (value.provider==PresenceCoverProvider::automatic && (value.automaticProviders&coverProviderBit(PresenceCoverProvider::imgbb))))
+        value.imgbbKey=unprotectRelayCredential(g_coverImgBBKey.get().c_str());
     publishPresenceCoverConfiguration(std::move(value));
 }
 
@@ -846,9 +854,10 @@ void DiscordPresenceService::start()
             std::ifstream input(choicePath);
             std::string choice; std::getline(input, choice);
             if (!choice.empty() && choice.back() == '\r') choice.pop_back();
-            if (choice == "catbox-accepted" || choice == "catbox-disabled") {
-                g_coverProvider = 1U;
-                g_coverDisclosure = choice == "catbox-accepted";
+            if (const auto parsed = parseInstallerCoverChoice(choice)) {
+                g_coverProvider = static_cast<unsigned>(parsed->provider);
+                g_coverAutomaticProviders = parsed->automaticProviders;
+                g_coverDisclosure = parsed->accepted;
             }
         }
         std::error_code ignored; std::filesystem::remove(choicePath, ignored);
@@ -1006,6 +1015,8 @@ DiscordPresenceSettings DiscordPresenceService::settings() const
         presenceCoverConfiguration()->relayEndpoint,
         !g_relayCredential.get().is_empty(),
         presenceCoverConfiguration()->disclosureAccepted,
+        presenceCoverConfiguration()->automaticProviders,
+        !g_coverImgBBKey.get().is_empty(),
     };
 }
 
@@ -1090,11 +1101,25 @@ void DiscordPresenceService::setTemporaryCovers(bool enabled)
 }
 
 bool DiscordPresenceService::setCoverConfiguration(PresenceCoverProvider provider,
-    std::string endpoint, std::string credential, bool disclosureAccepted)
+    std::string endpoint, std::string credential, bool disclosureAccepted,
+    std::uint32_t automaticProviders, std::string imgbbKey)
 {
-    if (provider != PresenceCoverProvider::unconfigured &&
-            provider != PresenceCoverProvider::catbox &&
-            provider != PresenceCoverProvider::privateRelay) return false;
+    if (static_cast<unsigned>(provider)>6U || (automaticProviders&~kPublicCoverProviders)) return false;
+    if (provider==PresenceCoverProvider::automatic && automaticProviders==0U) return false;
+    std::string protectedKey = g_coverImgBBKey.get().c_str();
+    if (!imgbbKey.empty()) {
+        const auto valid = imgbbKey.size()>=16U && imgbbKey.size()<=128U &&
+            std::all_of(imgbbKey.begin(),imgbbKey.end(),[](unsigned char c) {
+                return (c>='a'&&c<='z')||(c>='A'&&c<='Z')||(c>='0'&&c<='9')||c=='-'||c=='_';
+            });
+        if (!valid) { SecureZeroMemory(imgbbKey.data(),imgbbKey.size()); return false; }
+        protectedKey=protectRelayCredential(imgbbKey,L"GODENplayer ImgBB API key");
+        SecureZeroMemory(imgbbKey.data(),imgbbKey.size());
+        if (protectedKey.empty()) return false;
+    }
+    if ((provider==PresenceCoverProvider::imgbb || (provider==PresenceCoverProvider::automatic &&
+            (automaticProviders&coverProviderBit(PresenceCoverProvider::imgbb)))) &&
+            unprotectRelayCredential(protectedKey).empty()) return false;
     if (provider == PresenceCoverProvider::unconfigured) disclosureAccepted = false;
     endpoint = trimAscii(std::move(endpoint));
     while (!endpoint.empty() && endpoint.back()=='/') endpoint.pop_back();
@@ -1126,6 +1151,8 @@ bool DiscordPresenceService::setCoverConfiguration(PresenceCoverProvider provide
         g_coverInstallChoiceConsumed=true;
         g_relayEndpoint=endpoint.c_str();
         g_relayCredential=protectedCredential.c_str();
+        g_coverAutomaticProviders=automaticProviders;
+        g_coverImgBBKey=protectedKey.c_str();
         loadPresenceCoverConfiguration();
         ++pendingRevision_;
     }
@@ -1136,6 +1163,34 @@ bool DiscordPresenceService::setCoverConfiguration(PresenceCoverProvider provide
         ++pendingRevision_;
         pending_.update.presenceRevision = pendingRevision_;
         pending_.update.urgentClear = true;
+    }
+    changed_.notify_all();
+    return true;
+}
+
+bool DiscordPresenceService::retryCurrentCover(bool verifyCachedImage)
+{
+    if (!static_cast<bool>(g_presenceEnabled) || !static_cast<bool>(g_presenceTemporaryCovers) ||
+            !presenceCoverConfiguration()->allowsCovers()) return false;
+    {
+        std::lock_guard lock(mutex_);
+        if (!started_ || !pending_.update.allowCover || !pending_.trackHandle.is_valid()) return false;
+        coverService_.cancel();
+        if (verifyCachedImage) coverService_.requestVerification();
+        ++coverEpoch_;
+        pending_.coverUrl.clear(); pending_.coverToken.clear();
+        pending_.relayExpiresAtMilliseconds=0;
+        pending_.update.coverEpoch=coverEpoch_;
+        ++pendingRevision_;
+        pending_.update.presenceRevision=pendingRevision_;
+        pending_.update.urgentClear=true;
+    }
+    publishCurrent(true);
+    {
+        std::lock_guard lock(mutex_);
+        ++pendingRevision_;
+        pending_.update.presenceRevision=pendingRevision_;
+        pending_.update.urgentClear=true;
     }
     changed_.notify_all();
     return true;
@@ -1211,8 +1266,31 @@ std::wstring DiscordPresenceService::statusText() const
         case DiscordCoverStatus::resolving:
             return L"Connected \u00b7 preparing cover\u2026";
         case DiscordCoverStatus::ready:
-            return L"Connected";
+            switch (deliveredCoverProvider_.load(std::memory_order_acquire)) {
+            case PresenceCoverProvider::catbox: return L"Connected \u00b7 Catbox cover ready";
+            case PresenceCoverProvider::uguu: return L"Connected \u00b7 Uguu cover ready (temporary)";
+            case PresenceCoverProvider::imgbb: return L"Connected \u00b7 ImgBB cover ready";
+            case PresenceCoverProvider::catalogue: return L"Connected \u00b7 catalogue cover ready";
+            default: return L"Connected";
+            }
         case DiscordCoverStatus::fallback:
+            if (coverRetryPending_.load(std::memory_order_acquire)) {
+                return L"Connected \u00b7 cover unavailable; retry scheduled";
+            }
+            switch (coverFailure_.load(std::memory_order_acquire)) {
+            case DiscordCoverFailure::upload:
+                return L"Connected \u00b7 cover upload unavailable";
+            case DiscordCoverFailure::origin:
+                return L"Connected \u00b7 cover host returned an incomplete image";
+            case DiscordCoverFailure::delivery:
+                return L"Connected \u00b7 cover delivery unavailable";
+            case DiscordCoverFailure::noArtwork:
+                return L"Connected \u00b7 no cover found";
+            case DiscordCoverFailure::recoveryLimit:
+                return L"Connected \u00b7 cover recovery limit reached";
+            case DiscordCoverFailure::none:
+                break;
+            }
             return L"Connected \u00b7 cover fallback active";
         case DiscordCoverStatus::disabled:
             return L"Connected \u00b7 cover uploads off";
@@ -1534,6 +1612,8 @@ void DiscordPresenceService::coverWorkerMain(std::stop_token stopToken)
     std::uint64_t processedRevision = 0;
     std::optional<CoverKey> attemptedKey;
     unsigned attemptCount = 0;
+    unsigned deferredAttempts = 0;
+    auto deferredRetryAt = std::chrono::steady_clock::time_point::min();
     std::uint64_t observedRelayGeneration = 0;
     bool relayRecoveryPending = false;
     auto retryAt = std::chrono::steady_clock::time_point::min();
@@ -1545,8 +1625,13 @@ void DiscordPresenceService::coverWorkerMain(std::stop_token stopToken)
         {
             std::unique_lock lock(mutex_);
             const auto renewalDue=[&] {
-                if(!pending_.update.allowCover || pending_.coverToken.empty() ||
-                        !ephemeralRelayEnabled()) return false;
+                if(!pending_.update.allowCover || pending_.coverUrl.empty()) return false;
+                if(pending_.coverToken.empty()) {
+                    return pending_.relayExpiresAtMilliseconds>0 &&
+                        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count()+60000>=
+                            pending_.relayExpiresAtMilliseconds;
+                }
+                if(!ephemeralRelayEnabled()) return false;
                 const auto relay=coverService_.relayTrace();
                 return (relay.status==DiscordRelayStatus::connected &&
                         relay.connectionGeneration!=pending_.relayConnectionGeneration) ||
@@ -1555,11 +1640,23 @@ void DiscordPresenceService::coverWorkerMain(std::stop_token stopToken)
                         (std::max)(std::int64_t{0},pending_.relayExpiresAtMilliseconds));
             };
             const auto workReady = [&] {
+                // Expiration is a delivery event even after a terminal failure
+                // exhausted recovery. Clear stale public links without POSTing.
+                if (pending_.coverToken.empty() && !pending_.coverUrl.empty() &&
+                        pending_.relayExpiresAtMilliseconds>0 &&
+                        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count()>=
+                            pending_.relayExpiresAtMilliseconds) {
+                    pending_.coverUrl.clear(); pending_.relayExpiresAtMilliseconds=0;
+                    ++pendingRevision_; pending_.update.presenceRevision=pendingRevision_;
+                    changed_.notify_all();
+                }
                 const auto relay = coverService_.relayTrace();
                 if (relay.status == DiscordRelayStatus::connected &&
                         relay.connectionGeneration != observedRelayGeneration) {
                     observedRelayGeneration = relay.connectionGeneration;
                     attemptCount = 0;
+                    deferredAttempts = 0;
+                    deferredRetryAt = std::chrono::steady_clock::time_point::min();
                     retryAt = std::chrono::steady_clock::time_point::min();
                     // A connected episode can recover a registration that
                     // failed before the relay was ready. No metadata revision
@@ -1599,9 +1696,12 @@ void DiscordPresenceService::coverWorkerMain(std::stop_token stopToken)
                 if (scheduled) {
                     changed_.wait_until(lock, stopToken, retryAt, workReady);
                 } else {
-                    if(attemptCount < 4U && !pending_.coverToken.empty() && ephemeralRelayEnabled()) {
+                    if(pending_.update.allowCover && !pending_.coverUrl.empty() &&
+                            pending_.relayExpiresAtMilliseconds>0 &&
+                            (pending_.coverToken.empty() || ephemeralRelayEnabled())) {
                         const auto deadline=std::chrono::system_clock::time_point(
-                            std::chrono::milliseconds(pending_.relayExpiresAtMilliseconds-15000));
+                            std::chrono::milliseconds(pending_.relayExpiresAtMilliseconds-
+                                (attemptCount>=4U?0:(pending_.coverToken.empty()?60000:15000))));
                         changed_.wait_until(lock,stopToken,deadline,workReady);
                     } else {
                     changed_.wait(lock, stopToken, workReady);
@@ -1615,6 +1715,9 @@ void DiscordPresenceService::coverWorkerMain(std::stop_token stopToken)
                     std::memory_order_release);
                 attemptedKey.reset();
                 attemptCount = 0;
+                deferredAttempts = 0;
+                deferredRetryAt = std::chrono::steady_clock::time_point::min();
+                coverRetryPending_.store(false, std::memory_order_release);
                 retryAt = std::chrono::steady_clock::time_point::min();
                 changed_.wait(lock, stopToken, [&] {
                     return static_cast<bool>(g_presenceTemporaryCovers) &&
@@ -1629,7 +1732,10 @@ void DiscordPresenceService::coverWorkerMain(std::stop_token stopToken)
             track = pending_;
             coverAdmission = coverService_.admissionTicket();
             // Keep a still-valid published URL until a replacement is ready.
-            if (renewing) { track.coverUrl.clear(); track.coverToken.clear(); }
+            if (renewing || (attemptedKey && keyFor(track)==*attemptedKey && attemptCount!=0 &&
+                    track.relayExpiresAtMilliseconds>0 && track.coverToken.empty() && renewalDue())) {
+                track.coverUrl.clear(); track.coverToken.clear();
+            }
         }
 
         if (!track.update.allowCover || !track.trackHandle.is_valid()) {
@@ -1637,18 +1743,28 @@ void DiscordPresenceService::coverWorkerMain(std::stop_token stopToken)
                 std::memory_order_release);
             attemptedKey.reset();
             attemptCount = 0;
+            deferredAttempts = 0;
+            deferredRetryAt = std::chrono::steady_clock::time_point::min();
+            coverRetryPending_.store(false, std::memory_order_release);
             retryAt = std::chrono::steady_clock::time_point::min();
             continue;
         }
         const auto requestKey = keyFor(track);
         // A metadata revision or retained renewal URL does not grant another
         // network budget. Only a new request or relay connection does.
-        if (attemptedKey && requestKey == *attemptedKey && attemptCount >= 4U) continue;
+        const auto deferredDue = deferredAttempts < 2U &&
+            retryAt != std::chrono::steady_clock::time_point::min() &&
+            std::chrono::steady_clock::now() >= retryAt;
+        if (attemptedKey && requestKey == *attemptedKey &&
+                attemptCount >= 4U && !deferredDue) continue;
         if (!track.coverUrl.empty()) {
             coverStatus_.store(DiscordCoverStatus::ready,
                 std::memory_order_release);
             attemptedKey.reset();
             attemptCount = 0;
+            deferredAttempts = 0;
+            deferredRetryAt = std::chrono::steady_clock::time_point::min();
+            coverRetryPending_.store(false, std::memory_order_release);
             retryAt = std::chrono::steady_clock::time_point::min();
             continue;
         }
@@ -1656,6 +1772,8 @@ void DiscordPresenceService::coverWorkerMain(std::stop_token stopToken)
         if (!attemptedKey || requestKey != *attemptedKey) {
             attemptedKey = requestKey;
             attemptCount = 0;
+            deferredAttempts = 0;
+            deferredRetryAt = std::chrono::steady_clock::time_point::min();
             retryAt = std::chrono::steady_clock::time_point::min();
             // Collapse rapid Next/Previous bursts before touching album art or
             // the network. Metadata is published by the independent RPC lane.
@@ -1676,7 +1794,9 @@ void DiscordPresenceService::coverWorkerMain(std::stop_token stopToken)
             continue;
         }
 
+        if (attemptCount >= 4U) ++deferredAttempts;
         ++attemptCount;
+        coverRetryPending_.store(false, std::memory_order_release);
         coverStatus_.store(DiscordCoverStatus::resolving,
             std::memory_order_release);
         qaPresenceLog("cover resolve revision=" + std::to_string(revision) +
@@ -1684,7 +1804,9 @@ void DiscordPresenceService::coverWorkerMain(std::stop_token stopToken)
             " epoch=" + std::to_string(track.update.coverEpoch) +
             " attempt=" + std::to_string(attemptCount));
         auto result = coverService_.resolve(
-            track.trackHandle, track.update.trackKey, stopToken, coverAdmission);
+            track.trackHandle, track.update.trackKey, stopToken, coverAdmission,
+            {track.albumArtist.empty()?std::string(track.playback.artist.data()):track.albumArtist,
+                track.playback.album.data(),track.musicBrainzReleaseId});
         if (stopToken.stop_requested()) break;
         if (!result.succeeded()) {
             qaPresenceLog("cover fallback revision=" +
@@ -1704,23 +1826,57 @@ void DiscordPresenceService::coverWorkerMain(std::stop_token stopToken)
                     static_cast<bool>(g_presenceEnabled) &&
                     static_cast<bool>(g_presenceTemporaryCovers);
             }
+            if (stillCurrent) {
+                std::lock_guard lock(mutex_);
+                const auto now=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+                if (keyFor(pending_)==requestKey && pending_.coverToken.empty() && pending_.relayExpiresAtMilliseconds>0 &&
+                        pending_.relayExpiresAtMilliseconds<=now) {
+                    pending_.coverUrl.clear(); pending_.relayExpiresAtMilliseconds=0;
+                    ++pendingRevision_; pending_.update.presenceRevision=pendingRevision_;
+                    changed_.notify_all();
+                }
+            }
             coverStatus_.store(stillCurrent
                     ? DiscordCoverStatus::fallback
                     : DiscordCoverStatus::idle,
                 std::memory_order_release);
             if (!stillCurrent) staleCoverDiscards_.fetch_add(
                 1, std::memory_order_relaxed);
-            if (stillCurrent && attemptCount < 4U) {
+            coverFailure_.store(result.failure, std::memory_order_release);
+            const bool retryable = result.failure == DiscordCoverFailure::upload ||
+                result.failure == DiscordCoverFailure::origin ||
+                result.failure == DiscordCoverFailure::delivery;
+            if (stillCurrent && retryable && result.retryAfterMilliseconds != 0) {
+                deferredRetryAt = std::chrono::steady_clock::now() +
+                    std::chrono::milliseconds(result.retryAfterMilliseconds);
+            }
+            if (stillCurrent && retryable && attemptCount < 4U) {
                 const auto delay = attemptCount == 1U ? 1s :
                     attemptCount == 2U ? 5s : 30s;
                 retryAt = std::chrono::steady_clock::now() + delay;
+            } else if (stillCurrent && retryable && !ephemeralRelayEnabled() && deferredAttempts < 2U) {
+                // Give temporary outages two slow recovery opportunities even
+                // without an origin-repair hint. Still at most six resolves
+                // per cover key; metadata and RPC READY cannot reset the budget.
+                // Confirmed broken origins retain their propagation grace.
+                const auto delay = deferredAttempts == 0U ? 120s : 600s;
+                retryAt = (std::max)(std::chrono::steady_clock::now() + delay,
+                    deferredRetryAt);
             } else if (!stillCurrent) {
                 attemptedKey.reset();
                 attemptCount = 0;
+                deferredAttempts = 0;
+                deferredRetryAt = std::chrono::steady_clock::time_point::min();
                 retryAt = std::chrono::steady_clock::time_point::min();
             } else {
+                // Seal terminal failures too: a later metadata revision must
+                // not restart a request that has no automatic recovery path.
+                attemptCount = (std::max)(attemptCount, 4U);
+                deferredAttempts = 2U;
                 retryAt = std::chrono::steady_clock::time_point::min();
             }
+            coverRetryPending_.store(stillCurrent &&
+                retryAt != std::chrono::steady_clock::time_point::min(), std::memory_order_release);
             continue;
         }
 
@@ -1734,9 +1890,7 @@ void DiscordPresenceService::coverWorkerMain(std::stop_token stopToken)
                 pending_.update.coverEpoch == track.update.coverEpoch &&
                 pending_.update.trackKey == track.update.trackKey &&
                 pending_.update.enabled && pending_.update.started &&
-                pending_.update.allowCover &&
-                (ephemeralRelayEnabled() ||
-                    rpcReady_.load(std::memory_order_acquire)) &&
+                pending_.update.allowCover && pending_.trackHandle.is_valid() &&
                 static_cast<bool>(g_presenceEnabled) &&
                 static_cast<bool>(g_presenceTemporaryCovers);
             if (sameRequest) {
@@ -1755,12 +1909,18 @@ void DiscordPresenceService::coverWorkerMain(std::stop_token stopToken)
                 accepted = true;
             }
         }
+        if (accepted) deliveredCoverProvider_.store(result.provider, std::memory_order_release);
         if (!accepted) staleCoverDiscards_.fetch_add(
             1, std::memory_order_relaxed);
         coverStatus_.store(accepted
                 ? DiscordCoverStatus::ready
                 : DiscordCoverStatus::idle,
             std::memory_order_release);
+        // A valid result belongs to this track even while RPC reconnects.
+        // The RPC lane replays pending_ on READY; discarding it here can park
+        // the cover worker forever without another metadata publication.
+        coverFailure_.store(DiscordCoverFailure::none, std::memory_order_release);
+        coverRetryPending_.store(false, std::memory_order_release);
         qaPresenceLog("cover result revision=" + std::to_string(revision) +
             " accepted=" + std::to_string(accepted) +
             " pending=" + std::to_string(acceptedRevision) +
@@ -1772,6 +1932,8 @@ void DiscordPresenceService::coverWorkerMain(std::stop_token stopToken)
                 std::to_string(result.verificationMilliseconds));
         attemptedKey.reset();
         attemptCount = 0;
+        deferredAttempts = 0;
+        deferredRetryAt = std::chrono::steady_clock::time_point::min();
         retryAt = std::chrono::steady_clock::time_point::min();
         if (accepted) changed_.notify_all();
     }
@@ -2282,7 +2444,11 @@ void DiscordPresenceService::workerMain(std::stop_token stopToken)
             }
         }
         rpcReady_.store(false, std::memory_order_release);
-        coverService_.cancel();
+        // A pipe reconnect is not an opt-out or a track change. Let the
+        // already-admitted cover finish and retain its result for READY.
+        // New cover work still waits for READY; privacy/track/shutdown paths
+        // explicitly cancel their admission instead of spending retry slots
+        // on every short Discord connection.
         changed_.notify_all();
         CloseHandle(pipe);
     }

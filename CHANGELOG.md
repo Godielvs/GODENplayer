@@ -1,4 +1,10 @@
 # Changelog
+## Public preparation candidate 13
+- Add independent Discord cover options: temporary Uguu, personal-key ImgBB, catalogue artwork lookup and Automatic, alongside Catbox and a custom relay. New setup recommends Automatic with explicit permission; existing preferences and legacy Catbox consent are preserved.
+- Reuse enabled-provider caches before uploads, bound retries and recovery, renew temporary links, and retain cover results across Discord reconnection. Show clearer provider and failure status without interrupting text Presence or playback.
+- Organize Options into Appearance, Playback, Lyrics, Discord and Tools. Keep Apply / Reconnect accessible, put technical Discord controls under Advanced, preserve edits across navigation and warn before discarding unapplied settings.
+- Add provider, consent, retry/reconnect, Windows credential protection and Options layout regression coverage. Preserve the approved audio, shaders, visual quality and presentation cadence.
+
 ## Public preparation candidate 12
 - Keep the shared artwork palette while Album content is loading, adopt cached artwork when content becomes ready, and resynchronize on restoring Album. This fixes the interface turning gray or retaining the preceding album's colours while the visual already shows the new palette.
 - Add a production-method palette event oracle covering loading snapshots, cache hits, stale events, hidden views, missing artwork and restoration. The corrected source passes 13 checks; the preceding source fails 7 of them.

@@ -2,10 +2,10 @@
   "schema": "goden.release-manifest.v2",
   "component": "foo_nekorox",
   "buildIdentity": {
-    "version": "5.1.0-beta.18-public.12",
+    "version": "5.1.0-beta.18-public.13",
     "source": "src/component/build_identity.h",
     "releaseState": "local-candidate-not-published",
-    "sourceContentSha256": "294c4eacaaedd827f86e26ec7277b651b51bbaa3b8796a4676a4b2b655ed73c2",
+    "sourceContentSha256": "acd4d11a6f4dee49b85d728eaff2ed47f263058ed9379b822ed4900b2bab0c62",
     "toolchain": "MSVC v142 / SDK 19041; Columns UI v143 / SDK 26100"
   },
   "architecture": "x86_64",
@@ -19,13 +19,13 @@
   "qaMutationHooks": false,
   "nativeBuildSource": {
     "schema": "goden.native-build-source.v1",
-    "sourceContentSha256": "294c4eacaaedd827f86e26ec7277b651b51bbaa3b8796a4676a4b2b655ed73c2",
+    "sourceContentSha256": "acd4d11a6f4dee49b85d728eaff2ed47f263058ed9379b822ed4900b2bab0c62",
     "qaMutationHooks": false,
     "binaries": {
       "coreBinary": {
         "path": "foo_nekorox.dll",
-        "bytes": 7203328,
-        "sha256": "a9d3ea68f91ae2984a03de3a303dc78cb33b79eedde6a3ab76064c69e943fe95"
+        "bytes": 7255552,
+        "sha256": "e2d784123c95df5f7b8117925638c8ce9c9bcf2ea05bac8f5cdbd7729487afc9"
       },
       "analysisWorkerBinary": {
         "path": "nekorox-analysis.exe",
@@ -48,8 +48,8 @@
   "dependencyLockSha256": "2789316d67eac1497da46b7cc533118d1063f0bc4a22d026f6f44177aa91f1bc",
   "coreBinary": {
     "path": "foo_nekorox.dll",
-    "bytes": 7203328,
-    "sha256": "a9d3ea68f91ae2984a03de3a303dc78cb33b79eedde6a3ab76064c69e943fe95"
+    "bytes": 7255552,
+    "sha256": "e2d784123c95df5f7b8117925638c8ce9c9bcf2ea05bac8f5cdbd7729487afc9"
   },
   "analysisWorkerBinary": {
     "path": "nekorox-analysis.exe",

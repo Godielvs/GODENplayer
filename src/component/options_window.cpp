@@ -20,6 +20,7 @@
 #include <dwmapi.h>
 #include <string>
 #include <uxtheme.h>
+#include <vector>
 
 namespace nekorox::component {
 namespace {
@@ -66,6 +67,10 @@ constexpr int kRelayCredentialId=1028;
 constexpr int kCoverDisclosureId=1029;
 constexpr int kListenId = 1030;
 constexpr int kDawId = 1031;
+constexpr int kImgBBKeyId=1032, kAutoCatboxId=1033, kAutoUguuId=1034,
+    kAutoImgBBId=1035, kAutoCatalogueId=1036, kTestCoverId=1037, kRetryCoverId=1038;
+constexpr int kAdvancedPresenceId = 1039;
+constexpr int kNavigationId = 1050;
 constexpr int kCloseId = 1040;
 constexpr int kViewportId = 1090;
 constexpr UINT_PTR kStatusTimer = 1;
@@ -347,9 +352,11 @@ LRESULT OptionsWindow::handleMessage(
     }
     case WM_TIMER:
         if (wParam == kStatusTimer && IsWindowVisible(window_)) {
-            refreshPresenceStatus();
-            refreshListenEffectsStatus();
-            refreshAlbumAmbientStatus();
+            if (page_ == 3) refreshPresenceStatus();
+            if (page_ == 0) {
+                refreshListenEffectsStatus();
+                refreshAlbumAmbientStatus();
+            }
         }
         return 0;
     case WM_ERASEBKGND:
@@ -368,7 +375,10 @@ LRESULT OptionsWindow::handleMessage(
             sectionLabels_.end(), control) != sectionLabels_.end();
         SetTextColor(dc, isSection ? kAccent :
             control == footerStatus_ || control == motionLabel_ ||
-                    control == applicationLabel_ || control == presenceHint_
+                    control == applicationLabel_ || control == presenceHint_ ||
+                    control == providerLabel_ || control == playbackHint_ ||
+                    control == lyricsHint_ || control == toolsHint_ ||
+                    control == listenEffectsLabel_ || control == albumAmbientLabel_
                 ? kMuted : control == presenceStatus_ &&
                     DiscordPresenceService::instance().externalPublisherConflict()
                 ? kWarning : kText);
@@ -388,6 +398,8 @@ LRESULT OptionsWindow::handleMessage(
             item.CtlID == kIdentityId || item.CtlID == kKeepPlayingId ||
             item.CtlID == kPresenceId || item.CtlID == kPresencePausedId ||
             item.CtlID == kPresenceCoversId || item.CtlID == kCoverDisclosureId ||
+            item.CtlID == kAutoCatboxId || item.CtlID == kAutoUguuId ||
+            item.CtlID == kAutoImgBBId || item.CtlID == kAutoCatalogueId ||
             item.CtlID == kLyricsOnlineId || item.CtlID == kLyricsOfflineId) {
             drawCheckbox(item);
         } else if (item.CtlID == kMotionId || item.CtlID == kKeepModeId ||
@@ -412,7 +424,15 @@ LRESULT OptionsWindow::handleMessage(
     case WM_COMMAND: {
         const auto id = LOWORD(wParam);
         const auto notification = HIWORD(wParam);
-        if (id == kIdentityId && notification == BN_CLICKED) {
+        if (id >= kNavigationId && id < kNavigationId + static_cast<int>(navigation_.size()) && notification == BN_CLICKED) {
+            selectPage(static_cast<std::size_t>(id - kNavigationId));
+        } else if (id == kAdvancedPresenceId && notification == BN_CLICKED) {
+            presenceAdvanced_ = !presenceAdvanced_;
+            SetWindowTextW(advancedPresence_, presenceAdvanced_ ? L"HIDE ADVANCED" : L"ADVANCED...");
+            updateLayout();
+        } else if ((id == kApplicationId || id == kRelayEndpointId || id == kRelayCredentialId || id == kImgBBKeyId) && notification == EN_CHANGE) {
+            markPresenceDirty();
+        } else if (id == kIdentityId && notification == BN_CLICKED) {
             setHeaderWordmarkEnabled(toggleCheckbox(identity_));
         } else if (id == kFallbackButtonId && notification == BN_CLICKED) {
             if (chooseFallbackAccentColor(window_)) updateFallbackLabel();
@@ -470,10 +490,22 @@ LRESULT OptionsWindow::handleMessage(
                 toggleCheckbox(presenceCovers_));
             refreshPresenceStatus();
         } else if (id == kCoverProviderId && notification == CBN_SELCHANGE) {
-            const auto provider=SendMessageW(coverProvider_,CB_GETCURSEL,0,0);
-            EnableWindow(relayEndpoint_,provider==2);EnableWindow(relayCredential_,provider==2);
+            SendMessageW(coverDisclosure_,BM_SETCHECK,BST_UNCHECKED,0);
+            markPresenceDirty();
+            refreshCoverControls();
+        } else if (id>=kAutoCatboxId && id<=kAutoCatalogueId && notification==BN_CLICKED) {
+            toggleCheckbox(id==kAutoCatboxId?autoCatbox_:id==kAutoUguuId?autoUguu_:id==kAutoImgBBId?autoImgBB_:autoCatalogue_);
+            SendMessageW(coverDisclosure_,BM_SETCHECK,BST_UNCHECKED,0);
+            markPresenceDirty();
+            refreshCoverControls();
+        } else if ((id==kTestCoverId || id==kRetryCoverId) && notification==BN_CLICKED) {
+            if (!DiscordPresenceService::instance().retryCurrentCover(id==kTestCoverId))
+                MessageBoxW(window_,L"Play a track, enable Presence and covers, then Apply the provider and permission before testing.",
+                    L"Cover test",MB_OK|MB_ICONINFORMATION);
+            refreshPresenceStatus();
         } else if (id == kCoverDisclosureId && notification == BN_CLICKED) {
             toggleCheckbox(coverDisclosure_);
+            markPresenceDirty();
         } else if (id == kApplyPresenceId && notification == BN_CLICKED) {
             const auto readEdit=[](HWND edit) {
                 std::wstring text(static_cast<std::size_t>(GetWindowTextLengthW(edit))+1U,L'\0');
@@ -491,11 +523,17 @@ LRESULT OptionsWindow::handleMessage(
             }
             if(!DiscordPresenceService::instance().setCoverConfiguration(provider,
                     readEdit(relayEndpoint_),readEdit(relayCredential_),
-                    SendMessageW(coverDisclosure_,BM_GETCHECK,0,0)==BST_CHECKED)) {
-                MessageBoxW(window_,L"Choose Catbox, or enter a valid HTTPS relay origin and private credential.",
+                    SendMessageW(coverDisclosure_,BM_GETCHECK,0,0)==BST_CHECKED,
+                    (SendMessageW(autoCatbox_,BM_GETCHECK,0,0)==BST_CHECKED?coverProviderBit(PresenceCoverProvider::catbox):0U)|
+                    (SendMessageW(autoUguu_,BM_GETCHECK,0,0)==BST_CHECKED?coverProviderBit(PresenceCoverProvider::uguu):0U)|
+                    (SendMessageW(autoImgBB_,BM_GETCHECK,0,0)==BST_CHECKED?coverProviderBit(PresenceCoverProvider::imgbb):0U)|
+                    (SendMessageW(autoCatalogue_,BM_GETCHECK,0,0)==BST_CHECKED?coverProviderBit(PresenceCoverProvider::catalogue):0U),
+                    readEdit(imgbbKey_))) {
+                MessageBoxW(window_,L"Choose a provider. Automatic needs at least one enabled service; ImgBB needs your API key. Private relay needs a valid HTTPS origin and credential.",
                     L"Cover provider",MB_OK|MB_ICONWARNING);return 0;
             }
             SetWindowTextW(relayCredential_,L"");
+            SetWindowTextW(imgbbKey_,L"");
             std::wstring value(static_cast<std::size_t>(
                 GetWindowTextLengthW(applicationId_)) + 1U, L'\0');
             value.resize(static_cast<std::size_t>(GetWindowTextW(
@@ -506,18 +544,19 @@ LRESULT OptionsWindow::handleMessage(
                     L"Application ID must contain 16\u201324 decimal digits.",
                     L"GODENplayer Music Presence", MB_OK | MB_ICONWARNING);
             }
+            presenceDirty_ = false;
             refreshAll();
         } else if (id == kListenId && notification == BN_CLICKED) {
             ListenWindow::instance().show();
         } else if (id == kDawId && notification == BN_CLICKED) {
             DawWindow::instance().show(window_);
         } else if (id == kCloseId && notification == BN_CLICKED) {
-            DestroyWindow(window_);
+            if (confirmDiscard()) DestroyWindow(window_);
         }
         return 0;
     }
     case WM_CLOSE:
-        DestroyWindow(window);
+        if (confirmDiscard()) DestroyWindow(window);
         return 0;
     case WM_DESTROY:
         KillTimer(window, kStatusTimer);
@@ -532,25 +571,40 @@ LRESULT OptionsWindow::handleMessage(
 
 void OptionsWindow::createControls()
 {
+    refreshing_ = true;
     const auto content = viewport_.content();
-    title_ = makeControl(window_, 0, L"STATIC", L"GODENplayer OPTIONS",
+    title_ = makeControl(window_, 0, L"STATIC", L"GODENplayer Options",
         SS_LEFT, 1080);
     footerStatus_ = makeControl(window_, 0, L"STATIC",
-        L"Changes are saved immediately", SS_LEFT, 1081);
+        L"Changes save immediately.", SS_LEFT, 1081);
     closeButton_ = makeButton(window_, L"CLOSE", kCloseId);
     constexpr std::array<const wchar_t*, 5> sectionNames{
-        L"APPEARANCE & MOTION", L"PLAYBACK CONTINUITY",
-        L"AUTOMATIC LYRICS", L"DISCORD MUSIC PRESENCE", L"TOOLS"};
+        L"APPEARANCE", L"PLAYBACK", L"LYRICS", L"DISCORD", L"TOOLS"};
+    constexpr std::array<const wchar_t*, 5> navigationNames{
+        L"Appearance", L"Playback", L"Lyrics", L"Discord", L"Tools"};
+    for (std::size_t index = 0; index < navigation_.size(); ++index) {
+        navigation_[index] = makeButton(window_, navigationNames[index], kNavigationId + static_cast<int>(index));
+        viewport_.trackControl(navigation_[index]);
+    }
+    viewport_.trackControl(closeButton_);
     for (std::size_t index = 0; index < sectionLabels_.size(); ++index)
         sectionLabels_[index] = makeControl(content, 0, L"STATIC",
             sectionNames[index], SS_LEFT, 1082 + static_cast<int>(index));
-    motionLabel_ = makeControl(content, 0, L"STATIC", L"UI motion profile",
+    motionLabel_ = makeControl(content, 0, L"STATIC", L"UI animations",
         SS_LEFT, 1087);
     applicationLabel_ = makeControl(content, 0, L"STATIC",
         L"Discord Application ID", SS_LEFT, 1088);
     presenceHint_ = makeControl(content, 0, L"STATIC",
-        L"Catbox miniatures are public and may remain for years. Disabling covers stops new uploads. Private relay uses its own retention. Apply saves the provider and permission.",
+        L"Apply saves changes. Test cover checks the saved provider and cache; Try again restarts the bounded recovery. Text and playback continue if covers fail.",
         SS_LEFT, 1089);
+
+    providerLabel_ = makeControl(content, 0, L"STATIC", L"Cover source", SS_LEFT, 1091);
+    listenEffectsLabel_ = makeControl(content, 0, L"STATIC", L"LISTEN lighting", SS_LEFT, 1092);
+    albumAmbientLabel_ = makeControl(content, 0, L"STATIC", L"Album ambience", SS_LEFT, 1093);
+    playbackHint_ = makeControl(content, 0, L"STATIC", L"Choose what plays after the current album finishes.", SS_LEFT, 1094);
+    lyricsHint_ = makeControl(content, 0, L"STATIC", L"Online search sends artist, title, album and duration. Offline mode cancels network requests; local lyrics remain available.", SS_LEFT, 1095);
+    toolsHint_ = makeControl(content, 0, L"STATIC", L"Open a dedicated workspace. TAG and DSP are available from the player's main toolbar.", SS_LEFT, 1096);
+    advancedPresence_ = makeButton(content, L"ADVANCED...", kAdvancedPresenceId);
 
     identity_ = makeCheckbox(content,
         L"Show GODENplayer identity in the header", kIdentityId);
@@ -596,21 +650,32 @@ void OptionsWindow::createControls()
         reinterpret_cast<LPARAM>(L"Sequence \u00b7 captured library order"));
     SendMessageW(keepMode_, CB_SETMINVISIBLE, 2, 0);
     lyricsOnline_ = makeCheckbox(content,
-        L"Automatic online lyrics (artist/title/album/duration only)",
+        L"Find lyrics online automatically",
         kLyricsOnlineId);
     lyricsOffline_ = makeCheckbox(content,
-        L"Offline lyrics mode (cancel network)", kLyricsOfflineId);
+        L"Offline mode - use local lyrics only", kLyricsOfflineId);
 
     presence_ = makeCheckbox(content,
-        L"Enable native Discord Music Presence", kPresenceId);
+        L"Show what is playing in Discord", kPresenceId);
     presencePaused_ = makeCheckbox(content,
         L"Keep the track visible while paused", kPresencePausedId);
     presenceCovers_ = makeCheckbox(content,
-        L"Show current album cover in Discord", kPresenceCoversId);
+        L"Include the current album cover", kPresenceCoversId);
     coverProvider_=makeControl(content,0,WC_COMBOBOXW,L"",
         CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS|WS_TABSTOP|WS_VSCROLL,kCoverProviderId);
-    for(const auto* label:{L"Choose a cover provider",L"Catbox - public miniature",L"Private relay"})
+    for(const auto* label:{L"Choose a cover provider",L"Catbox - public miniature",L"Private relay",
+            L"Uguu - temporary (3 hours)",L"ImgBB - your API key",L"Catalogue - no local image upload",L"Automatic (recommended)"})
         SendMessageW(coverProvider_,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label));
+    SendMessageW(coverProvider_,CB_SETMINVISIBLE,7,0);
+    autoCatbox_=makeCheckbox(content,L"Catbox - public, persistent upload",kAutoCatboxId);
+    autoUguu_=makeCheckbox(content,L"Uguu - public upload, expires after 3 hours",kAutoUguuId);
+    autoImgBB_=makeCheckbox(content,L"ImgBB - public upload, requires your key",kAutoImgBBId);
+    autoCatalogue_=makeCheckbox(content,L"Catalogue - artist / album lookup, no upload",kAutoCatalogueId);
+    imgbbKey_=makeControl(content,WS_EX_CLIENTEDGE,L"EDIT",L"",
+        ES_LEFT|ES_AUTOHSCROLL|ES_PASSWORD|WS_TABSTOP,kImgBBKeyId);
+    SendMessageW(imgbbKey_,EM_SETLIMITTEXT,128,0);
+    testCover_=makeButton(content,L"TEST COVER",kTestCoverId);
+    retryCover_=makeButton(content,L"TRY AGAIN NOW",kRetryCoverId);
     relayEndpoint_=makeControl(content,WS_EX_CLIENTEDGE,L"EDIT",L"",
         ES_LEFT|ES_AUTOHSCROLL|WS_TABSTOP,kRelayEndpointId);
     relayCredential_=makeControl(content,WS_EX_CLIENTEDGE,L"EDIT",L"",
@@ -619,25 +684,64 @@ void OptionsWindow::createControls()
     SendMessageW(relayCredential_,EM_SETLIMITTEXT,256,0);
     SendMessageW(relayEndpoint_,EM_SETCUEBANNER,0,reinterpret_cast<LPARAM>(L"Private relay HTTPS origin"));
     SendMessageW(relayCredential_,EM_SETCUEBANNER,0,reinterpret_cast<LPARAM>(L"Private credential (blank keeps saved value)"));
-    coverDisclosure_=makeCheckbox(content,L"Allow sending cover miniatures to the chosen provider",kCoverDisclosureId);
+    coverDisclosure_=makeCheckbox(content,L"Allow the services described above",kCoverDisclosureId);
     applicationId_ = makeControl(content, WS_EX_CLIENTEDGE, L"EDIT", L"",
         ES_LEFT | ES_AUTOHSCROLL | WS_TABSTOP, kApplicationId);
     SendMessageW(applicationId_, EM_SETLIMITTEXT, 24, 0);
-    applyPresence_ = makeButton(content, L"APPLY / RECONNECT", kApplyPresenceId);
+    applyPresence_ = makeButton(window_, L"APPLY / RECONNECT", kApplyPresenceId);
+    viewport_.trackControl(applyPresence_);
     presenceStatus_ = makeControl(content, 0, L"STATIC", L"",
         SS_LEFT, kPresenceStatusId);
     listen_ = makeButton(content, L"OPEN GODENplayer LISTEN", kListenId);
     daw_ = makeButton(content, L"OPEN DAW MODE", kDawId);
-    for (const auto control : {identity_, fallbackButton_, fallbackValue_, motion_,
+    for (const auto control : {advancedPresence_, identity_, fallbackButton_, fallbackValue_, motion_,
             listenEffects_, listenEffectsStatus_, albumAmbient_,
             albumAmbientStatus_, keepPlaying_, keepMode_,
             lyricsOnline_, lyricsOffline_, presence_, presencePaused_,
             presenceCovers_, coverProvider_,relayEndpoint_,relayCredential_,coverDisclosure_,
+            imgbbKey_,autoCatbox_,autoUguu_,autoImgBB_,autoCatalogue_,testCover_,retryCover_,
             applicationId_, applyPresence_, presenceStatus_,
             listen_, daw_}) viewport_.trackControl(control);
     updateFont();
     updateLayout();
     refreshAll();
+}
+
+void OptionsWindow::selectPage(std::size_t index)
+{
+    if (index >= navigation_.size() || index == page_) return;
+    pageScroll_[page_] = viewport_.scrollOffset();
+    page_ = index;
+    viewport_.scrollTo(0);
+    updateLayout();
+    viewport_.scrollTo(pageScroll_[page_]);
+    for (const auto control : navigation_) InvalidateRect(control, nullptr, FALSE);
+    updateFooter();
+}
+
+void OptionsWindow::markPresenceDirty()
+{
+    if (refreshing_) return;
+    presenceDirty_ = true;
+    updateFooter();
+}
+
+void OptionsWindow::updateFooter()
+{
+    if (footerStatus_ == nullptr) return;
+    SetWindowTextW(footerStatus_, presenceDirty_
+        ? L"Unapplied Discord settings. Use Apply / Reconnect."
+        : page_ == 3 ? L"Provider edits need Apply. Switches save immediately."
+                     : L"Changes save immediately.");
+    SetWindowTextW(navigation_[3], presenceDirty_ ? L"Discord *" : L"Discord");
+    ShowWindow(applyPresence_, page_ == 3 ? SW_SHOWNA : SW_HIDE);
+}
+
+bool OptionsWindow::confirmDiscard()
+{
+    return !presenceDirty_ || MessageBoxW(window_,
+        L"Discard unapplied Discord settings?\n\nUse Apply / Reconnect on the Discord page to save them.",
+        L"Unapplied settings", MB_OKCANCEL | MB_ICONQUESTION | MB_DEFBUTTON2) == IDOK;
 }
 
 void OptionsWindow::updateLayout()
@@ -646,104 +750,112 @@ void OptionsWindow::updateLayout()
     RECT client{};
     GetClientRect(window_, &client);
     const auto headerHeight = dip(window_, 56);
-    const auto footerHeight = dip(window_, 56);
+    const auto footerHeight = dip(window_, 72);
+    const auto sidebarWidth = dip(window_, 144);
     const auto clientWidth = static_cast<int>(client.right);
     const auto clientHeight = static_cast<int>(client.bottom);
     const auto preservedScroll = viewport_.scrollOffset();
     viewport_.scrollTo(0);
-    viewport_.setBounds(0, headerHeight, clientWidth,
-        (std::max)(1, clientHeight - headerHeight - footerHeight),
-        dip(window_, 820));
+    const auto bodyHeight = (std::max)(1, clientHeight - headerHeight - footerHeight);
+    viewport_.setBounds(sidebarWidth, headerHeight, (std::max)(1, clientWidth - sidebarWidth), bodyHeight, dip(window_, 820));
     RECT contentClient{};
     GetClientRect(viewport_.content(), &contentClient);
-    const auto dpiValue = static_cast<int>((std::max)(96U,
-        GetDpiForWindow(window_)));
-    const auto widthDip = MulDiv(static_cast<int>(contentClient.right), 96,
-        dpiValue);
-    const auto paddingDip = 26;
+    const auto dpiValue = static_cast<int>((std::max)(96U, GetDpiForWindow(window_)));
+    const auto widthDip = MulDiv(static_cast<int>(contentClient.right), 96, dpiValue);
+    constexpr auto paddingDip = 20;
     const auto usableDip = (std::max)(1, widthDip - paddingDip * 2);
-    const auto buttonDip = (std::min)(150, (std::max)(96, usableDip / 3));
-    const auto comboDip = (std::min)(210, (std::max)(130, usableDip / 2));
     auto px = [&](int value) { return MulDiv(value, dpiValue, 96); };
-    auto place = [&](HWND control, const UiFormRect& rect,
-            int = -1) {
-        move(control, px(rect.x), px(rect.y), px(rect.width),
-            px(rect.height));
+    std::vector<HWND> visible;
+    const auto place = [&](HWND control, const UiFormRect& rect) {
+        visible.push_back(control);
+        const bool combo = control == motion_ || control == listenEffects_ || control == albumAmbient_ ||
+            control == keepMode_ || control == coverProvider_;
+        move(control, px(rect.x), px(rect.y), px(rect.width), px(combo ? 240 : rect.height));
     };
-    UiFormFlow flow(12);
-    auto section = [&](std::size_t index) {
-        place(sectionLabels_[index], flow.take(
-            paddingDip, usableDip, 24, 12));
+    UiFormFlow flow(20);
+    const auto fullRow = [&](HWND control, int height = 30, int gap = 12) {
+        place(control, flow.take(paddingDip, usableDip, height, gap));
     };
-    auto fullRow = [&](HWND control, int gap = 12) {
-        place(control, flow.take(paddingDip, usableDip, 30, gap));
+    const auto labelledCombo = [&](HWND label, HWND combo) {
+        fullRow(label, 20, 4);
+        fullRow(combo);
     };
-
-    section(0);
-    fullRow(identity_);
-    auto row = flow.take(paddingDip, usableDip, 30, 12);
-    place(fallbackButton_, {row.x, row.y, buttonDip, row.height});
-    place(fallbackValue_, {row.x + buttonDip + 12, row.y,
-        (std::max)(1, row.width - buttonDip - 12), row.height});
-    row = flow.take(paddingDip, usableDip, 30, 12);
-    place(motion_, {row.x, row.y, comboDip, row.height}, 220);
-    place(motionLabel_, {row.x + comboDip + 12, row.y,
-        (std::max)(1, row.width - comboDip - 12), row.height});
-    row = flow.take(paddingDip, usableDip, 30, 20);
-    place(listenEffects_, {row.x, row.y, comboDip, row.height}, 120);
-    place(listenEffectsStatus_, {row.x + comboDip + 12, row.y,
-        (std::max)(1, row.width - comboDip - 12), row.height});
-    row = flow.take(paddingDip, usableDip, 30, 20);
-    place(albumAmbient_, {row.x, row.y, comboDip, row.height}, 180);
-    place(albumAmbientStatus_, {row.x + comboDip + 12, row.y,
-        (std::max)(1, row.width - comboDip - 12), row.height});
-
-    section(1);
-    fullRow(keepPlaying_);
-    row = flow.take(paddingDip, usableDip, 30, 20);
-    place(keepMode_, {(widthDip - (std::min)(330, usableDip)) / 2,
-        row.y, (std::min)(330, usableDip), row.height}, 220);
-
-    section(2);
-    fullRow(lyricsOnline_);
-    fullRow(lyricsOffline_, 20);
-
-    section(3);
-    fullRow(presence_);
-    fullRow(presencePaused_);
-    fullRow(presenceCovers_);
-    row=flow.take(paddingDip,usableDip,30,8);place(coverProvider_,row,180);
-    fullRow(coverDisclosure_);
-    fullRow(relayEndpoint_);
-    fullRow(relayCredential_);
-    place(applicationLabel_, flow.take(paddingDip, usableDip, 20, 4));
-    row = flow.take(paddingDip, usableDip, 30, 10);
-    place(applicationId_, {row.x, row.y,
-        (std::max)(1, row.width - buttonDip - 10), row.height});
-    place(applyPresence_, {row.x + row.width - buttonDip, row.y,
-        buttonDip, row.height});
-    fullRow(presenceStatus_, 8);
-    place(presenceHint_, flow.take(paddingDip, usableDip, 42, 20));
-
-    section(4);
-    row = flow.take(paddingDip, usableDip, 30, 24);
-    const auto toolWidth = (std::max)(1, (row.width - 12) / 2);
-    place(daw_, {row.x, row.y, toolWidth, row.height});
-    place(listen_, {row.x + toolWidth + 12, row.y, toolWidth, row.height});
-
-    viewport_.setBounds(0, headerHeight, clientWidth,
-        (std::max)(1, clientHeight - headerHeight - footerHeight),
-        px(flow.cursor()));
-    move(title_, dip(window_, 26), dip(window_, 14),
-        clientWidth - dip(window_, 52), dip(window_, 30));
+    fullRow(sectionLabels_[page_], 24, 16);
+    switch (page_) {
+    case 0: {
+        fullRow(identity_);
+        auto row = flow.take(paddingDip, usableDip, 30, 22);
+        place(fallbackButton_, {row.x, row.y, 126, row.height});
+        place(fallbackValue_, {row.x + 138, row.y, (std::max)(1, row.width - 138), row.height});
+        labelledCombo(motionLabel_, motion_);
+        labelledCombo(listenEffectsLabel_, listenEffects_);
+        fullRow(listenEffectsStatus_, 40, 18);
+        labelledCombo(albumAmbientLabel_, albumAmbient_);
+        fullRow(albumAmbientStatus_, 56);
+        break;
+    }
+    case 1:
+        fullRow(playbackHint_, 40);
+        fullRow(keepPlaying_);
+        fullRow(keepMode_);
+        break;
+    case 2:
+        fullRow(lyricsOnline_);
+        fullRow(lyricsOffline_);
+        fullRow(lyricsHint_, 80);
+        break;
+    case 3: {
+        fullRow(presence_);
+        fullRow(presenceStatus_, 40, 8);
+        fullRow(presencePaused_);
+        fullRow(presenceCovers_);
+        labelledCombo(providerLabel_, coverProvider_);
+        const auto provider = static_cast<PresenceCoverProvider>(SendMessageW(coverProvider_, CB_GETCURSEL, 0, 0));
+        if (provider == PresenceCoverProvider::imgbb || (provider == PresenceCoverProvider::automatic &&
+                SendMessageW(autoImgBB_, BM_GETCHECK, 0, 0) == BST_CHECKED)) fullRow(imgbbKey_);
+        if (provider == PresenceCoverProvider::privateRelay) {
+            fullRow(relayEndpoint_);
+            fullRow(relayCredential_);
+        }
+        fullRow(presenceHint_, usableDip < 460 ? 124 : 100, 8);
+        fullRow(coverDisclosure_);
+        fullRow(advancedPresence_);
+        if (presenceAdvanced_) {
+            if (provider == PresenceCoverProvider::automatic) {
+                for (const auto control : {autoUguu_, autoCatbox_, autoImgBB_, autoCatalogue_}) fullRow(control);
+            }
+            labelledCombo(applicationLabel_, applicationId_);
+            auto row = flow.take(paddingDip, usableDip, 30, 12);
+            const auto half = (std::max)(1, (row.width - 12) / 2);
+            place(testCover_, {row.x, row.y, half, row.height});
+            place(retryCover_, {row.x + half + 12, row.y, half, row.height});
+        }
+        break;
+    }
+    case 4:
+        fullRow(toolsHint_, 60, 20);
+        fullRow(daw_);
+        fullRow(listen_);
+        break;
+    default: break;
+    }
+    for (auto control = GetWindow(viewport_.content(), GW_CHILD); control != nullptr; control = GetWindow(control, GW_HWNDNEXT)) {
+        const auto shown = std::find(visible.begin(), visible.end(), control) != visible.end();
+        ShowWindow(control, shown ? SW_SHOWNA : SW_HIDE);
+    }
+    viewport_.setBounds(sidebarWidth, headerHeight, (std::max)(1, clientWidth - sidebarWidth), bodyHeight, px(flow.cursor()));
+    for (std::size_t index = 0; index < navigation_.size(); ++index)
+        move(navigation_[index], dip(window_, 14), headerHeight + dip(window_, 16 + 44 * static_cast<int>(index)), dip(window_, 116), dip(window_, 34));
+    move(title_, dip(window_, 26), dip(window_, 14), clientWidth - dip(window_, 52), dip(window_, 30));
     const auto footerTop = clientHeight - footerHeight;
-    const auto closeWidth = dip(window_, 112);
-    move(footerStatus_, dip(window_, 26), footerTop + dip(window_, 13),
-        (std::max)(1, clientWidth - dip(window_, 64) - closeWidth),
-        dip(window_, 30));
-    move(closeButton_, clientWidth - dip(window_, 26) - closeWidth,
-        footerTop + dip(window_, 12), closeWidth, dip(window_, 30));
+    const auto closeWidth = dip(window_, 96);
+    const auto applyWidth = page_ == 3 ? dip(window_, 168) : 0;
+    move(footerStatus_, dip(window_, 20), footerTop + dip(window_, 14),
+        (std::max)(1, clientWidth - dip(window_, 52) - closeWidth - (page_ == 3 ? applyWidth + dip(window_, 12) : 0)), dip(window_, 44));
+    move(closeButton_, clientWidth - dip(window_, 20) - closeWidth, footerTop + dip(window_, 20), closeWidth, dip(window_, 30));
+    if (page_ == 3) move(applyPresence_, clientWidth - dip(window_, 32) - closeWidth - applyWidth, footerTop + dip(window_, 20), applyWidth, dip(window_, 30));
     viewport_.scrollTo(preservedScroll);
+    updateFooter();
 }
 
 void OptionsWindow::updateFont()
@@ -764,14 +876,17 @@ void OptionsWindow::updateFont()
             keepPlaying_, keepMode_, lyricsOnline_, lyricsOffline_, presence_,
             presencePaused_, presenceCovers_, coverProvider_, relayEndpoint_,
             relayCredential_, coverDisclosure_,
+            imgbbKey_,autoCatbox_,autoUguu_,autoImgBB_,autoCatalogue_,testCover_,retryCover_,
             applicationId_,
             applyPresence_, presenceStatus_, listen_, daw_, motionLabel_,
-            applicationLabel_, presenceHint_, footerStatus_, closeButton_}) {
+            applicationLabel_, presenceHint_, footerStatus_, closeButton_, advancedPresence_,
+            providerLabel_, playbackHint_, lyricsHint_, toolsHint_, listenEffectsLabel_, albumAmbientLabel_}) {
         if (control != nullptr) SendMessageW(control, WM_SETFONT,
             reinterpret_cast<WPARAM>(font_), TRUE);
     }
     if (title_ != nullptr) SendMessageW(title_, WM_SETFONT,
         reinterpret_cast<WPARAM>(headingFont_), TRUE);
+    for (const auto control : navigation_) SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
     for (const auto control : sectionLabels_) {
         if (control != nullptr) SendMessageW(control, WM_SETFONT,
             reinterpret_cast<WPARAM>(font_), TRUE);
@@ -780,6 +895,7 @@ void OptionsWindow::updateFont()
 
 void OptionsWindow::refreshAll()
 {
+    refreshing_ = true;
     SendMessageW(identity_, BM_SETCHECK,
         headerWordmarkEnabled() ? BST_CHECKED : BST_UNCHECKED, 0);
     SendMessageW(motion_, CB_SETCURSEL,
@@ -799,12 +915,21 @@ void OptionsWindow::refreshAll()
     SendMessageW(lyricsOffline_, BM_SETCHECK,
         lyrics.offlineMode() ? BST_CHECKED : BST_UNCHECKED, 0);
     const auto presence = DiscordPresenceService::instance().settings();
-    SendMessageW(coverProvider_,CB_SETCURSEL,static_cast<WPARAM>(presence.coverProvider),0);
-    SetWindowTextW(relayEndpoint_,utf8ToWide(presence.relayEndpoint).c_str());
-    SetWindowTextW(relayCredential_,L"");
-    SendMessageW(coverDisclosure_,BM_SETCHECK,presence.coverDisclosureAccepted?BST_CHECKED:BST_UNCHECKED,0);
-    const bool privateRelay=presence.coverProvider==PresenceCoverProvider::privateRelay;
-    EnableWindow(relayEndpoint_,privateRelay); EnableWindow(relayCredential_,privateRelay);
+    if (!presenceDirty_) {
+        const bool fresh = presence.coverProvider == PresenceCoverProvider::unconfigured;
+        SendMessageW(coverProvider_,CB_SETCURSEL,static_cast<WPARAM>(fresh ? PresenceCoverProvider::automatic : presence.coverProvider),0);
+        SetWindowTextW(relayEndpoint_,utf8ToWide(presence.relayEndpoint).c_str());
+        SetWindowTextW(relayCredential_,L"");
+        SendMessageW(coverDisclosure_,BM_SETCHECK,presence.coverDisclosureAccepted?BST_CHECKED:BST_UNCHECKED,0);
+        SetWindowTextW(imgbbKey_,L"");
+        SendMessageW(imgbbKey_,EM_SETCUEBANNER,0,reinterpret_cast<LPARAM>(presence.imgbbKeySaved?
+            L"ImgBB key saved (blank keeps saved value)":L"Your ImgBB API key (stored with Windows protection)"));
+        for (const auto [control,provider] : {std::pair{autoCatbox_,PresenceCoverProvider::catbox},
+                std::pair{autoUguu_,PresenceCoverProvider::uguu},std::pair{autoImgBB_,PresenceCoverProvider::imgbb},
+                std::pair{autoCatalogue_,PresenceCoverProvider::catalogue}})
+            SendMessageW(control,BM_SETCHECK,((fresh ? kRecommendedCoverProviders : presence.automaticProviders)&coverProviderBit(provider))?BST_CHECKED:BST_UNCHECKED,0);
+    }
+    refreshCoverControls();
 
     SendMessageW(presence_, BM_SETCHECK,
         presence.enabled ? BST_CHECKED : BST_UNCHECKED, 0);
@@ -812,16 +937,61 @@ void OptionsWindow::refreshAll()
         presence.showPaused ? BST_CHECKED : BST_UNCHECKED, 0);
     SendMessageW(presenceCovers_, BM_SETCHECK,
         presence.temporaryCovers ? BST_CHECKED : BST_UNCHECKED, 0);
-    applicationIdText_ = utf8ToWide(presence.applicationId);
-    SetWindowTextW(applicationId_, applicationIdText_.c_str());
-    for (const auto control : {presencePaused_, presenceCovers_,
-            applicationId_, applyPresence_}) {
+    if (!presenceDirty_) {
+        applicationIdText_ = utf8ToWide(presence.applicationId);
+        SetWindowTextW(applicationId_, applicationIdText_.c_str());
+    }
+    for (const auto control : {presencePaused_, presenceCovers_, testCover_, retryCover_}) {
         EnableWindow(control, presence.enabled ? TRUE : FALSE);
     }
     updateFallbackLabel();
     refreshListenEffectsStatus();
     refreshAlbumAmbientStatus();
     refreshPresenceStatus();
+    refreshing_ = false;
+    updateFooter();
+}
+
+void OptionsWindow::refreshCoverControls()
+{
+    const auto provider=static_cast<PresenceCoverProvider>(SendMessageW(coverProvider_,CB_GETCURSEL,0,0));
+    const bool automatic=provider==PresenceCoverProvider::automatic;
+    for (const auto control : {autoCatbox_,autoUguu_,autoImgBB_,autoCatalogue_}) EnableWindow(control,automatic);
+    EnableWindow(relayEndpoint_,provider==PresenceCoverProvider::privateRelay);
+    EnableWindow(relayCredential_,provider==PresenceCoverProvider::privateRelay);
+    EnableWindow(imgbbKey_,provider==PresenceCoverProvider::imgbb ||
+        (automatic && SendMessageW(autoImgBB_,BM_GETCHECK,0,0)==BST_CHECKED));
+    std::wstring hint=L"Choose a provider and allow its use, then Apply. Test / Try again use saved settings. Text Presence works independently.";
+    switch(provider) {
+    case PresenceCoverProvider::catbox:
+        hint=L"Catbox uploads a public, metadata-free miniature that may remain for years. Disabling covers stops new uploads; it does not delete old ones. Delivery also uses wsrv.nl. Apply saves changes."; break;
+    case PresenceCoverProvider::uguu:
+        hint=L"Uguu uploads a public miniature retained for 3 hours. The player renews it during long playback. Delivery also uses wsrv.nl. Disabling covers stops new uploads. Apply saves changes."; break;
+    case PresenceCoverProvider::imgbb:
+        hint=L"ImgBB uploads a public miniature using your own API key, protected locally by Windows. Images persist under ImgBB's policy; disabling covers does not delete them. Delivery uses wsrv.nl. Apply saves changes."; break;
+    case PresenceCoverProvider::catalogue:
+        hint=L"Catalogue sends artist and album, or a tagged release ID, to MusicBrainz / Cover Art Archive. No local image is uploaded. Artwork may differ by edition. Delivery uses wsrv.nl. Apply saves changes."; break;
+    case PresenceCoverProvider::automatic:
+        hint=L"Enabled: ";
+        {
+            bool first = true;
+            for (const auto [control, label] : {std::pair{autoUguu_, L"Uguu (3 h)"},
+                    std::pair{autoCatbox_, L"Catbox (persistent)"}, std::pair{autoImgBB_, L"ImgBB (persistent)"},
+                    std::pair{autoCatalogue_, L"catalogue lookup"}}) {
+                if (SendMessageW(control, BM_GETCHECK, 0, 0) != BST_CHECKED) continue;
+                if (!first) hint += L", ";
+                hint += label; first = false;
+            }
+            if (first) hint += L"none";
+        }
+        hint += L". Thumbnails are public; catalogue sends artist/album. Delivery: wsrv.nl. Disabling stops new requests, not previous uploads. Configure services in Advanced; Apply to save.";
+        break;
+    case PresenceCoverProvider::privateRelay:
+        hint=L"Private relay uses the HTTPS origin and personal credential below. Its retention depends on your server. Apply saves changes. Test checks the saved provider; Try again restarts recovery."; break;
+    default: break;
+    }
+    SetWindowTextW(presenceHint_,hint.c_str());
+    updateLayout();
 }
 
 void OptionsWindow::refreshListenEffectsStatus()
@@ -921,8 +1091,10 @@ void OptionsWindow::drawButton(const DRAWITEMSTRUCT& item)
     const bool disabled = (item.itemState & ODS_DISABLED) != 0;
     const bool hovered = !disabled &&
         GetPropW(item.hwndItem, kHoverProperty) != nullptr;
+    const auto selectedPage = item.hwndItem == navigation_[page_];
     const auto fillColor = disabled ? kPanel :
         pressed ? blend(kSurface, kAccent, 0.62f) :
+        selectedPage ? blend(kSurface, kAccent, 0.20f) :
         hovered ? blend(kSurface, kAccent, 0.30f) : kSurface;
     HBRUSH fill = CreateSolidBrush(fillColor);
     FillRect(item.hDC, &item.rcItem, fill);
@@ -940,7 +1112,7 @@ void OptionsWindow::drawButton(const DRAWITEMSTRUCT& item)
     SetBkMode(item.hDC, TRANSPARENT);
     SetTextColor(item.hDC, disabled ? kMuted :
         pressed ? RGB(238, 250, 250) :
-        focused || hovered ? kAccent : kText);
+        focused || hovered || selectedPage ? kAccent : kText);
     SelectObject(item.hDC, font_);
     auto bounds = item.rcItem;
     if (pressed) {
@@ -1066,11 +1238,13 @@ void OptionsWindow::paint(HDC external)
     GetClientRect(window_, &client);
     FillRect(dc, &client, backgroundBrush_);
     const auto headerHeight = dip(window_, 56);
-    const auto footerTop = client.bottom - dip(window_, 56);
+    const auto footerTop = client.bottom - dip(window_, 72);
     HPEN line = CreatePen(PS_SOLID, 1, kBorder);
     const auto oldPen = SelectObject(dc, line);
     MoveToEx(dc, 0, headerHeight - 1, nullptr);
     LineTo(dc, client.right, headerHeight - 1);
+    MoveToEx(dc, dip(window_, 144), headerHeight, nullptr);
+    LineTo(dc, dip(window_, 144), footerTop);
     MoveToEx(dc, 0, footerTop, nullptr);
     LineTo(dc, client.right, footerTop);
     SelectObject(dc, oldPen);
@@ -1098,10 +1272,16 @@ void OptionsWindow::releaseResources()
     presence_ = presencePaused_ = presenceCovers_ = applicationId_ =
         applyPresence_ = nullptr;
     coverProvider_ = relayEndpoint_ = relayCredential_ = coverDisclosure_ = nullptr;
+    imgbbKey_=autoCatbox_=autoUguu_=autoImgBB_=autoCatalogue_=testCover_=retryCover_=nullptr;
     presenceStatus_ = listen_ = daw_ = nullptr;
     title_ = motionLabel_ = applicationLabel_ = presenceHint_ = nullptr;
     footerStatus_ = closeButton_ = nullptr;
     sectionLabels_.fill(nullptr);
+    navigation_.fill(nullptr);
+    pageScroll_.fill(0);
+    providerLabel_ = playbackHint_ = lyricsHint_ = toolsHint_ = nullptr;
+    listenEffectsLabel_ = albumAmbientLabel_ = advancedPresence_ = nullptr;
+    presenceDirty_ = refreshing_ = presenceAdvanced_ = false;
     applicationIdText_.clear();
 }
 

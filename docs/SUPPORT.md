@@ -12,3 +12,14 @@ Use a generated or authorized sample. Do not send complete profiles or music. In
 Keep app.previous until the replacement is accepted. Recover app.rollback.pending manually only after closing the player; do not delete the sole retained profile. Installer transaction logs identify the committed and recovery directories.
 
 Report reproducible problems in [GitHub Issues](https://github.com/Godielvs/GODENplayer/issues), including the information above.
+
+## Discord cover recovery
+
+In **Options → Discord**, choose a provider, read its disclosure, allow its use and click **Apply / Reconnect**. Provider changes and Automatic checkboxes are not saved by simply closing Options. Unapplied edits remain available when switching sections; closing Options warns before discarding them. **Advanced** contains the Automatic service list, Application ID and cover diagnostics. A blank ImgBB/relay secret field keeps the saved credential.
+
+- **Try again now** restarts recovery using saved settings and existing cache URLs. It does not discard a valid acknowledged upload or enable another host.
+- **Test cover** also rechecks cached images. A ready status means native origin/delivery checks passed, not independent confirmation inside Discord.
+- **Automatic** is useful when a host is unavailable. Enable Uguu as an independent temporary uploader if desired; only checked services participate. ImgBB requires your own key. Catalogue is optional and can show another edition's cover.
+- Temporary links renew while covers are enabled. Expired links fall back to text if renewal fails. Repeated Next/Previous is not a remedy for an upstream outage.
+
+Report the selected provider, enabled Automatic services and the visible status. Do not include API keys, relay credentials, complete profiles or private session URLs. Test with an image you are entitled to share. No firewall/antivirus weakening is required.

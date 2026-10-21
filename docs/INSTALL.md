@@ -48,9 +48,10 @@ listed in the [compatibility matrix](COMPATIBILITY.md).
 
 1. Run the installer and choose the application folder.
 2. Select a music folder, or add your library later.
-3. Review optional Discord Presence and cover sharing. Catbox covers are offered
-   checked by default with disclosure before the first upload; uncheck them if
-   you do not want public artwork uploads.
+3. Review optional Discord Presence and cover sharing. Automatic covers are
+   preselected with disclosure: Uguu first, Catbox as an alternative, then catalogue
+   lookup. Uncheck this choice to disable external cover requests. Existing
+   configured profiles keep their choices.
 4. Optionally install Playback Statistics for star ratings and play counts.
 5. Open GODENplayer and let the first library scan finish. Its duration depends
    on file count, tags, embedded artwork and storage.
@@ -73,7 +74,7 @@ Existing statistics are preserved during GODEN updates.
 - **DAW:** temporary sample/stem arrangement and preview workspace.
 - **TAG:** batch metadata and artwork editing, with Apply and Undo.
 - **Listen:** dedicated audio visualization views.
-- **Options:** visual behavior, motion preferences, lyrics and Presence settings.
+- **Options:** Appearance, Playback, Lyrics, Discord and Tools sections. General switches save immediately; Discord provider edits use **Apply / Reconnect** in the fixed footer. Technical Discord controls are under **Advanced**.
 
 The initial visual is Nebula 3. Existing visual choices and preferences survive
 updates. The demo media shown in the README is an original fictional catalogue;

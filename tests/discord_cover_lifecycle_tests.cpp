@@ -164,6 +164,33 @@ void cancelAfterOrigin(const std::filesystem::path& root) {
     check(host_fixture::artworkCalls==1,"delivery retry decoded artwork again");
     std::puts("PASS origin saved before CDN failure; admitted retry uses GET only and retained PNG");
 }
+void slowCompleteOrigin(const std::filesystem::path& root) {
+    begin(root,"slow-complete-origin");Service service;
+    fixture::holdCoverGet=true;
+    auto future=std::async(std::launch::async,[&] {
+        return service.verifyRemotePng("https://files.catbox.moe/slow12.png",true,{},service.admissionTicket());
+    });
+    auto* request=fixture::waitPending(fixture::Pending::sendHeaders);
+    std::this_thread::sleep_for(1800ms);
+    {
+        std::lock_guard lock(fixture::mutex);
+        check(!request->closing,"healthy origin was cancelled at the former 1.5 second limit");
+        fixture::holdCoverGet=false;request->pending=fixture::Pending::none;
+    }
+    fixture::callback(request,WINHTTP_CALLBACK_STATUS_SENDREQUEST_COMPLETE);
+    check(future.get(),"complete slow origin was rejected");
+    check(fixture::coverUploads==0,"slow origin validation uploaded artwork");
+    fixture::holdCoverGet=true;
+    const auto deadline=std::chrono::steady_clock::now()+100ms;
+    const auto bounded=std::async(std::launch::async,[&] {
+        return service.verifyRemotePng("https://files.catbox.moe/slow12.png",true,{},
+            service.admissionTicket(),nullptr,nullptr,deadline);
+    }).get();
+    check(!bounded && std::chrono::steady_clock::now()<deadline+1s,
+        "explicit total deadline was ignored");
+    fixture::holdCoverGet=false;
+    std::puts("PASS complete origin slower than 1.5s accepted; explicit deadline remains bounded, no POST");
+}
 void missingOriginPolicy(const std::filesystem::path& root) {
     begin(root,"origin-policy");Service service;
     const auto hash=nekorox::component::encodedContentHash(host_fixture::artHash);
@@ -184,7 +211,9 @@ void missingOriginPolicy(const std::filesystem::path& root) {
             gets.back()->path==L"/abc123.png","missing origin decision did not check independent exact origin");
     };
     seed();fixture::coverReplies={{429,""}};
-    check(!resolve(service).succeeded(),"rate-limit accepted as image");
+    const auto limited=resolve(service);
+    check(!limited.succeeded() && limited.retryAfterMilliseconds==0,
+        "rate-limit accepted as image or granted origin-repair retry");
     checkLastDestinations();
     check(fixture::coverUploads==0 && service.cache_.contains(hash),"rate-limit evicted origin/reuploaded");
     seed();fixture::coverReplies={{200,fixture::validCoverPng()},{404,""}};
@@ -209,8 +238,12 @@ void missingOriginPolicy(const std::filesystem::path& root) {
         "recovered origin uploaded again");
     seed();service.cache_[hash].lastUsed=Clock::now();
     fixture::coverReplies={{200,""}};
-    check(!resolve(service).succeeded() && fixture::coverUploads==3 && fixture::coverReplies.empty(),
+    const auto freshBroken=resolve(service);
+    check(!freshBroken.succeeded() && fixture::coverUploads==3 && fixture::coverReplies.empty(),
         "fresh zero-byte suspicion bypassed grace period");
+    check(freshBroken.retryAfterMilliseconds>590000 && freshBroken.retryAfterMilliseconds<=600001 &&
+        freshBroken.failure==nekorox::component::DiscordCoverFailure::origin,
+        "confirmed fresh broken origin did not expose bounded repair eligibility");
     fixture::coverReplies.clear();
     std::puts("PASS fresh-origin grace, CDN/rate-limit/truncation preservation and independent origin 404/410/empty recovery across restart");
 }
@@ -296,7 +329,7 @@ void repeatedBrokenOriginRepair(const std::filesystem::path& root) {
     first.cache_[hash].lastUsed=Clock::now()-11min;first.saveCache();
     Service restarted;
     fixture::coverResponse="https://files.catbox.moe/next02.png";
-    fixture::coverReplies={{200,""}};
+    fixture::coverReplies={{503,""},{200,""}};
     check(resolve(restarted).succeeded(),"second confirmed broken origin did not recover after restart");
     const auto replacement=lastPng();
     check(replacement!=previous,"second repair repeated the previous rejected PNG bytes");
@@ -307,13 +340,13 @@ void repeatedBrokenOriginRepair(const std::filesystem::path& root) {
         restarted.cache_[hash].lastUsed=Clock::now()-11min;
         restarted.verifiedDelivery_.clear();restarted.saveCache();
         const auto posts=fixture::coverUploads;
-        fixture::coverReplies={{200,""}};
+        fixture::coverReplies={{503,""},{200,""}};
         const auto result=resolve(restarted);
         if(!result.succeeded()) {
             check(result.error=="cover storage recovery limit reached" && fixture::coverUploads==posts,
                 "exhausted recovery posted or reported the wrong failure");
             Service exhausted;
-            fixture::coverReplies={{200,""}};
+            fixture::coverReplies={{503,""},{200,""}};
             check(resolve(exhausted).error==result.error && fixture::coverUploads==posts,
                 "restart reset exhausted storage recovery");
             fixture::coverReplies.clear();
@@ -411,7 +444,7 @@ void automaticProxyReads(const std::filesystem::path& root) {
     Service restarted;
     check(resolve(restarted).source==Result::Source::cache && restarted.preferAutomaticProxy_,
         "cached first GET after restart did not recover through proxy");
-    check(fixture::coverUploads==1 && fixture::coverGets==reads+3,"cached proxy recovery repeated upload or looped");
+    check(fixture::coverUploads==1 && fixture::coverGets==reads+2,"cached proxy recovery repeated upload or looped");
     const auto verifiedReads=fixture::coverGets;
     check(resolve(restarted).source==Result::Source::cache && fixture::coverGets==verifiedReads,
         "verified proxy cover repeated a GET");
@@ -419,9 +452,103 @@ void automaticProxyReads(const std::filesystem::path& root) {
     Service readFailure;
     const auto previous=fixture::coverGets;
     check(resolve(readFailure).source==Result::Source::cache && readFailure.preferAutomaticProxy_ &&
-        fixture::coverGets==previous+3 && fixture::coverUploads==1,
+        fixture::coverGets==previous+2 && fixture::coverUploads==1,
         "HTTP 200 followed by body timeout did not recover cached GET through proxy");
     std::puts("PASS direct GET failure -> one system-proxy GET, same origin, no redundant POST, restart cache");
+}
+void verifiedDeliverySurvivesOutage(const std::filesystem::path& root) {
+    begin(root,"verified-delivery-outage");
+    const auto hash=nekorox::component::encodedContentHash(host_fixture::artHash);
+    const auto good=fixture::validCoverPng();
+    {
+        Service first;check(resolve(first).succeeded(),"initial paired validation failed");
+        check(first.cache_[hash].deliveryProof.size()==64,"paired validation did not persist a SHA256 proof");
+    }
+    const auto posts=fixture::coverUploads, gets=fixture::coverGets;
+    Service restarted;
+    fixture::coverReplies={{200,good},{503,""}};
+    check(resolve(restarted).source==Result::Source::cache,"verified CDN unavailable after restart/origin outage");
+    check(fixture::coverGets==gets+1 && fixture::coverReplies.size()==1 && fixture::coverUploads==posts,
+        "proven CDN reuse contacted origin or repeated POST");
+    bool cdn=false;
+    for(const auto& h:fixture::handles) if(h->kind==fixture::Kind::request && h->get) cdn=h->host==L"wsrv.nl";
+    check(cdn,"proof fast path did not validate the actual CDN URL");
+
+    Service unverified;unverified.loadCache();unverified.cache_[hash].deliveryProof.clear();
+    fixture::coverReplies={{503,""},{200,good}};
+    check(!resolve(unverified).succeeded() && fixture::coverReplies.size()==1,
+        "acknowledged-only origin was treated as previously validated");
+
+    Service changedUrl;changedUrl.loadCache();
+    changedUrl.cache_[hash].url="https://files.catbox.moe/other1.png";
+    fixture::coverReplies={{200,good},{503,""}};
+    check(!resolve(changedUrl).succeeded() && fixture::coverReplies.empty(),
+        "proof was transferable to another origin/delivery URL");
+
+    Service mismatch;mismatch.loadCache();mismatch.cache_[hash].deliveryProof=std::string(64,'0');
+    fixture::coverReplies={{200,good},{503,""}};
+    check(!resolve(mismatch).succeeded(),"different complete CDN bytes bypassed unavailable origin");
+
+    Service corrupt;corrupt.loadCache();
+    auto damaged=good;damaged[damaged.size()-1]^=1;
+    fixture::coverReplies={{200,damaged},{503,""}};
+    check(!resolve(corrupt).succeeded(),"corrupted CDN response bypassed proof");
+    check(fixture::coverUploads==posts,"failed proof checks authorized a replacement upload");
+    fixture::coverReplies.clear();
+
+    // An older cache upgrades only after both origin and delivery validate.
+    Service legacy;legacy.loadCache();legacy.cache_[hash].deliveryProof.clear();legacy.saveCache();
+    const auto before=fixture::coverGets;
+    check(resolve(legacy).succeeded() && fixture::coverGets==before+2 &&
+        legacy.cache_[hash].deliveryProof.size()==64,"legacy cache proof was not earned by paired validation");
+    Service upgraded;upgraded.loadCache();
+    check(upgraded.cache_[hash].deliveryProof==legacy.cache_[hash].deliveryProof,
+        "newly earned legacy proof did not survive restart");
+    Service cancelled;
+    fixture::holdCoverGet=true;
+    auto pending=std::async(std::launch::async,[&] {return cancelled.resolve(metadb_handle_ptr{},1,{});});
+    fixture::waitPending(fixture::Pending::sendHeaders);
+    cancelled.cancel();
+    check(pending.get().error=="cancelled" && cancelled.verifiedDelivery_.empty(),
+        "cancelled proof read published/verified a cover");
+    fixture::holdCoverGet=false;
+    check(resolve(cancelled).source==Result::Source::cache && fixture::coverUploads==posts,
+        "cancelled proof read lost durable evidence or repeated POST");
+    std::puts("PASS validated delivery proof survives restart/origin outage; URL-bound, complete, cancellable, fail-closed; legacy cache earns proof without POST");
+}
+void deliveryProofCacheBounds(const std::filesystem::path& root) {
+    begin(root,"proof-bounds");Service first;
+    const auto now=Clock::now();
+    for(std::uint64_t hash=1;hash<=512;++hash) {
+        first.cache_[hash]={"https://files.catbox.moe/abc123.png",Clock::time_point::max(),now,1,std::string(64,'a')};
+    }
+    first.saveCache();Service loaded;loaded.loadCache();
+    check(loaded.cache_.size()==512,"three-record cache truncated before entry bound");
+    for(const auto& [hash,entry]:loaded.cache_)
+        check(entry.pngEncoding==1 && entry.deliveryProof==std::string(64,'a'),"proof roundtrip failed");
+    for(auto& [hash,entry]:first.cache_) {
+        entry.url="https://files.catbox.moe/"+std::string(450,'a')+".png";
+        entry.lastUsed=now+std::chrono::seconds(hash);
+    }
+    first.saveCache();
+    check(std::filesystem::file_size(first.cachePath_)<=256U*1024U,"writer exceeded reader cache byte cap");
+    Service bounded;bounded.loadCache();
+    check(!bounded.cache_.empty() && bounded.cache_.size()<512 && bounded.cache_.contains(512),
+        "bounded writer discarded newest entries or wrote an unreadable cache");
+    begin(root,"proof-malformed");Service malformed;
+    std::filesystem::create_directories(malformed.cachePath_.parent_path());
+    {
+        std::ofstream output(malformed.cachePath_);
+        output<<"goden.discord-cover-cache.v2\n#delivery-proof-v1\t17\t"<<std::string(64,'a')<<'\n'
+              <<"17\t0\t0\thttps://files.catbox.moe/abc123.png\n"
+              <<"#delivery-proof-v1\t17\t"<<std::string(63,'a')<<'\n'
+              <<"#delivery-proof-v1\t17\t"<<std::string(64,'g')<<'\n'
+              <<"#delivery-proof-v1\t17junk\t"<<std::string(64,'b')<<'\n';
+    }
+    malformed.loadCache();
+    check(malformed.cache_.size()==1 && malformed.cache_[23].deliveryProof.empty(),
+        "unbound/malformed proof granted verification");
+    std::puts("PASS bounded persistent proof parser/writer; malformed and unbound records rejected");
 }
 void completeStoredPng(const std::filesystem::path& root) {
     begin(root,"complete-stored-png");Service service;
@@ -490,6 +617,9 @@ void proxyCannotHideOriginDamage(const std::filesystem::path& root) {
     check(result.error=="cover origin was not complete after upload" && fixture::coverUploads==1 &&
         uploaded.cache_.contains(hash) && !uploaded.verifiedDelivery_.contains(hash),
         "new incomplete origin was published or lost its acknowledged URL");
+    check(result.retryAfterMilliseconds>580000 && result.retryAfterMilliseconds<=600001 &&
+        result.failure==nekorox::component::DiscordCoverFailure::origin,
+        "initial upload with confirmed broken origin did not schedule deferred recovery");
     for(const auto& h:fixture::handles) if(h->kind==fixture::Kind::request && h->get)
         check(h->host==L"files.catbox.moe","CDN was trusted before complete origin");
     fixture::coverReplies.clear();fixture::requireCoverReadProxy=true;
@@ -502,6 +632,131 @@ void proxyCannotHideOriginDamage(const std::filesystem::path& root) {
     check(resolve(restarted).source==Result::Source::cache && fixture::coverUploads==1,
         "restart repeated acknowledged upload");
     std::puts("PASS healthy CDN cannot conceal damaged origin; fresh upload remains cached/unverified; GET-only retry and restart recover without duplicate POST");
+}
+
+void publicProviderOptions(const std::filesystem::path& root) {
+    using namespace nekorox::component;
+    check(kAutomaticCoverOrder.front()==Provider::uguu && kAutomaticCoverOrder.back()==Provider::catalogue,
+        "recommended automatic priority drifted");
+    const auto newChoice=parseInstallerCoverChoice("automatic-v1-accepted");
+    const auto deniedChoice=parseInstallerCoverChoice("automatic-v1-disabled");
+    const auto oldChoice=parseInstallerCoverChoice("catbox-accepted");
+    check(newChoice && newChoice->provider==Provider::automatic && newChoice->accepted &&
+        newChoice->automaticProviders==kRecommendedCoverProviders && deniedChoice && !deniedChoice->accepted &&
+        oldChoice && oldChoice->provider==Provider::catbox && oldChoice->automaticProviders==coverProviderBit(Provider::catbox) &&
+        !parseInstallerCoverChoice("automatic-v2-accepted"), "installer consent version or legacy scope drifted");
+    begin(root,"public-options");
+    PresenceCoverConfiguration cfg;cfg.provider=Provider::automatic;cfg.disclosureAccepted=true;
+    check(cfg.allowsProvider(Provider::catbox) && !cfg.allowsProvider(Provider::uguu) &&
+        !cfg.allowsProvider(Provider::imgbb) && !cfg.allowsProvider(Provider::catalogue),"old Catbox consent enabled another host");
+    cfg.automaticProviders=kPublicCoverProviders;
+    check(!cfg.allowsProvider(Provider::imgbb) && !cfg.allowsProvider(Provider::privateRelay),"automatic accepts missing key or private relay");
+    cfg.disclosureAccepted=false;publishPresenceCoverConfiguration(cfg);
+    Service denied;check(!resolve(denied).succeeded() && fixture::opens==0,"automatic bypassed disclosure");
+    cfg.disclosureAccepted=true;cfg.automaticProviders=coverProviderBit(Provider::catbox)|coverProviderBit(Provider::uguu);
+    publishPresenceCoverConfiguration(cfg);
+    fixture::providerStatuses[L"catbox.moe"]=503;
+    fixture::providerResponses[L"uguu.se"]=R"({"success":true,"files":[{"url":"https://h.uguu.se/fixture.png"}]})";
+    Service automatic;
+    const auto result=resolve(automatic);
+    check(result.succeeded() && result.provider==Provider::uguu && fixture::coverUploads==1,"automatic did not prefer enabled Uguu");
+    check(result.url.find("maxage=2h")!=std::string::npos && result.expiresAtMilliseconds>0,"temporary upload lost expiry or proxy lifetime");
+    const auto expiry=result.expiresAtMilliseconds;
+    check(expiry>std::chrono::duration_cast<std::chrono::milliseconds>((Clock::now()+174min).time_since_epoch()).count() &&
+        expiry<=std::chrono::duration_cast<std::chrono::milliseconds>((Clock::now()+175min).time_since_epoch()).count(),"Uguu expiry is not conservative");
+    const auto posts=fixture::coverUploads;
+    Service restarted;
+    const auto cached=resolve(restarted);
+    check(cached.succeeded() && cached.provider==Provider::uguu && cached.source==Result::Source::cache &&
+        fixture::coverUploads==posts,"automatic did not search all caches before another upload");
+    check(std::filesystem::exists(restarted.providerCaches_[0].path),"Uguu cache missing");
+    check(restarted.cache_.empty() && restarted.providerCaches_[0].entries.size()==1,"public provider caches mixed");
+    const auto hash=restarted.providerCaches_[0].entries.begin()->first;
+    restarted.providerCaches_[0].entries[hash].expires=Clock::now()+30s;
+    cfg.provider=Provider::uguu;publishPresenceCoverConfiguration(cfg);
+    check(resolve(restarted).source==Result::Source::upload && fixture::coverUploads==posts+1,"near-expiry Uguu cache was not renewed");
+    for(const auto& h:fixture::handles) if(h->host==L"uguu.se"&&!h->requestBody.empty()) {
+        check(h->requestBody.find("name=\"files[]\"")!=std::string::npos,"Uguu multipart field wrong");
+        check(h->requestBody.find("reqtype")==std::string::npos,"Catbox multipart sent to Uguu");
+    }
+    ArtPixels pixels;
+    const auto ordinary=encodePng(pixels,512);
+    const auto temporaryA=freshTemporaryPng(ordinary), temporaryB=freshTemporaryPng(ordinary);
+    check(!temporaryA.empty() && temporaryA!=temporaryB && temporaryA!=ordinary,
+        "temporary renewal reused identical expiring object bytes");
+    check(decodedPng(temporaryA)==decodedPng(ordinary) && decodedPng(temporaryB)==decodedPng(ordinary),
+        "temporary PNG renewal changed dimensions/pixels");
+    check(completePngStructure(std::string_view(reinterpret_cast<const char*>(temporaryA.data()),temporaryA.size())),
+        "temporary PNG renewal broke chunks/CRCs");
+    check(public_covers::uploadedUrl(Provider::uguu,R"({"success":true,"files":[{"url":"https://h.uguu.se/a.png","dupe":true}]})").empty(),
+        "deduplicated temporary object granted a new lifetime");
+    {
+        std::ofstream forged(restarted.providerCaches_[0].path);
+        forged<<"goden.discord-cover-cache.v2\n"<<std::hex<<hash<<std::dec<<"\t0\t"<<
+            std::chrono::duration_cast<std::chrono::seconds>(Clock::now().time_since_epoch()).count()<<
+            "\thttps://h.uguu.se/fixture.png\n";
+    }
+    Service invalidExpiry;
+    check(resolve(invalidExpiry).source==Result::Source::upload && fixture::coverUploads==posts+2,
+        "unbounded Uguu cache expiry accepted");
+    std::puts("PASS versioned installer consent, Uguu priority, cache-first restart, isolated persistent cache, expiry renewal and lossless fresh PNG chunk layout");
+
+    begin(root,"automatic-fallback");cfg.provider=Provider::automatic;publishPresenceCoverConfiguration(cfg);
+    fixture::providerStatuses[L"uguu.se"]=503;
+    Service fallback;
+    const auto fallbackResult=resolve(fallback);
+    check(fallbackResult.succeeded() && fallbackResult.provider==Provider::catbox && fixture::coverUploads==2,
+        "automatic did not fall back to enabled Catbox after Uguu failure");
+    std::puts("PASS Uguu failure falls back to Catbox only when explicitly enabled");
+
+    begin(root,"imgbb");cfg.provider=Provider::imgbb;cfg.imgbbKey="fixture-key-not-a-real-key";publishPresenceCoverConfiguration(cfg);
+    fixture::providerResponses[L"api.imgbb.com"]=R"({"success":true,"data":{"url":"https://i.ibb.co/fixture/image.png"}})";
+    Service imgbb;check(resolve(imgbb).succeeded() && fixture::coverUploads==1,"ImgBB multipart upload failed");
+    for(const auto& h:fixture::handles) if(h->kind==fixture::Kind::request && h->host==L"api.imgbb.com"&&!h->get) {
+        check(h->path==L"/1/upload" && h->requestBody.find("name=\"key\"")!=std::string::npos &&
+            h->requestBody.find(cfg.imgbbKey)!=std::string::npos && h->requestBody.find("name=\"image\"")!=std::string::npos,
+            "ImgBB key leaked to URL or wrong multipart contract");
+    }
+    const auto postsImg=fixture::coverUploads;Service restartImg;
+    check(resolve(restartImg).source==Result::Source::cache && fixture::coverUploads==postsImg,"ImgBB repeated upload after restart");
+    std::ifstream cache(restartImg.providerCaches_[1].path);
+    const std::string cacheText((std::istreambuf_iterator<char>(cache)),{});
+    check(cacheText.find(cfg.imgbbKey)==std::string::npos,"ImgBB key entered cache");
+    std::puts("PASS ImgBB own-key multipart, no URL/cache credential, persistent cache avoids duplicate POST");
+}
+void publicParsingAndCatalogue(const std::filesystem::path& root) {
+    using namespace nekorox::component;
+    check(public_covers::uploadedUrl(Provider::uguu,R"({"success":true,"success":false,"files":[{"url":"https://h.uguu.se/a.png"}]})").empty(),"duplicate JSON keys accepted");
+    check(public_covers::uploadedUrl(Provider::imgbb,R"({"success":"true","data":{"url":"https://i.ibb.co/a.png"}})").empty(),"nonboolean success accepted");
+    check(public_covers::parseJson(std::string(65537,' ')).is_null(),"oversized JSON accepted");
+    check(public_covers::parseJson(std::string(25,'[')+"0"+std::string(25,']')).is_null(),"deep JSON accepted");
+    check(!validReturnedUrl("https://h.uguu.se/a.png?secret=1",false,Provider::uguu) &&
+        !validReturnedUrl("https://files.catbox.moe/a.png",false,Provider::uguu) &&
+        !validReturnedUrl("https://i.ibb.co/a.png",false,Provider::catbox),"provider URL boundaries mixed");
+    check(coverProviderBit(static_cast<Provider>(99))==0,"invalid provider shift undefined");
+    begin(root,"catalogue");policy(Provider::catalogue);Service service;
+    DiscordCoverMetadata metadata{"Fixture Artist","Fixture Album","01234567-89ab-cdef-0123-456789abcdef"};
+    auto run=[&] {return std::async(std::launch::async,[&] {return service.resolve(metadb_handle_ptr{},1,{},std::nullopt,metadata);}).get();};
+    const auto result=run();
+    check(result.succeeded() && result.provider==Provider::catalogue && fixture::coverUploads==0 && host_fixture::artworkCalls==0,
+        "tagged catalogue cover performed local artwork work or POST");
+    const auto gets=fixture::coverGets;check(run().source==Result::Source::cache && fixture::coverGets==gets,"catalogue cache repeated network");
+    metadata.releaseId.clear();
+    const std::string body=R"({"releases":[{"id":"01234567-89ab-cdef-0123-456789abcdef","title":"Fixture Album","artist-credit":[{"name":"Fixture Artist"}]}]})";
+    check(public_covers::matchingRelease(body,"Fixture Artist","Fixture Album")=="01234567-89ab-cdef-0123-456789abcdef","exact catalogue match rejected");
+    check(public_covers::matchingRelease(body,"Different Artist","Fixture Album").empty(),"wrong catalogue artist accepted");
+    fixture::coverReplies.push_back({200,body,true,{},{},L"musicbrainz.org"});
+    check(run().succeeded() && fixture::coverUploads==0,"catalogue search failed or uploaded");
+    for(const auto& h:fixture::handles) if(h->kind==fixture::Kind::request && h->host==L"musicbrainz.org") {
+        check(h->get&&h->redirectsDisabled && h->path.find(L"fmt=json&limit=3")!=std::wstring::npos,"catalogue query unbounded or redirects allowed");
+        check(h->path.find(L"Fixture%20Artist")!=std::wstring::npos,"catalogue query not escaped");
+    }
+    metadata.artist="Missing Artist";
+    fixture::coverReplies.push_back({200,R"({"releases":[]})",true,{},{},L"musicbrainz.org"});
+    check(!run().succeeded(),"unmatched catalogue fabricated a cover");
+    const auto negativeGets=fixture::coverGets;
+    check(!run().succeeded()&&fixture::coverGets==negativeGets,"negative catalogue cache repeated queries");
+    std::puts("PASS bounded/strict JSON and provider URLs, catalogue MBID/exact search, GET-only privacy, positive/negative cache and redirects blocked");
 }
 }
 int main(int argc,char** argv) {
@@ -516,6 +771,7 @@ int main(int argc,char** argv) {
     cover_fixture::persistenceAndEncoding(root);
     cover_fixture::cancelPendingUpload(root);
     cover_fixture::cancelAfterOrigin(root);
+    cover_fixture::slowCompleteOrigin(root);
     cover_fixture::missingOriginPolicy(root);
     cover_fixture::deduplicatedOriginRepair(root);
     cover_fixture::repeatedBrokenOriginRepair(root);
@@ -523,8 +779,12 @@ int main(int argc,char** argv) {
     cover_fixture::encodingCacheRecords(root);
     cover_fixture::boundedCacheAndLegacy(root);
     cover_fixture::automaticProxyReads(root);
+    cover_fixture::verifiedDeliverySurvivesOutage(root);
+    cover_fixture::deliveryProofCacheBounds(root);
     cover_fixture::completeStoredPng(root);
     cover_fixture::proxyCannotHideOriginDamage(root);
+    cover_fixture::publicProviderOptions(root);
+    cover_fixture::publicParsingAndCatalogue(root);
     fixture::reset();
     std::puts("All cover provider lifecycle tests PASS (production methods/WIC, fake transport).");
 }
