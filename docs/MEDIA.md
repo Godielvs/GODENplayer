@@ -6,7 +6,7 @@ The screenshots and video show GODENplayer with a fictional music library and or
 | --- | --- |
 | [Album screenshot](media/album.png) | Cover art, synchronized lyrics and Nebula 3 |
 | [Library screenshot](media/library.png) | Genre, artist and album filters, with playback and audio views |
-| [Video](https://github.com/user-attachments/assets/9f2f36aa-5e02-4f8d-bde2-a0f044c588fb) | 36 seconds with audio: Library, Album and a cover/palette change |
+| [Video](https://github.com/user-attachments/assets/98699fd5-5a7b-4ea0-a24e-392e4bdfc621) | 36 seconds with audio: Library, Album and a cover/palette change |
 | [Animated preview](media/album-transition.gif) | Six-second silent album transition |
 | [Social preview](media/social-preview.png) | Repository sharing card, 1280 × 640 |
 
