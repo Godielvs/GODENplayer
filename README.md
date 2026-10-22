@@ -95,4 +95,6 @@ Project code is MIT; third-party components, shaders and assets have separate te
 
 ## Thanks
 
+Thanks to [catlinman](https://github.com/catlinman) for [NekoRoX](https://github.com/catlinman/foobar2000), the starting point for GODENplayer, and to the CaTRoX contributors behind it.
+
 Thanks to **Clóvis** for testing, visual feedback and helping refine the player; to the developers of [foobar2000](https://www.foobar2000.org/), [Columns UI](https://github.com/reupen/columns_ui) and [Spectrum Analyzer](https://github.com/stuerp/foo_vis_spectrum_analyzer); and to the library and shader authors credited above.
