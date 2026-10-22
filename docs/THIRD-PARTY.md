@@ -26,16 +26,13 @@ summary. The project is not entirely MIT or fully cleared for distribution.
 | glslang / SPIRV-Cross / FXC | Pinned sources / installed SDK | Build-only tools; source licenses retained. Microsoft SDK tools are not bundled. |
 | sharp / libvips | 0.35.5 / npm platform package pins | Optional icon-authoring tooling only; sharp is Apache-2.0; the fetched Windows binary package declares Apache-2.0 AND LGPL-3.0-or-later. Per-platform/transitive notices remain in the fetched packages. No tool binaries are redistributed in the installer/source archives. npm integrity pins are in tools/icon-assets/package-lock.json. |
 
-Shader sources, authors, modifications and **unresolved permissions** are
-separately enumerated in `SHADER-PROVENANCE.md`. Keeping credits does not grant
-missing rights. All approved effects are retained in this technical candidate
-at the owner's request. No broad rewrite or author contact was performed.
-The owner approved the B / Angular vector icon. Its close visual reference and
-remaining rights question are recorded in [icon provenance](ICON-PROVENANCE.md).
+Shader sources, authors, modifications and **unresolved permissions** are listed
+in [shader provenance](SHADER-PROVENANCE.md). Credits do not grant missing rights.
+The application icon's visual reference and remaining rights question are
+recorded in [icon provenance](ICON-PROVENANCE.md).
 
-The current header wordmark is original pixel geometry, not a bundled or
-converted font. Its [provenance](WORDMARK-PROVENANCE.md) explains why the
-historical Homemade Robot notice no longer applies to this source tree.
+The header wordmark uses original pixel geometry. See
+[wordmark provenance](WORDMARK-PROVENANCE.md).
 
 ## Mapping sources to binaries
 

@@ -197,6 +197,19 @@ class SourceAndStagingTests(unittest.TestCase):
         self.assertFalse(self.destination.exists())
         self.assertEqual(list(self.root.glob('stage.stage-*')), [])
 
+    def test_local_agent_guidance_not_exported(self):
+        tree = self.root / 'public-tree'
+        tree.mkdir()
+        for name in release.ROOT_FILES:
+            (tree / name).write_text('public', encoding='utf-8')
+        (tree / 'AGENTS.md').write_text('local development instructions', encoding='utf-8')
+        (tree / 'docs').mkdir()
+        (tree / 'docs/BUILD.md').write_text('public build instructions', encoding='utf-8')
+        with patch.object(release, 'ROOT', tree):
+            names = {rel for _, rel in release.source_files()}
+        self.assertNotIn('AGENTS.md', names)
+        self.assertIn('docs/BUILD.md', names)
+
     def test_source_walk_excludes_links_and_private_state(self):
         tree = self.root / 'sources'; tree.mkdir()
         (tree / 'ordinary').write_bytes(b'public')

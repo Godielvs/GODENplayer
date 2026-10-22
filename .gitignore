@@ -1,5 +1,6 @@
 /out/
 /artifacts/
+/AGENTS.md
 /release-*/
 /debug-*/
 /x64/

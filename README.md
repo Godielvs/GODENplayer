@@ -19,14 +19,18 @@
 
 <p align="center">
   <a href="docs/INSTALL.md">Installation guide</a> ·
-  <a href="docs/media/godenplayer-demo.mp4">Watch the demo</a> ·
+  <a href="#demo">Watch the demo</a> ·
   <a href="#features">Features</a> ·
   <a href="docs/BUILD.md">Build from source</a>
 </p>
 
 ![Album view with artwork-derived colours, synchronized lyrics and the Nebula 3 visual](docs/media/album.png)
 
-[**Watch the demo — 36 seconds, with audio**](docs/media/godenplayer-demo.mp4)
+## Demo
+
+36 seconds with audio: Library, Album, synchronized lyrics and artwork colours.
+
+https://github.com/user-attachments/assets/9f2f36aa-5e02-4f8d-bde2-a0f044c588fb
 
 <details>
 <summary>Animated preview</summary>
@@ -88,3 +92,7 @@ Updates preserve GODEN's profile and preferences. The beta installer is unsigned
 GODENplayer is an independent project built on **foobar2000**, **Columns UI** and **Spectrum Analyzer**.
 
 Project code is MIT; third-party components, shaders and assets have separate terms. [License scope](LICENSE-SCOPE.md) · [Third-party credits](docs/THIRD-PARTY.md) · [Shader credits](docs/SHADER-PROVENANCE.md)
+
+## Thanks
+
+Thanks to **Clóvis** for testing, visual feedback and helping refine the player; to the developers of [foobar2000](https://www.foobar2000.org/), [Columns UI](https://github.com/reupen/columns_ui) and [Spectrum Analyzer](https://github.com/stuerp/foo_vis_spectrum_analyzer); and to the library and shader authors credited above.

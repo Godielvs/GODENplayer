@@ -19,7 +19,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 ROOT_FILES = {
-    '.editorconfig', '.gitignore', 'AGENTS.md', 'CHANGELOG.md', 'CONTRIBUTING.md',
+    '.editorconfig', '.gitignore', 'CHANGELOG.md', 'CONTRIBUTING.md',
     'Directory.Build.props', 'LICENSE', 'LICENSE-SCOPE.md', 'NekoRoX.sln', 'README.md',
 }
 SOURCE_DIRS = {'.github', 'assets', 'build', 'config', 'docs', 'LICENSES',

@@ -1,0 +1,29 @@
+{
+  "design": "Brand and player, native pixel wordmark",
+  "width": 1280,
+  "height": 640,
+  "bytes": 396188,
+  "sha256": "271db04a73fb76a793134f200fff05b3578cd1de4e4fe01a14011ba868899a19",
+  "renderer": {
+    "sharp": "0.35.5",
+    "vips": "8.18.7"
+  },
+  "inputs": [
+    {
+      "file": "docs/media/source/social-preview.svg",
+      "sha256": "485d0cdb9eb8616a059f096ad6b999b2cb6df766fefd74d061bf3e429760dd97"
+    },
+    {
+      "file": "assets/pixel-ui/brand/wordmark_standard.svg",
+      "sha256": "3e925e551d095a60e3f9ee866485f846a92227ff52e5db5fd91a3793ffe9bf27"
+    },
+    {
+      "file": "packaging/brand/goden.svg",
+      "sha256": "e2e6abc6c91c721d892404ef4208e8f2c15cf911c942589128b50e75ca07ac55"
+    },
+    {
+      "file": "docs/media/album.png",
+      "sha256": "df1e5eedfc0150e9be21d3773cf1a1aad727223572967dc23b445b394b4b8d54"
+    }
+  ]
+}

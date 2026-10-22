@@ -1,6 +1,6 @@
 # Shader provenance and unresolved permissions
 
-Reviewed 19 October 2026. Adaptation, a visual difference, a credit or a source link is not a redistribution license. All approved effects remain in this local candidate as explicitly requested. No author contact or broad reimplementation was undertaken.
+Sources, modifications and permission status are recorded below. Credits and visual changes do not grant redistribution rights.
 
 | Effect | Source / author | Status |
 |---|---|---|

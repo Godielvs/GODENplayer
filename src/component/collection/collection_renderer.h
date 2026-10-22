@@ -69,7 +69,7 @@ class Renderer final {
     bool playing_=true,physicsOnly_=false,audioTextureUsed_=false;
     bool initialized_=false,pending_=false,onceDone_=false,wantedActive_=false;
     Timeline timeline_;Diagnostics diag_{};
-    // Read-only QA receipt of the constants submitted to the visible Main pass.
+    // Read-only snapshot of the constants submitted to the visible Main pass.
     // Retaining CPU data avoids GPU readback, logging, or work on the audio thread.
     Constants submittedConstants_{};
     bool makeTexture(Tex&,Extent,DXGI_FORMAT,bool target,bool uav);

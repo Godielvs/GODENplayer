@@ -155,8 +155,7 @@ public:
     [[nodiscard]] bool validateLyricsHit(
         const LyricsHitToken& token) const noexcept;
     [[nodiscard]] bool animationActive() const noexcept;
-    // C9 QA: the eight-region light state the curated renderer last applied.
-    // Read-only and diagnostic only; appearance still requires human review.
+    // Read-only diagnostic view of the last applied eight-region light state.
     [[nodiscard]] const collection::LightBands& appliedLights() const noexcept
     {
         return curated_.appliedLights();

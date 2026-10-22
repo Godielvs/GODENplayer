@@ -203,10 +203,8 @@ public:
     void reset()noexcept{demand(false);c8Source_.reset();resumeWaiting_=false;renderedIdentity_={};resetHistoryReader();collection_.reset();legacy_.reset();sync();}
     bool needsFrame()const noexcept{return selected()?collection_.needsFrame():legacy_.needsFrame();}
     bool asynchronous()const noexcept{return selected()&&collection_.asynchronous();}
-    // C9 QA: the eight-region light state that the LAST prepare actually handed
-    // to the renderer. This is the curated/Clovis path, which the shell does not
-    // publish through the legacy AlbumAmbientController at all, so a diagnostic
-    // that reads only the ambient controller always reports zeros.
+    // Last prepared eight-region light state for the curated/Clovis renderer.
+    // The legacy AlbumAmbientController does not publish this path's lights.
     [[nodiscard]] const LightBands& appliedLights() const noexcept {
         static const LightBands empty{};
         return lastAudioFrame_ ? lastAudioFrame_->lights : empty;

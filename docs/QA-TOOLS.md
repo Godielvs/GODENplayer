@@ -28,9 +28,8 @@ See [COMPATIBILITY.md](COMPATIBILITY.md).
 
 ## Retained integration tools
 
-Historical C9/R5/R6 tools are retained because they cover distinct scroll,
-soak and renderer paths. Their names do not establish that they are obsolete.
-They are not normal build dependencies or unattended desktop tests.
+These opt-in tools cover scrolling, soak testing and renderer behavior. They
+are not normal build dependencies or unattended desktop tests.
 
 | Tool | Purpose | Explicit caller inputs |
 | --- | --- | --- |
