@@ -30,7 +30,7 @@
 
 36 seconds with audio: Library, Album, synchronized lyrics and artwork colours.
 
-https://github.com/user-attachments/assets/9f2f36aa-5e02-4f8d-bde2-a0f044c588fb
+https://github.com/user-attachments/assets/98699fd5-5a7b-4ea0-a24e-392e4bdfc621
 
 <details>
 <summary>Animated preview</summary>
